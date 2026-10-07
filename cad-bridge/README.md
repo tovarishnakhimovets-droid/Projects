@@ -17,16 +17,25 @@
   Вложенного `.git` нет; изменения отслеживает общий репозиторий Projects.
 - `tools/` — диагностика MCP и сборка командного ZIP.
 - `packaging/team/` — русская установка и настройка Codex.
+- [AGENTS.md](AGENTS.md) — единственные общие правила моста; при новой сборке
+  установочный пакет получает точную копию этого файла.
 - `patches/` — история первоначальных изменений относительно upstream.
   После клонирования Projects применять эти патчи повторно не требуется.
 - `docs/` — работа с мостом, установка, параметры style-инструментов и происхождение
   исходников. [WORK_STATUS.md](WORK_STATUS.md) хранит проверенные результаты и пробелы.
-- `releases/`, `.venv/`, `bin/`, `obj/` — локальные результаты, исключённые из Git.
+- `releases/`, `bin/`, `obj/` — локальные результаты, исключённые из Git.
+  Python на этом компьютере использует уже существующий `D:\CAD-Automation\.venv`.
 
-Сейчас это подготовленный импорт в `feat/cad-bridge`. Он не переключает
-действующее подключение и не устанавливает пакет. До первого merge исходная
-папка `D:\CAD-Automation\upstream\dwg-mcp` остаётся рабочей базой; после merge
-нужно отдельно обновить указатель на общий source checkout.
+PR #2 принят в `develop`; единственная рабочая база исходников на этом компьютере —
+`D:\CAD-Automation\team\Projects\cad-bridge`. Действующий runtime AutoCAD 2027
+сохранён в `D:\CAD-Automation\releases\dwg-2027\2026-10-06-style-tools`.
+Изменение исходников или merge не обновляет загруженный сервер и плагин.
+
+Для передачи сохранён проверенный ZIP
+`releases/team/2.0.1-team.2/DwgMcp.Setup-v2.0.1-team.2-win-x64.zip`.
+Файл доступен по [проверенной ссылке Яндекс Диска](https://disk.yandex.ru/d/tzTFb_evK8vwJg);
+контрольная сумма и установка — в [docs/TEAM_SETUP.md](docs/TEAM_SETUP.md).
+Архив не пересобирался при очистке.
 
 ## Сборка и offline-проверка
 
@@ -39,24 +48,35 @@ Autodesk DLL не входят в поставку. Не заменяйте эт
 dotnet test .\upstream\dwg-mcp\tests\Bimwright.Dwg.Tests\Bimwright.Dwg.Tests.csproj -c Release --logger 'console;verbosity=minimal'
 ```
 
+`-c Release` выбирает конфигурацию сборки; `--logger` оставляет краткий вывод тестов.
+
 Дополнительная проверка MCP-схем использует официальный Python SDK и не обращается
 к AutoCAD без явных live-флагов:
 
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r .\requirements-dev.txt
-.\.venv\Scripts\python.exe -X utf8 .\tools\check-style-mcp.py --target 2026
+& 'D:\CAD-Automation\.venv\Scripts\python.exe' -m pip install -r .\requirements-dev.txt
+& 'D:\CAD-Automation\.venv\Scripts\python.exe' -X utf8 .\tools\check-style-mcp.py --target 2026
 ```
+
+`&` запускает программу по указанному пути. На другом компьютере используйте
+Python своего окружения; вторую копию локального `.venv` создавать не требуется.
+`-m` запускает модуль Python; `-r` читает список зависимостей; `-X utf8` включает
+UTF-8; `--target 2026` выбирает профиль AutoCAD 2026.
 
 Полный ZIP с обоими плагинами:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\package-team-dwg.ps1 -Version 2.0.1-team.2
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\package-team-dwg.ps1 -Version 2.0.1-team.3
 ```
 
-Результат: `releases/team/2.0.1-team.2/`. Для повторной сборки выберите новую
-версию или пустой `-OutputDir` внутри этого проекта: существующий stage защищён
-от перезаписи. Manifest содержит commit общего репозитория и признак dirty;
+`-NoProfile` отключает личный профиль PowerShell; `-ExecutionPolicy Bypass`
+разрешает этот скрипт в запущенном процессе; `-File` задаёт скрипт;
+`-Version` задаёт версию нового пакета. Для нового выпуска выберите новую версию.
+
+Результат примера: `releases/team/2.0.1-team.3/`. Для повторной сборки выберите новую
+версию или пустой `-OutputDir` внутри этого проекта: наличие ZIP или его SHA256
+останавливает новую сборку ещё до запуска build; существующий stage также защищён.
+`-OutputDir` задаёт каталог результата. Manifest содержит commit общего репозитория и признак dirty;
 до коммита пакет пригоден для проверки, окончательный выпуск собирается из
 принятых исходников. Установка описана в [docs/TEAM_SETUP.md](docs/TEAM_SETUP.md).
 

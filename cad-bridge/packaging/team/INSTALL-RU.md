@@ -6,10 +6,12 @@ AutoCAD выбранного года и локальный Codex с разре�
 Подписка Business не переносит локальный
 сервер, пользовательские инструкции или историю чатов коллеге автоматически.
 
-Подготовленный импорт исходников в `Projects/cad-bridge` ещё не слит и не
-развёрнут. Текущий исходный мост `D:\CAD-Automation\upstream\dwg-mcp` остаётся
-активным до согласованного переключения после merge. Импорт сам по себе
-не меняет установку ZIP, подключение `dwg-2027` или глобальные инструкции.
+PR #2 с импортом исходников в `Projects/cad-bridge` слит в `develop` 2026-10-07.
+Исходники и общие правила находятся в одном проекте `cad-bridge`.
+На компьютере автора source root — `D:\CAD-Automation\team\Projects\cad-bridge`;
+действующий runtime AutoCAD 2027 сохранён в
+`D:\CAD-Automation\releases\dwg-2027\2026-10-06-style-tools`.
+Установка пакета на другом компьютере выполняется отдельно по инструкции ниже.
 
 `2.0.1-team.2` — версия этого командного пакета; версия upstream/MCP остаётся `2.0.1`.
 Для запуска не нужны отдельные Python, .NET 8 Runtime или SDK: внешний сервер
@@ -19,7 +21,20 @@ AutoCAD выбранного года и локальный Codex с разре�
 
 ## 1. Установить пакет
 
-1. Скопируйте ZIP с Яндекс Диска в локальную папку. Разблокируйте ZIP до
+Скачать: [ZIP team.2 для AutoCAD 2026/2027 с Яндекс Диска](https://disk.yandex.ru/d/tzTFb_evK8vwJg).
+2026-10-07 публичные метаданные подтвердили размер 39 622 751 байт и SHA256:
+
+```text
+d74a568bbfccb462987d7cff82f9d05c8108e9c1b267a45338f83a7c9bee092d
+```
+
+После скачивания из папки с ZIP выполните
+`Get-FileHash -LiteralPath .\DwgMcp.Setup-v2.0.1-team.2-win-x64.zip -Algorithm SHA256`.
+`-LiteralPath` задаёт точное имя файла; `-Algorithm SHA256` выбирает алгоритм.
+Значение `Hash` должно совпасть с указанным выше. ZIP не пересобирался при
+очистке; внутри сохранены документы и manifest времени его сборки.
+
+1. Скачайте ZIP по ссылке выше в локальную папку. Разблокируйте ZIP до
    извлечения: через пункт «Разблокировать» в его свойствах либо командой
    `Unblock-File -LiteralPath .\DwgMcp.Setup-v2.0.1-team.2-win-x64.zip` из папки с ZIP.
    Установщик разблокирует сервер, но не файлы плагина.
@@ -38,6 +53,12 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\setup-codex.ps1 -AcadY
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -Years 2027 -Client none
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\setup-codex.ps1 -AcadYear 2027
 ```
+
+`-NoProfile` отключает личный профиль PowerShell; `-ExecutionPolicy Bypass`
+разрешает этот скрипт в запущенном процессе; `-File` задаёт скрипт. `-Years`
+выбирает год плагина; `-Client none` оставляет настройку клиента второму скрипту;
+`-AcadYear` выбирает год подключения Codex. `Unblock-File` снимает отметку
+скачанного файла; `-LiteralPath` задаёт его точное имя.
 
 Первый скрипт устанавливает плагин выбранного года и общий сервер. Второй
 регистрирует `dwg-2026` или `dwg-2027` через Codex CLI, если он доступен,
@@ -75,6 +96,8 @@ codex mcp get dwg-2026 --json
 # Для AutoCAD 2027: codex mcp get dwg-2027 --json
 ```
 
+`--json` выводит конфигурацию в формате JSON.
+
 Эта команда проверяет конфигурацию, а не связь с AutoCAD. Если подключение
 отсутствует, проверьте вывод `setup-codex.ps1` и перезапустите Codex. Если сервер
 запустился, но AutoCAD недоступен, проверьте загрузку плагина и ограничения
@@ -109,7 +132,7 @@ upstream или применять `patches/` не требуется. Патч�
 применённых изменений;
 дальнейшие изменения, коммиты, push и merge ведёт пользователь в Git `Projects`.
 
-После merge и согласованного переключения указатель можно направить на локальный
+Для разработки указатель можно направить на локальный
 каталог `cad-bridge`, содержащий `AGENTS.md`, `docs/CAD_WORKFLOW.md` и
 `WORK_STATUS.md`. Команда выполняется из извлечённого ZIP:
 
@@ -118,10 +141,17 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\setup-codex.ps1 -AcadY
 ```
 
 Для AutoCAD 2027 замените `-AcadYear 2026` на `-AcadYear 2027`.
+`-BridgeSourceRoot` указывает на исходники, документацию и состояние разработки
+в своем checkout; он не устанавливает другую DLL.
 
 На другом компьютере замените путь после `-BridgeSourceRoot` своим локальным
 путём к `Projects\cad-bridge`. Для установки готового ZIP checkout исходников
 не требуется. Работа с исходниками и offline helper-проверки описаны в
 `docs/TEAM_SETUP.md` общего проекта.
+
+В новых пакетах `server/bridge-docs/AGENTS.md` создаётся точным копированием
+канонического `cad-bridge/AGENTS.md`; отдельная редактируемая копия правил
+runtime в исходниках не поддерживается. Пользователь готового runtime читает
+установленные правила; развитие моста требует отдельного checkout Projects.
 
 Настройка MCP: [официальная документация OpenAI](https://learn.chatgpt.com/docs/extend/mcp).

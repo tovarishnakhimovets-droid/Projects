@@ -8,19 +8,27 @@ $repo = Join-Path $root 'upstream\dwg-mcp'
 if (-not $OutputDir) { $OutputDir = Join-Path $root "releases\team\$Version" }
 $OutputDir = [IO.Path]::GetFullPath($OutputDir)
 if (-not $OutputDir.StartsWith($root.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Team package output must be inside the CAD workspace.' }
+$zip = Join-Path $OutputDir "DwgMcp.Setup-v$Version-win-x64.zip"
+if (-not $FinalizeOnly -and ((Test-Path -LiteralPath $zip) -or (Test-Path -LiteralPath ($zip + '.sha256')))) {
+    throw 'Release ZIP or SHA256 file already exists. Choose a new version or output directory.'
+}
 $extras = Join-Path $root 'packaging\team'
-foreach ($file in @('INSTALL-RU.md', 'setup-codex.ps1', 'server\bridge-docs\AGENTS.md')) {
+foreach ($file in @('INSTALL-RU.md', 'setup-codex.ps1')) {
     if (-not (Test-Path -LiteralPath (Join-Path $extras $file))) { throw "Missing package extra: $file" }
 }
+$canonicalInstructions = Join-Path $root 'AGENTS.md'
+if (-not (Test-Path -LiteralPath $canonicalInstructions -PathType Leaf)) { throw 'Missing canonical bridge AGENTS.md.' }
 $stage = Join-Path $OutputDir 'stage'
 if (-not $FinalizeOnly) {
     & (Join-Path $repo 'scripts\package-client-setup.ps1') -Config Release -RepoRoot $repo -Version $Version -OutputDir $OutputDir -Years $Years -UseAutoCad2026NuGetRefs -AllowDirty
 } elseif (-not (Test-Path -LiteralPath (Join-Path $stage 'manifest.json'))) { throw 'FinalizeOnly requires a successfully built upstream package stage.' }
 Copy-Item -LiteralPath (Join-Path $extras 'INSTALL-RU.md'), (Join-Path $extras 'setup-codex.ps1') -Destination $stage
 Copy-Item -LiteralPath (Join-Path $repo 'LICENSE') -Destination (Join-Path $stage 'LICENSE')
-Copy-Item -Path (Join-Path $extras 'server\*') -Destination (Join-Path $stage 'server') -Recurse -Force
-Copy-Item -LiteralPath (Join-Path $extras 'INSTALL-RU.md'), (Join-Path $root 'docs\TEAM_SETUP.md'), (Join-Path $root 'docs\IMPORT_MANIFEST.json') -Destination (Join-Path $stage 'server\bridge-docs') -Force
-$changes = Join-Path $stage 'server\bridge-docs\changes'
+$runtimeDocs = Join-Path $stage 'server\bridge-docs'
+New-Item -ItemType Directory -Path $runtimeDocs -Force | Out-Null
+Copy-Item -LiteralPath $canonicalInstructions -Destination (Join-Path $runtimeDocs 'AGENTS.md') -Force
+Copy-Item -LiteralPath (Join-Path $extras 'INSTALL-RU.md'), (Join-Path $root 'docs\TEAM_SETUP.md'), (Join-Path $root 'docs\IMPORT_MANIFEST.json') -Destination $runtimeDocs -Force
+$changes = Join-Path $runtimeDocs 'changes'
 New-Item -ItemType Directory -Path $changes -Force | Out-Null
 Get-ChildItem -LiteralPath (Join-Path $root 'patches') -Filter 'dwg-mcp-*.patch' -File | Copy-Item -Destination $changes
 $manifestPath = Join-Path $stage 'manifest.json'
@@ -36,7 +44,6 @@ $manifest.files = @(Get-ChildItem -LiteralPath $stage -Recurse -File | Where-Obj
     [ordered]@{ path = $_.FullName.Substring($stage.Length).TrimStart('\').Replace('\', '/'); sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant(); bytes = $_.Length }
 })
 $manifest | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
-$zip = Join-Path $OutputDir "DwgMcp.Setup-v$Version-win-x64.zip"
 Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -Force
 $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
 [IO.File]::WriteAllText($zip + '.sha256', "$hash  $([IO.Path]::GetFileName($zip))`r`n", (New-Object Text.UTF8Encoding($false)))

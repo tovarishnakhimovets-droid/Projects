@@ -7,17 +7,37 @@
 работы передаются файлами и Git.
 
 Общий проект для разработки теперь находится в monorepo `Projects`, каталог
-`cad-bridge/`; его исходники — `cad-bridge/upstream/dwg-mcp/`. Подготовленный
-импорт в ветке `feat/cad-bridge` ещё не слит и не развёрнут. Текущий исходный
-мост `D:\CAD-Automation\upstream\dwg-mcp` остаётся активным до согласованного
-переключения после merge. Этот документ не переключает подключение `dwg-2027`
-и глобальные инструкции исходного компьютера.
+`cad-bridge/`; его исходники — `cad-bridge/upstream/dwg-mcp/`. PR #2 с импортом
+слит в `develop` 2026-10-07. Единственный source root на компьютере автора —
+`D:\CAD-Automation\team\Projects\cad-bridge`; общие правила — в его `AGENTS.md`,
+состояние — в `WORK_STATUS.md`. Действующий runtime AutoCAD 2027 сохранён в
+`D:\CAD-Automation\releases\dwg-2027\2026-10-06-style-tools`.
+Очистка исходников не переустанавливает пакет и не меняет подключение `dwg-2027`.
 
 ## Установка коллеге
 
 Дистрибутив для обоих годов: `releases/team/2.0.1-team.2/DwgMcp.Setup-v2.0.1-team.2-win-x64.zip`.
+Скачать: [ZIP team.2 для AutoCAD 2026/2027 с Яндекс Диска](https://disk.yandex.ru/d/tzTFb_evK8vwJg).
+2026-10-07 публичные метаданные подтвердили имя, размер 39 622 751 байт и
+SHA256 канонического проверенного ZIP из `cad-bridge/releases/`:
+
+```text
+d74a568bbfccb462987d7cff82f9d05c8108e9c1b267a45338f83a7c9bee092d
+```
+
+Проверка скачанного файла из папки с ZIP:
+
+```powershell
+Get-FileHash -LiteralPath .\DwgMcp.Setup-v2.0.1-team.2-win-x64.zip -Algorithm SHA256
+```
+
+`-LiteralPath` задаёт точное имя файла; `-Algorithm SHA256` выбирает алгоритм
+контрольной суммы. Значение `Hash` должно совпасть с указанным выше.
+
 Краткая инструкция внутри ZIP — `INSTALL-RU.md`; её исходник находится
-в `packaging/team/INSTALL-RU.md`.
+в `packaging/team/INSTALL-RU.md`. Этот ZIP не пересобирался при очистке:
+внутри остаются документы и manifest времени его сборки. Дальнейшие правки
+инструкций и генерация канонического AGENTS.md попадут в следующий выпуск.
 
 Перед извлечением скачанный ZIP разблокируется через свойства файла или
 `Unblock-File -LiteralPath .\DwgMcp.Setup-v2.0.1-team.2-win-x64.zip` из папки с ZIP.
@@ -36,6 +56,12 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -Years 202
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\setup-codex.ps1 -AcadYear 2027
 ```
 
+`-NoProfile` отключает личный профиль PowerShell; `-ExecutionPolicy Bypass`
+разрешает скрипт в этом процессе; `-File` задаёт скрипт. `-Years` выбирает
+плагин нужного года; `-Client none` оставляет настройку клиента второму скрипту;
+`-AcadYear` выбирает год подключения Codex. `Unblock-File` снимает отметку
+скачанного файла, а `-LiteralPath` задаёт точное имя ZIP.
+
 Сервер установлен в `%LOCALAPPDATA%\Bimwright\Dwg\server\current\dwg-mcp.exe`;
 плагин — в `%APPDATA%\Autodesk\ApplicationPlugins\Bimwright.Dwg.bundle`.
 Внешний сервер самодостаточный: Python, .NET 8 Runtime и SDK для работы не нужны.
@@ -49,8 +75,9 @@ AutoCAD 2026 Update 1.2 переходит на .NET 10; пакет 2026 выб�
 Если CLI отсутствует, он печатает TOML для ручной настройки. Скрипт сохраняет
 имеющиеся личные инструкции и добавляет указатель на установленный
 `server/current/bridge-docs/AGENTS.md`; повторный запуск обновляет указатель без
-дублирования, включая блок первого выпуска. После согласованного переключения
-для проекта разработчика можно указать
+дублирования, включая блок первого выпуска. Новые пакеты получают этот файл
+прямым копированием канонического `cad-bridge/AGENTS.md`, без отдельного исходника
+правил runtime. Для проекта разработчика можно указать
 `-BridgeSourceRoot 'D:\CAD-Automation\team\Projects\cad-bridge'`;
 в этом каталоге обязательны `AGENTS.md`, `docs/CAD_WORKFLOW.md` и `WORK_STATUS.md`.
 
@@ -95,8 +122,7 @@ cd .\Projects
 cd .\cad-bridge
 ```
 
-До merge пользователь выбирает подготовленную ветку `feat/cad-bridge`; после
-merge работает с согласованной веткой репозитория. Вложенного `.git` у
+Пользователь выбирает согласованную ветку репозитория. Вложенного `.git` у
 `upstream/dwg-mcp` нет: исходники и последующие правки отслеживает Git `Projects`.
 
 Исходная база — upstream v2.0.1, commit
@@ -120,9 +146,13 @@ merge работает с согласованной веткой репозит
 ```powershell
 dotnet build .\upstream\dwg-mcp\src\server\Bimwright.Dwg.Server.csproj -c Release
 dotnet test .\upstream\dwg-mcp\tests\Bimwright.Dwg.Tests\Bimwright.Dwg.Tests.csproj -c Release
-python .\tools\check-style-mcp.py --target 2027
-python .\tools\check-dotnet-mcp.py --list-tools --target 2026
+& 'D:\CAD-Automation\.venv\Scripts\python.exe' -X utf8 .\tools\check-style-mcp.py --target 2027
+& 'D:\CAD-Automation\.venv\Scripts\python.exe' -X utf8 .\tools\check-dotnet-mcp.py --list-tools --target 2026
 ```
+
+`-c Release` выбирает конфигурацию сборки; `-X utf8` включает UTF-8;
+`--target` задаёт год AutoCAD; `--list-tools` читает только список инструментов.
+Используется существующий `D:\CAD-Automation\.venv`; на другом компьютере — свое окружение Python. Зависимости перечислены в requirements-dev.txt.
 
 Для Python helpers нужна среда с пакетами `anyio` и `mcp`; локальное `.venv`
 в Git не переносится. Все три helper-скрипта (`check-style-mcp.py`,
@@ -132,13 +162,15 @@ python .\tools\check-dotnet-mcp.py --list-tools --target 2026
 target 2027 и `dotnet` из PATH. Например, другую DLL можно проверить так:
 
 ```powershell
-python .\tools\check-style-mcp.py --server 'C:\CAD\build\Bimwright.Dwg.Server.dll' --target 2026 --dotnet 'C:\Program Files\dotnet\dotnet.exe'
+& 'D:\CAD-Automation\.venv\Scripts\python.exe' -X utf8 .\tools\check-style-mcp.py --server 'C:\CAD\build\Bimwright.Dwg.Server.dll' --target 2026 --dotnet 'C:\Program Files\dotnet\dotnet.exe'
 ```
+
+`--server` задаёт проверяемую DLL; `--dotnet` задаёт исполняемый файл .NET.
 
 `check-style-mcp.py` без `--live` и `check-dotnet-mcp.py --list-tools` проверяют
 stdio-схемы без CAD-вызовов. `run-dotnet-code.py` исполняет переданный C# в
 AutoCAD и требует отдельно разрешённой задачи. Живые режимы и загрузка новых
-плагинов выполняются пользователем только после согласованного переключения;
+плагинов выполняются пользователем по отдельному явному разрешению;
 успешная offline-проверка не означает развёртывание новой версии.
 
 Документация: [MCP в Codex](https://learn.chatgpt.com/docs/extend/mcp),

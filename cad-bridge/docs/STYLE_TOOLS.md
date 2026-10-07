@@ -8,10 +8,11 @@
 отказы без изменений. Пять тестовых объектов и уникальный слой удалены.
 
 Эти исходники уже включены в `Projects/cad-bridge/upstream/dwg-mcp` вместе
-с локальными исправлениями. Подготовленный импорт ещё не слит и не развёрнут.
-Текущий исходный мост `D:\CAD-Automation\upstream\dwg-mcp` остаётся активным
-до согласованного переключения после merge. Исторический live PASS не является
-подтверждением загрузки DLL из нового checkout или проверки AutoCAD 2026.
+с локальными исправлениями; PR #2 слит в `develop`. Единственный source root —
+`D:\CAD-Automation\team\Projects\cad-bridge`. Действующая установка 2027
+сохранена в `D:\CAD-Automation\releases\dwg-2027\2026-10-06-style-tools`.
+Исторический live PASS не подтверждает загрузку DLL из новой сборки или
+проверку AutoCAD 2026. Общие правила находятся в `cad-bridge/AGENTS.md`.
 
 ## Инструменты
 
@@ -75,12 +76,14 @@ Autodesk AutoCAD.NET 25.1.0. Подробности — в `docs/TEAM_SETUP.md`.
 После клонирования `Projects` пользователь переходит в каталог моста:
 
 ```powershell
-cd .\Projects
-cd .\cad-bridge
-python .\tools\check-style-mcp.py --target 2027
+cd D:\CAD-Automation\team\Projects\cad-bridge
+& 'D:\CAD-Automation\.venv\Scripts\python.exe' -X utf8 .\tools\check-style-mcp.py --target 2027
 # Проверка того же профиля для маршрутизации на AutoCAD 2026:
-python .\tools\check-style-mcp.py --target 2026
+& 'D:\CAD-Automation\.venv\Scripts\python.exe' -X utf8 .\tools\check-style-mcp.py --target 2026
 ```
+
+`-X utf8` включает UTF-8; `--target` выбирает год AutoCAD. На другом компьютере
+первый путь заменяется своим checkout. На этом компьютере используется существующий `D:\CAD-Automation\.venv`; на другом — свое окружение Python.
 
 Без `--live` проверяются только список и схемы; AutoCAD не вызывается.
 Скрипт по умолчанию запускает собственную собранную DLL
@@ -89,30 +92,34 @@ python .\tools\check-style-mcp.py --target 2026
 `--target 2027` и `--dotnet`, например:
 
 ```powershell
-python .\tools\check-style-mcp.py --server 'C:\CAD\build\Bimwright.Dwg.Server.dll' --target 2026 --dotnet 'C:\Program Files\dotnet\dotnet.exe'
+& 'D:\CAD-Automation\.venv\Scripts\python.exe' -X utf8 .\tools\check-style-mcp.py --server 'C:\CAD\build\Bimwright.Dwg.Server.dll' --target 2026 --dotnet 'C:\Program Files\dotnet\dotnet.exe'
 ```
+
+`--server` задаёт проверяемую DLL; `--dotnet` задаёт исполняемый файл .NET.
 
 Python запускается из среды с `anyio` и `mcp`. Сборка и требования к SDK описаны
 в `docs/TEAM_SETUP.md`. Offline-проверка не меняет зарегистрированный MCP.
 
-## Согласованная загрузка и живая проверка после merge
+## Согласованная загрузка и живая проверка
 
-Для первого перехода на импортированный checkout DLL загружается после merge
-и согласованного переключения моста. При дальнейшей разработке пользователь
-может отдельно включить live-проверку тестовой сборки до merge.
+Пользователь отдельно разрешает загрузку новой DLL и живую проверку.
+При разработке он может включить live-проверку тестовой сборки до merge.
 Пользователь закрывает AutoCAD, устанавливает согласованный ZIP для своего года
 по `packaging/team/INSTALL-RU.md` и запускает новую сессию. DLL предыдущей сессии
 сама не обновляется. Сохранение существующих чертежей пользователь решает
 самостоятельно. Регистрация MCP и глобальные инструкции исходного компьютера
-не переключаются автоматически при импорте или сборке.
+не переключаются автоматически при изменении исходников или сборке.
 
 В пустом тестовом чертеже Model запустить проверку; имя после --document должно
 совпадать с document_name текущего чертежа. Во время теста не переключать вкладки.
 
 ```powershell
-python .\tools\check-style-mcp.py --target 2027 --live --document 'Чертеж1.dwg'
+& 'D:\CAD-Automation\.venv\Scripts\python.exe' -X utf8 .\tools\check-style-mcp.py --target 2027 --live --document 'Чертеж1.dwg'
 # Для AutoCAD 2026: тот же вызов с --target 2026 и соответствующим плагином.
 ```
+
+`--live` включает изменения в AutoCAD; `--document` ограничивает проверку
+указанным именем активного чертежа.
 
 Живой режим требует отдельного разрешения пользователя. Он
 создаёт собственный уникальный слой и объекты, проверяет веса и две штриховки,
