@@ -1,0 +1,51 @@
+<!-- Modified by the CAD team (2026-10-07); see patches/ and docs/IMPORT_MANIFEST.json in cad-bridge. -->
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>Bimwright.Dwg.Server</RootNamespace>
+    <AssemblyName>Bimwright.Dwg.Server</AssemblyName>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+
+  <!-- NuGet .NET tool packaging -->
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>bimwright-dwg</ToolCommandName>
+    <PackageId>Bimwright.Dwg.Server</PackageId>
+    <Version>2.0.1</Version>
+    <Authors>Khoa Le</Authors>
+    <Description>MCP gateway for AutoCAD 2022-2027 DWG workflows: text reading, translation rewriting, target routing, optional ToolBaker, and opt-in code execution.</Description>
+    <PackageProjectUrl>https://github.com/bimwright/dwg-mcp</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/bimwright/dwg-mcp</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageTags>mcp;autocad;dwg;ai;translation</PackageTags>
+    <Copyright>Copyright 2026 Khoa Le</Copyright>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ModelContextProtocol" Version="1.1.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.6" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\shared\ToolBaker\*.cs" LinkBase="Shared\ToolBaker" />
+    <Compile Include="..\shared\Security\SecretMasker.cs" LinkBase="Shared\Security" />
+    <Compile Include="..\shared\Security\ErrorSanitizer.cs" LinkBase="Shared\Security" />
+    <Compile Include="..\shared\Security\BakeRedactor.cs" LinkBase="Shared\Security" />
+    <Compile Include="..\shared\Security\LispExecutionPolicy.cs" LinkBase="Shared\Security" />
+    <Compile Include="..\shared\Cad\LineweightSpec.cs" LinkBase="Shared\Cad" />
+    <Compile Include="..\shared\Cad\CreateHatchInput.cs" LinkBase="Shared\Cad" />
+  </ItemGroup>
+
+</Project>

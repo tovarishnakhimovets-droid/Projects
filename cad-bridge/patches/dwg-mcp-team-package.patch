@@ -1,0 +1,138 @@
+diff --git a/scripts/package-client-setup.ps1 b/scripts/package-client-setup.ps1
+--- a/scripts/package-client-setup.ps1
++++ b/scripts/package-client-setup.ps1
+@@ -1,4 +1,5 @@
+ #Requires -Version 5.1
++# Modified by the CAD team (2026-10-07); see patches/ and docs/IMPORT_MANIFEST.json in cad-bridge.
+ <#
+ .SYNOPSIS
+   Build the end-user dwg-mcp setup ZIP (self-contained server + AutoCAD plugins that compile here).
+@@ -10,6 +11,9 @@
+     [string]$RepoRoot,
+     [string]$Version,
+     [string]$OutputDir,
++    [ValidateSet(2022, 2023, 2024, 2025, 2026, 2027)]
++    [int[]]$Years,
++    [switch]$UseAutoCad2026NuGetRefs,
+ 
+     # Package an uncommitted working tree for a throwaway test build.
+     [switch]$AllowDirty
+@@ -20,17 +24,30 @@
+ if (-not $RepoRoot) { $RepoRoot = Split-Path -Parent $PSScriptRoot }
+ $RepoRoot = (Resolve-Path $RepoRoot).Path
+ 
++# Vendor sources can live inside a larger team repository. Find its actual
++# Git root before applying the process-local safe.directory exception.
++$gitRoot = $RepoRoot
++while (-not (Test-Path -LiteralPath (Join-Path $gitRoot '.git'))) {
++    $parent = Split-Path -Parent $gitRoot
++    if (-not $parent -or $parent -eq $gitRoot) { throw 'Cannot identify enclosing Git working tree.' }
++    $gitRoot = $parent
++}
++
+ # A package must match a commit, otherwise testers exercise code nobody can
+ # identify. -AllowDirty marks the manifest instead.
+ $dirty = $false
+ $status = $null
+-try { $status = & git -C $RepoRoot status --porcelain 2>$null } catch { $status = $null }
++try {
++    $status = & git -c "safe.directory=$gitRoot" -C $gitRoot status --porcelain 2>$null
++    if ($LASTEXITCODE -ne 0) { throw 'Cannot identify Git working tree.' }
++} catch { throw "Cannot inspect package source: $_" }
+ if ($status) {
+     if (-not $AllowDirty) { throw 'Working tree has uncommitted changes. Commit them so the package matches a commit, or pass -AllowDirty for a throwaway test package.' }
+     $dirty = $true
+     Write-Warning 'Packaging a dirty working tree (-AllowDirty): manifest records dirty=true.'
+ }
+ if (-not $OutputDir) { $OutputDir = Join-Path $RepoRoot 'build\client-setup' }
++$OutputDir = [IO.Path]::GetFullPath($OutputDir)
+ 
+ if (-not $Version) {
+     $serverJsonPath = Join-Path $RepoRoot 'server.json'
+@@ -44,7 +61,15 @@
+ $bundleStage = Join-Path $stageRoot 'bundle'
+ $contentsStage = Join-Path $bundleStage 'Contents'
+ 
+-if (Test-Path $stageRoot) { Remove-Item $stageRoot -Recurse -Force }
++$stageRoot = [IO.Path]::GetFullPath($stageRoot)
++$outputPrefix = $OutputDir.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
++if (-not $stageRoot.StartsWith($outputPrefix, [StringComparison]::OrdinalIgnoreCase) -or
++    (Split-Path -Leaf $stageRoot) -ne 'stage') { throw "Unsafe stage path: $stageRoot" }
++if (Test-Path -LiteralPath $stageRoot) {
++    # An explicit empty output directory keeps releases immutable and avoids
++    # recursive removal of paths supplied by the caller.
++    throw "Package stage already exists: $stageRoot. Choose an empty OutputDir."
++}
+ New-Item -ItemType Directory -Path $serverStage, $contentsStage -Force | Out-Null
+ 
+ Write-Host "=== dwg-mcp package-client-setup ($displayVersion) ==="
+@@ -58,7 +83,7 @@
+ if (-not (Test-Path $published)) { throw "Missing $published" }
+ Move-Item $published $friendly -Force
+ 
+-$years = @(
++$yearSpecs = @(
+     @{ Year = 2022; Suffix = '22'; Tfm = 'net48' }
+     @{ Year = 2023; Suffix = '23'; Tfm = 'net48' }
+     @{ Year = 2024; Suffix = '24'; Tfm = 'net48' }
+@@ -66,22 +91,27 @@
+     @{ Year = 2026; Suffix = '26'; Tfm = 'net8.0-windows' }
+     @{ Year = 2027; Suffix = '27'; Tfm = 'net10.0-windows' }
+ )
++if ($Years) { $yearSpecs = @($yearSpecs | Where-Object { $Years -contains $_.Year }) }
+ 
+ $packedYears = @()
+-foreach ($y in $years) {
++foreach ($y in $yearSpecs) {
+     $csproj = Join-Path $RepoRoot ("src\plugin-acad{0}\Bimwright.Dwg.Plugin.Acad{0}.csproj" -f $y.Suffix)
+     Write-Host "[plugin] AutoCAD $($y.Year)"
+-    & dotnet build $csproj -c $Config --nologo -v q
++    # Never overwrite a DLL currently loaded in AutoCAD from bin/Release.
++    $outDir = Join-Path $OutputDir ("plugin-build\{0}" -f $y.Year)
++    $referenceArgs = @()
++    if ($y.Year -eq 2026 -and $UseAutoCad2026NuGetRefs) { $referenceArgs = @('-p:UseAutoCadNuGetRefs=true') }
++    & dotnet build $csproj -c $Config --nologo -v q "-p:OutputPath=$outDir\" -p:CopyLocalLockFileAssemblies=true @referenceArgs
+     if ($LASTEXITCODE -ne 0) {
++        if ($Years) { throw "Requested AutoCAD $($y.Year) plugin build failed: $LASTEXITCODE" }
+         Write-Warning "Skipping AutoCAD $($y.Year) (SDK/refs missing or build failed)."
+         continue
+     }
+-    $outDir = Join-Path $RepoRoot ("src\plugin-acad{0}\bin\{1}\{2}" -f $y.Suffix, $Config, $y.Tfm)
+     $dll = Join-Path $outDir ("Bimwright.Dwg.Plugin.Acad{0}.dll" -f $y.Suffix)
+     if (-not (Test-Path $dll)) { throw "Built but missing $dll" }
+     $dest = Join-Path $contentsStage "$($y.Year)"
+     New-Item -ItemType Directory -Path $dest -Force | Out-Null
+-    Get-ChildItem $outDir -File | Where-Object {
++    Get-ChildItem -LiteralPath $outDir -File | Where-Object {
+         $_.Name -notmatch '^(accoremgd|acdbmgd|acmgd)\.dll$'
+     } | Copy-Item -Destination $dest -Force
+     if (Test-Path (Join-Path $outDir 'Fonts')) {
+@@ -94,7 +124,7 @@
+ 
+ $templatePath = Join-Path $RepoRoot 'scripts\PackageContents.xml'
+ [xml]$manifestXml = Get-Content -Raw $templatePath
+-$manifestXml.ApplicationPackage.AppVersion = $Version
++$manifestXml.ApplicationPackage.AppVersion = (($Version -replace '^v', '') -split '[-+]')[0]
+ $toRemove = @()
+ foreach ($comp in @($manifestXml.ApplicationPackage.Components)) {
+     $mod = [string]$comp.ComponentEntry.ModuleName
+@@ -111,6 +141,7 @@
+ Copy-Item (Join-Path $RepoRoot 'scripts\uninstall-all.ps1') (Join-Path $stageRoot 'uninstall.ps1') -Force
+ Copy-Item (Join-Path $RepoRoot 'scripts\uninstall-all.ps1') (Join-Path $stageRoot 'uninstall-all.ps1') -Force
+ Copy-Item (Join-Path $RepoRoot 'README.md') (Join-Path $stageRoot 'README.md') -Force
++Copy-Item (Join-Path $RepoRoot 'THIRD_PARTY_NOTICES.md') (Join-Path $stageRoot 'THIRD_PARTY_NOTICES.md') -Force
+ 
+ function Get-Rel([string]$Root, [string]$Path) {
+     return $Path.Substring($Root.Length).TrimStart('\', '/') -replace '\\', '/'
+@@ -125,7 +156,10 @@
+ }
+ 
+ $commit = ''
+-try { $commit = (& git -C $RepoRoot rev-parse HEAD).Trim() } catch { }
++try {
++    $head = & git -c "safe.directory=$gitRoot" -C $gitRoot rev-parse HEAD 2>$null
++    if ($LASTEXITCODE -eq 0) { $commit = $head.Trim() }
++} catch { }
+ 
+ $files = @()
+ foreach ($f in @(Get-ChildItem $stageRoot -File -Recurse | Sort-Object FullName)) {

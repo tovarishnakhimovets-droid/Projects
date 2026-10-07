@@ -1,0 +1,421 @@
+<!-- mcp-name: io.github.bimwright/dwg-mcp -->
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/bimwright/.github/master/assets/logos/dwg-mcp.png" alt="dwg-mcp" width="180" />
+</p>
+
+<h1 align="center">dwg-mcp</h1>
+
+<p align="center">
+  <a href="https://github.com/bimwright/dwg-mcp/actions/workflows/build.yml"><img src="https://github.com/bimwright/dwg-mcp/actions/workflows/build.yml/badge.svg" alt="build" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="license" /></a>
+  <a href="#phiên-bản-autocad-hỗ-trợ"><img src="https://img.shields.io/badge/AutoCAD-2022--2027-186BFF" alt="AutoCAD 2022-2027" /></a>
+  <a href="#công-cụ"><img src="https://img.shields.io/badge/MCP-41%20default%20%2B%20optional-6C47FF" alt="MCP tools" /></a>
+</p>
+
+<p align="center">
+  <a href="README.md">English</a> · Tiếng Việt · <a href="README.zh-CN.md">简体中文</a> · <a href="README.ja.md">日本語</a>
+</p>
+
+---
+
+## Dịch bản vẽ không nên dừng lại ở Copy-Paste thủ công
+
+Bản vẽ thi công và kỹ thuật chứa rất nhiều text — ghi chú kỹ thuật, chú thích vật liệu, legend, kích thước. Khi bản vẽ đến bằng tiếng nước ngoài, việc dịch là bắt buộc trước khi đội dự án có thể làm việc.
+
+Quy trình thông thường rất đau đầu: chọn text từng entity, copy sang translator, paste lại, sửa font (vì font SHX không hiển thị được tiếng Việt hay CJK), chỉnh chiều cao, hy vọng không có gì bị lệch. Nhân lên hàng trăm text fragment mỗi sheet, hàng chục sheet mỗi dự án.
+
+`dwg-mcp` nén quy trình đó thành hai bước: chọn text, để AI agent đọc, dịch, và ghi lại tại chỗ — đúng font, đúng chiều cao, đúng nhóm spatial, và một lần undo duy nhất.
+
+---
+
+## dwg-mcp là gì
+
+`dwg-mcp` là cổng MCP cục bộ cho Autodesk AutoCAD 2022-2027.
+
+Gồm hai phần:
+
+- **Bimwright.Dwg.Server**: MCP server .NET 8, được Claude Code, Cursor, OpenCode hoặc MCP client khác khởi chạy.
+- **Bimwright.Dwg.Plugin**: các shell add-in theo từng phiên bản AutoCAD, thực thi lệnh trực tiếp lên database bản vẽ.
+
+Agent nói MCP. Server nói với plugin qua local wire: TCP NDJSON cho AutoCAD 2022–2024, và Named Pipe (loopback, tránh firewall prompt) cho 2025–2027. Plugin nói AutoCAD .NET API.
+
+Mọi thứ chạy trên máy bạn.
+
+---
+
+## Tại sao quan trọng
+
+AI agent cho phép mô tả "dịch tất cả text đã chọn sang tiếng Việt" và nó xảy ra — đúng — ngay trong bản vẽ. Nhưng chỉ intent thôi chưa đủ. Thao tác text trong AutoCAD đòi hỏi hiểu layout không gian, nhóm fragment, giới hạn font, MText vs DBText, block reference, và scaling chiều cao.
+
+`dwg-mcp` xử lý sự phức tạp đó:
+
+- **Spatial clustering** nhóm text rời rạc thành câu logic (theo block, hàng, cột, đoạn).
+- **Tự động xử lý font** tạo text style Unicode và áp dụng — không còn dấu hỏi SHX.
+- **Scaling chiều cao** bù trừ cho mật độ thị giác khác nhau giữa Latin và CJK.
+- **Chuyển đổi MText** nâng cấp single-line fragment thành multi-line text khi an toàn.
+- **Một lần undo** gói mỗi thao tác trong transaction.
+
+---
+
+## Bằng chứng sử dụng
+
+220 tool call hoàn thành trong 19 ngày sử dụng thực tế trên bản vẽ thi công. Tỷ lệ thành công 98.2%.
+
+| Tool | Lượt gọi |
+|------|----------|
+| get_selected_texts | ~100 |
+| translate_and_rewrite | ~77 |
+| send_code | ~28 |
+| collapse_and_rewrite | ~11 |
+| update_texts | ~10 |
+| apply_unicode_style | ~4 |
+
+---
+
+## Kiến trúc
+
+```text
++---------------------------+
+| AI Client                 |
+| Claude / Cursor / OpenCode|
++---------------------------+
+              |
+              | stdio MCP
+              v
++---------------------------+
+| Bimwright.Dwg.Server      |
+| .NET 8 / C#               |
++---------------------------+
+              |
+               | TCP NDJSON (2022-2024) / Named Pipe (2025-2027)
+              | token auth
+              v
++---------------------------+
+| Bimwright.Dwg.Plugin      |
+| AutoCAD 2022-2027 shells |
++---------------------------+
+              |
+              | LockDocument()
+              v
++---------------------------+
+| AutoCAD .NET API          |
+| ObjectARX 2022-2027       |
++---------------------------+
+```
+
+Xem [ARCHITECTURE.md](ARCHITECTURE.md) để biết chi tiết về threading, discovery, và auth.
+
+---
+
+## Cài đặt
+
+Tải setup ZIP từ [GitHub Releases](https://github.com/bimwright/dwg-mcp/releases/latest) (`DwgMcp.Setup-*-win-x64.zip`). v1.0.0 gồm plugin AutoCAD **2024** và **2027**. Giải nén rồi `install.ps1` (xem README tiếng Anh để copy-paste đầy đủ).
+
+Không `dotnet tool install -g Bimwright.Dwg.Server`.
+
+**Developer:** `pwsh scripts/install.ps1 -Version 2024` từ repo sau khi build; hoặc `NETLOAD` DLL Debug.
+
+### 3. Cấu hình MCP client
+
+```json
+{
+  "mcpServers": {
+    "bimwright-dwg": {
+      "command": "bimwright-dwg",
+      "args": []
+    }
+  }
+}
+```
+
+`dwg_send_code` có sẵn qua `meta`; `MCPDISABLECODE` tắt C# trong session và `MCPENABLECODE` bật lại. `dwg_run_lisp` giữ tên để tương thích nhưng từ chối mọi yêu cầu ở cả server và plugin. Bản này chưa có môi trường cách ly LISP hoặc cơ chế xác lập script tin cậy. `--read-only` gỡ cả hai tool.
+
+`dwg_send_code` chỉ nhận snippet đồng bộ được gửi trực tiếp: `async`/`await` và directive `#load` bị chặn trước thực thi. Giữ AutoCAD API trên luồng gọi; không chuyển sang `Task.Run` hoặc luồng khác. Chỉ trả DTO JSON; object AutoCAD/COM bị từ chối kể cả khi lồng nhau. `dwg_inspect_lisp` vẫn phân tích tĩnh: nguồn quá 2.000.000 ký tự bị đánh dấu không thể kiểm tra đầy đủ/nguy hiểm; giới hạn hiển thị 200 findings không làm mất phát hiện mức nguy hiểm. Regex có timeout; scan hết thời gian được báo chưa đầy đủ/nguy hiểm, không trả `clean`.
+
+Để pin một AutoCAD cụ thể, dùng năm 4 chữ số:
+
+```json
+{
+  "mcpServers": {
+    "bimwright-dwg": {
+      "command": "bimwright-dwg",
+      "args": ["--target", "2024"]
+    }
+  }
+}
+```
+
+Dùng `--read-only` để gỡ toolset write-capable. Dùng `--toolsets all` hoặc danh sách **có đủ default bạn cần** (list tùy chỉnh **thay** default — ví dụ `query,modify,meta,view,annotation`). Env: `BIMWRIGHT_DWG_TOOLSETS=…`.
+
+---
+
+## Công cụ
+
+Mặc định server expose 41 tool: query (gồm `dwg_inspect_lisp`), modify, meta (gồm `dwg_send_code`/`dwg_run_lisp`), view, và `dwg_capture_view_image` mặc định bật. Các toolset tùy chọn ToolBaker, annotation, block, dimension, export, và drawing được kích hoạt qua `--toolsets`, nâng tổng diện tích bề mặt MCP lên 65 tool. Số tool đăng ký có tính `dwg_run_lisp`, hiện chỉ trả từ chối; không verdict nào cấp quyền thực thi.
+
+CAD tool chạy trên active document hiện tại của AutoCAD target đang chọn. Entity input và entity id trả về dùng AutoCAD hex handle, ví dụ `7F5AD`, do tool selection, creation, hoặc properties trả về. Creation, copy, offset, và modify response identify entity tạo/sửa bằng hex handle.
+
+Plan 2 query expansion chỉ quét model space: `dwg_query_entities`, `dwg_count_entities`, `dwg_select_by_layer`, và `dwg_select_by_type` không quét paper-space/layout entity. `dwg_select_by_layer` và `dwg_select_by_type` trả về handle list cho caller; chúng không đổi AutoCAD pickfirst selection.
+
+| Tool | Mục đích |
+|------|----------|
+| `dwg_get_drawing_info` | Đọc tên drawing, current layer, current space/layout, và unit scalar |
+| `dwg_get_entity_properties` | Đọc property của entity theo AutoCAD hex handle |
+| `dwg_list_layers` | Liệt kê layer trong drawing hiện tại kèm color và state flag |
+| `dwg_query_entities` | Query model-space entity theo type, layer, color, limit, và geometry flag tùy chọn |
+| `dwg_count_entities` | Đếm model-space entity theo type, layer, hoặc color filter tùy chọn |
+| `dwg_select_by_layer` | Trả về handle list của model-space entity trên một layer, không đổi pickfirst selection |
+| `dwg_select_by_type` | Trả về handle list của model-space entity theo một entity type, không đổi pickfirst selection |
+| `dwg_get_selected_texts` | Đọc text đang chọn, cluster không gian, trả về nhóm text |
+| `dwg_update_texts` | Ghi text theo handle trong một transaction |
+| `dwg_create_layer` | Đảm bảo layer tồn tại, không ghi đè property của layer đã có |
+| `dwg_create_line` | Tạo một line trong drawing space hiện tại |
+| `dwg_create_circle` | Tạo một circle trong drawing space hiện tại |
+| `dwg_create_point` | Tạo một point và trả về hex handle |
+| `dwg_create_polyline` | Tạo lightweight polyline từ vertices và trả về hex handle |
+| `dwg_create_rectangle` | Tạo rectangle polyline và trả về hex handle |
+| `dwg_create_arc` | Tạo một arc và trả về hex handle |
+| `dwg_create_ellipse` | Tạo một ellipse và trả về hex handle |
+| `dwg_change_layer` | Chuyển entity theo hex handle sang layer khác |
+| `dwg_change_color` | Đổi color entity bằng AutoCAD color index |
+| `dwg_move_entities` | Move entity theo hex handle bằng displacement vector |
+| `dwg_rotate_entities` | Rotate entity theo hex handle quanh base point |
+| `dwg_scale_entities` | Scale entity theo hex handle quanh base point |
+| `dwg_copy_entities` | Copy entity theo hex handle và trả về copied handle |
+| `dwg_erase_entities` | Erase entity theo hex handle |
+| `dwg_offset_entities` | Offset curve entity và trả về generated handle |
+| `dwg_translate_and_rewrite` | **Ưu tiên.** Ghi text đã dịch, tự động xử lý anchor, xóa, MText, font, chiều cao |
+| `dwg_apply_unicode_style` | Đảm bảo style `Bimwright_Unicode` tồn tại và áp dụng |
+| `dwg_collapse_and_rewrite` | Rewrite low-level với kiểm soát hình học chi tiết |
+| `dwg_list_available_targets` | Liệt kê AutoCAD đang chạy từ discovery v2 và legacy 2024 |
+| `dwg_get_current_target` | Xem target đang pin |
+| `dwg_switch_target` | Pin server sang AutoCAD `2022` đến `2027` |
+| `dwg_batch_execute` | Chạy nhiều wire command nội bộ như một logical batch |
+| `dwg_send_code` | Chạy C# snippet trên AutoCAD .NET API (globals `doc`/`db`/`ed`, hỗ trợ `return` value + stdout capture, cooperative cancel 30s; `MCPDISABLECODE`/`MCPENABLECODE` bật/tắt theo session) |
+| `dwg_run_lisp` | Giữ để tương thích: mọi input `file`/`code`/`command` đều bị từ chối với `lisp_execution_blocked`. Tool không đọc file, không gửi plugin và không thực thi. Dùng `dwg_inspect_lisp` để phân tích tĩnh. |
+| `dwg_inspect_lisp` | Quét an toàn tĩnh cho file `.lsp` hoặc AutoLISP inline — phát hiện exec process (`startapp`/`shell`), COM nguy hiểm (`WScript.Shell`/`XMLHTTP`), persistence (`acaddoc.lsp`, ghi registry), xóa file, `(load …)` tầng hai, obfuscation (`eval`/`read`). Trả `verdict` clean/caution/dangerous + findings. Phân tích local thuần; không thực thi, không cần AutoCAD; dùng được cả dưới `--read-only`. `clean` không chứng nhận an toàn. Report luôn có `execution_authorized=false` và `safety_assured=false`. |
+| `dwg_zoom_extents` | Zoom đến giới hạn của viewport bản vẽ |
+| `dwg_zoom_window` | Zoom viewport đến một cửa sổ được xác định bởi hai điểm góc |
+| `dwg_zoom_to_entity` | Zoom viewport đến giới hạn của một entity cụ thể theo handle |
+| `dwg_capture_view_image` | Chụp đồ họa trong AutoCAD; trả ảnh trực tiếp qua MCP, đường dẫn ảnh, kích thước thực, hash, metadata bản vẽ/viewport/camera (mặc định bật; path policy) |
+| `dwg_inspect_view_region` | Chọn vùng 0–1 trên ảnh nguồn; zoom, regenerate và trả ảnh mới trực tiếp qua MCP, có liên kết ảnh cha |
+| `dwg_restore_view` | Quay lại camera của ảnh trước và nhận ảnh chụp mới |
+
+Đọc bản vẽ: chụp → xem ảnh → chọn vùng → `dwg_inspect_view_region` → xem chi tiết. Giữ ID ảnh cha và dùng `dwg_restore_view` để quay lại tổng thể. Lịch sử giữ tối đa 64 ảnh / 30 phút trong tiến trình AutoCAD. Bản đầu hỗ trợ một viewport model space, nhìn từ trên xuống, không xoay, trực giao; từ chối nguồn cũ hoặc view ngoài phạm vi. Capture trả thêm image block MCP (tối đa 8 MiB) cạnh JSON hiện có. Các tool thay đổi camera và ghi ảnh, kể cả `--read-only`; không sửa geometry hay lưu DWG. Kiểm chứng trên host đã cài vẫn pending. Xem [quy trình, tương thích và nghiệm thu](docs/design/2026-09-24-visual-reading-loop.md).
+
+ToolBaker là toolset tùy chọn:
+
+| Tool | Mục đích |
+|------|----------|
+| `dwg_list_baked_tools` | Liệt kê baked tool đã accept trong SQLite registry của server |
+| `dwg_run_baked_tool` | Chạy baked tool đã accept |
+| `dwg_list_bake_suggestions` | Liệt kê gợi ý workflow lặp lại |
+| `dwg_accept_bake_suggestion` | Validate, smoke-test, và accept gợi ý |
+| `dwg_dismiss_bake_suggestion` | Dismiss hoặc suppress gợi ý |
+| `dwg_create_bake_issue_draft` | Tạo GitHub issue draft cho gợi ý mà không submit |
+
+Các tool Annotation tùy chọn hiển thị khi toolset `annotation` được bật:
+
+| Tool | Mục đích |
+|------|----------|
+| `dwg_create_text` | Tạo chữ dòng đơn (DBText) với chiều cao, góc xoay và các thuộc tính mục tiêu |
+| `dwg_create_mtext` | Tạo chữ đa dòng (MText) với định dạng và chiều rộng |
+| `dwg_create_leader` | Tạo multileader (MLeader) với nội dung text tùy chọn |
+| `dwg_create_table` | Tạo bảng AutoCAD với nội dung văn bản hàng/cột được chỉ định |
+
+Các tool Block tùy chọn hiển thị khi toolset `block` được bật:
+
+| Tool | Mục đích |
+|------|----------|
+| `dwg_list_blocks` | Liệt kê các định nghĩa block trong bản vẽ hiện tại (an toàn read-only) |
+| `dwg_get_block_attributes` | Đọc thuộc tính của một block reference bằng handle (an toàn read-only) |
+| `dwg_insert_block` | Chèn một block reference, hỗ trợ import từ file DWG bên ngoài |
+| `dwg_set_block_attributes` | Thiết lập thuộc tính của một block reference bằng handle |
+| `dwg_explode_block` | Phá vỡ (explode) block reference và trả về handle của các phần tử được tạo ra |
+
+Các tool Dimension (Kích thước) tùy chọn hiển thị khi toolset `dimension` được bật:
+
+| Tool | Mục đích |
+|------|----------|
+| `dwg_create_linear_dimension` | Tạo kích thước tuyến tính xoay (Rotated Dimension) với góc xoay cụ thể |
+| `dwg_create_aligned_dimension` | Tạo kích thước song song (Aligned Dimension) giữa hai điểm |
+| `dwg_create_radial_dimension` | Tạo kích thước bán kính (Radial Dimension) cho đường tròn hoặc cung tròn |
+| `dwg_create_diameter_dimension` | Tạo kích thước đường kính (Diametric Dimension) cho đường tròn hoặc cung tròn |
+
+Các tool Export tùy chọn hiển thị khi toolset `export` được bật:
+
+| Tool | Mục đích |
+|------|----------|
+| `dwg_export_dxf` | Xuất bản vẽ ra file DXF (được bảo vệ bởi chính sách đường dẫn đầu ra) |
+
+Các tool Drawing tùy chọn hiển thị khi toolset `drawing` được bật:
+
+| Tool | Mục đích |
+|------|----------|
+| `dwg_get_variables` | Đọc giá trị hiện tại của danh sách các biến hệ thống AutoCAD |
+| `dwg_set_system_variable` | Thiết lập giá trị cho một biến hệ thống AutoCAD |
+| `dwg_save_drawing` | Lưu bản vẽ hiện tại ra file (yêu cầu confirm=true) |
+| `dwg_purge_drawing` | Purge các đối tượng không sử dụng (blocks, layers, styles) (hỗ trợ dry_run=true, thực tế purge cần confirm=true) |
+
+### Chính sách đường dẫn đầu ra (Output Path Policy)
+Tất cả các hoạt động xuất/lưu file được kiểm soát nghiêm ngặt bởi một chính sách bảo vệ:
+- Đường dẫn đầu ra phải là đường dẫn tuyệt đối.
+- Phần mở rộng của file phải khớp chính xác (ví dụ `.dxf` cho xuất DXF).
+- Không tự động ghi đè file hiện có trừ khi có `overwrite_existing=true`.
+- Từ chối ghi đè vào thư mục gốc của repository trừ khi có `allow_repo_output=true`.
+
+### Các Toolset tùy chọn và Hành vi Read-Only
+
+Theo mặc định, chỉ có các toolset `query`, `modify`, `meta`, và `view` được bật. Bạn có thể bật các toolset khác bằng tham số `--toolsets` (ví dụ: `--toolsets all` hoặc `--toolsets query,modify,meta,view,annotation,block,dimension,export,drawing`).
+
+- **Hành vi Read-Only (`--read-only`)**: Khi chế độ read-only được kích hoạt, tất cả các toolset có khả năng chỉnh sửa (`modify`, `code`, `annotation`, `dimension`, `export`, và `drawing` write tools) sẽ bị vô hiệu hóa hoàn toàn.
+- **Phân tách Toolset Block**: Toolset `block` được phân tách thành các công cụ read-only và write-capable. Nếu `--read-only` được bật, các công cụ `dwg_list_blocks` và `dwg_get_block_attributes` vẫn hoạt động bình thường để kiểm tra thông tin, nhưng các công cụ chỉnh sửa (`dwg_insert_block`, `dwg_set_block_attributes`, `dwg_explode_block`) sẽ bị loại bỏ.
+- **View và Read-Only**: Toolset `view` vẫn đăng ký trong read-only (zoom và `dwg_capture_view_image`). Capture mang cờ read-only ở schema MCP nhưng vẫn ghi file ảnh theo path policy — cẩn thận path khi dùng `--read-only`.
+- **Drawing Operations và Read-Only**: Toolset `drawing` giữ lại `dwg_get_variables` ở chế độ read-only, nhưng loại bỏ `dwg_set_system_variable`, `dwg_save_drawing`, và `dwg_purge_drawing`.
+- **Hoãn hỗ trợ Angular Dimension**: Kích thước góc (angular dimensions) tạm thời bị hoãn và chưa được thực hiện.
+- **Chụp view trong AutoCAD**: `dwg_capture_view_image` dùng API `Document.CapturePreviewImage`, không cần điều khiển desktop và không lưu DWG. Tool từ chối khi có lệnh đang chạy hoặc bản vẽ/camera thay đổi trong lúc chụp. `expected_document_fingerprint` tùy chọn giúp ràng buộc lần chụp sau với bản vẽ của lần trước. Agent cần lưu metadata trả về cạnh ảnh khi lập atlas; tool chỉ ghi file ảnh. Kích thước thực có thể lệch nhẹ do AutoCAD làm tròn. Camera mô tả viewport active, chưa phải phép chiếu pixel → WCS chung cho nhiều viewport hoặc paper layout. Xem [contract và kiểm chứng](docs/design/2026-09-23-native-view-capture.md).
+- **Tạm hoãn các công cụ xuất khác**: `dwg_export_pdf` và `dwg_export_image` vẫn tạm hoãn; chụp viewport không thiết lập hay kiểm chứng cấu hình in.
+
+### Checklist smoke thủ công
+
+Trong scratch DWG:
+
+1. Chạy `dwg_get_drawing_info`.
+2. Chạy `dwg_list_layers`.
+3. Tạo `BIMWRIGHT_TEST` bằng `dwg_create_layer`.
+4. Tạo point, polyline, rectangle, arc, và ellipse trên `BIMWRIGHT_TEST` bằng `dwg_create_point`, `dwg_create_polyline`, `dwg_create_rectangle`, `dwg_create_arc`, và `dwg_create_ellipse`; ghi lại hex handle trả về và giữ riêng một curve, ví dụ arc hoặc ellipse, để check color và offset.
+5. Query, count, và select các entity đó theo layer và type bằng `dwg_query_entities`, `dwg_count_entities`, `dwg_select_by_layer`, và `dwg_select_by_type`; xác nhận select tool trả về handle list và không đổi pickfirst selection.
+6. Move, rotate, và scale scratch entity không reserve bằng `dwg_move_entities`, `dwg_rotate_entities`, và `dwg_scale_entities`.
+7. Copy một scratch entity không reserve bằng `dwg_copy_entities`, rồi chỉ erase disposable copied temp entity đó bằng `dwg_erase_entities`.
+8. Đổi color reserved curve bằng `dwg_change_color`, sau đó offset curve đó bằng `dwg_offset_entities` và xác nhận generated handle trả về là hex handle.
+9. Xác nhận workflow dịch text cũ vẫn chạy: chọn scratch text, chạy `dwg_get_selected_texts`, rồi rewrite bằng `dwg_translate_and_rewrite`.
+
+### Smoke tùy chọn — annotation / block / dimension
+
+Bật các toolset tùy chọn trước (`--toolsets …` hoặc `--toolsets all`). Trên DWG scratch:
+
+1. Tạo text, mtext, leader, và table trong scratch DWG với `dwg_create_text`, `dwg_create_mtext`, `dwg_create_leader`, và `dwg_create_table`.
+2. Liệt kê định nghĩa block với `dwg_list_blocks`.
+3. Chèn một block đã biết từ bản vẽ hoặc đường dẫn DWG bên ngoài với `dwg_insert_block`.
+4. Đọc và ghi các thuộc tính block reference với `dwg_get_block_attributes` and `dwg_set_block_attributes`.
+5. Phá vỡ (explode) một block reference với `dwg_explode_block`.
+6. Tạo kích thước linear, aligned, radial, và diameter với `dwg_create_linear_dimension`, `dwg_create_aligned_dimension`, `dwg_create_radial_dimension`, và `dwg_create_diameter_dimension`; xác nhận validator cho projected-distance hoạt động đúng như mong đợi.
+
+### Smoke tùy chọn — view / export / drawing
+
+Khi đã bật toolset `view`, `export`, `drawing` (tùy nhu cầu):
+
+1. Chạy `dwg_zoom_extents`.
+2. Chạy `dwg_zoom_window` với toạ độ cụ thể.
+3. Zoom đến một entity với `dwg_zoom_to_entity` sử dụng handle.
+4. Đọc biến bản vẽ với `dwg_get_variables`.
+5. Xuất bản vẽ ra dxf với `dwg_export_dxf`.
+6. Chạy `dwg_purge_drawing` with `dry_run=true`, rồi với `confirm=true` (chỉ chạy thử trên bản vẽ copy bỏ đi).
+7. Chạy `dwg_save_drawing` với `confirm=true` (chỉ chạy thử trên bản vẽ copy bỏ đi).
+
+### Migration từ tên tool 0.1.x
+
+Tên MCP tool này có prefix `dwg_`. Tên command raw trong plugin chỉ còn là wire command nội bộ.
+
+| Tên MCP 0.1.x | Tên MCP 1.0 |
+|---------------|-------------|
+| `get_selected_texts` | `dwg_get_selected_texts` |
+| `update_texts` | `dwg_update_texts` |
+| `translate_and_rewrite` | `dwg_translate_and_rewrite` |
+| `apply_unicode_style` | `dwg_apply_unicode_style` |
+| `collapse_and_rewrite` | `dwg_collapse_and_rewrite` |
+| `send_code` | `dwg_send_code` |
+| `run_lisp` | `dwg_run_lisp` |
+
+---
+
+## Quy trình tiêu chuẩn
+
+```
+1. Người dùng chọn text trong AutoCAD
+2. Agent gọi dwg_get_selected_texts -> nhận nhóm text đã cluster
+3. Agent dịch từng cluster
+4. Agent gọi dwg_translate_and_rewrite([{id, new_text}, ...])
+   Tool tự xử lý: anchor, xóa, MText, font, chiều cao. Xong.
+5. Nếu cần, người dùng chạy REGEN
+```
+
+---
+
+## Phiên bản AutoCAD hỗ trợ
+
+| Phiên bản | ObjectARX release | Plugin TFM | Trạng thái |
+|-----------|-------------------|------------|-----------|
+| AutoCAD 2022 | 24.1 | `net48` | Đã scaffold shell; release build cần Autodesk refs tương ứng |
+| AutoCAD 2023 | 24.2 | `net48` | Đã scaffold shell; release build cần Autodesk refs tương ứng |
+| AutoCAD 2024 | 24.3 | `net48` | Shell mặc định và normal solution build |
+| AutoCAD 2025 | 25.0 | `net8.0-windows` | Đã scaffold shell; release build cần Autodesk refs tương ứng |
+| AutoCAD 2026 | 25.1 | `net8.0-windows` | Đã scaffold shell; binary-compatible với 2025 nhưng build thành shell riêng |
+| AutoCAD 2027 | 26.0 | `net10.0-windows` | Đã scaffold shell; không binary-compatible với 2025/2026 |
+
+Server và tests có thể pass khi chưa build release tất cả shell. Muốn ship một năm AutoCAD thì phải build shell đó trên máy đã có managed assemblies Autodesk tương ứng.
+
+---
+
+## Bảo mật
+
+`dwg_send_code` chạy C# tùy ý với toàn quyền của AutoCAD và filesystem, chỉ dành cho agent tin cậy, không phải sandbox. `dwg_run_lisp` bị chặn bất kể input, verdict hay `MCPENABLECODE`. Không tạo wrapper, không xếp lệnh LISP vào hàng đợi, không đổi trusted paths hoặc SECURELOAD. Không lách từ chối qua C#, batch hoặc ToolBaker. `dwg_inspect_lisp` chỉ phân tích tĩnh, không phải antivirus hay cơ chế bảo vệ toàn máy; `clean` chỉ có nghĩa chưa thấy mẫu đã biết. Mọi report trả `execution_authorized=false` và `safety_assured=false`. Cần cập nhật cả server/plugin rồi khởi động lại để áp dụng; binary cũ vẫn giữ hành vi cũ.
+
+Bảo mật dựa trên:
+
+- **Chỉ local** — TCP trên 127.0.0.1 cho AutoCAD 2022–2024, loopback Named Pipe cho 2025–2027.
+- **Auth token mỗi session** — xoay khi plugin khởi động lại.
+- **Kill-switch theo session** — `MCPDISABLECODE` / `MCPENABLECODE` điều khiển `dwg_send_code`. LISP vẫn bị chặn sau khi bật code hoặc khởi động lại listener.
+- **Giới hạn timeout** — script chạy inline trên thread giữ document lock, cooperative cancel sau 30s.
+- **Giả định agent tin cậy** — chỉ dùng với MCP client bạn kiểm soát.
+
+---
+
+## Cấu trúc dự án
+
+```
+dwg-mcp/
+├── src/
+│   ├── Bimwright.Dwg.sln
+│   ├── server/            # .NET 8 MCP server (global tool)
+│   ├── shared/            # Handlers, clustering, rewriting, unicode
+│   ├── plugin-acad22/     # AutoCAD 2022 shell (.NET 4.8)
+│   ├── plugin-acad23/     # AutoCAD 2023 shell (.NET 4.8)
+│   ├── plugin-acad24/     # AutoCAD 2024 shell (.NET 4.8)
+│   ├── plugin-acad25/     # AutoCAD 2025 shell (.NET 8)
+│   ├── plugin-acad26/     # AutoCAD 2026 shell (.NET 8)
+│   └── plugin-acad27/     # AutoCAD 2027 shell (.NET 10)
+├── tests/                 # xUnit
+├── scripts/               # install/uninstall PowerShell
+├── lib/acad24/            # Notes only; Autodesk DLLs are never committed
+└── .github/workflows/     # CI
+```
+
+---
+
+## Họ bimwright
+
+Các công cụ mã nguồn mở kết nối trợ lý AI với ứng dụng BIM và CAD.
+
+Tên **bimwright** ghép **BIM** với **wright**, một từ tiếng Anh cổ chỉ người thợ chế tạo hoặc xây dựng — như trong *shipwright* (thợ đóng tàu).
+
+- [**rvt-mcp**](https://github.com/bimwright/rvt-mcp) — Autodesk® Revit®
+- [**dwg-mcp**](https://github.com/bimwright/dwg-mcp) — Autodesk® AutoCAD®
+- [**nwd-mcp**](https://github.com/bimwright/nwd-mcp) — Autodesk® Navisworks®
+- [**ipt-mcp**](https://github.com/bimwright/ipt-mcp) — Autodesk® Inventor®
+- [**bim-wiki**](https://github.com/bimwright/bim-wiki) — Kho kiến thức BIM ưu tiên tiếng Việt
+
+---
+
+## Tuyên bố miễn trừ
+
+AutoCAD và Autodesk là thương hiệu đã đăng ký của Autodesk, Inc. bimwright là dự án open-source độc lập, không liên kết, không được tài trợ và không được bảo chứng bởi Autodesk, Inc.
+
+---
+
+## Giấy phép
+
+[Apache License 2.0](LICENSE)
+
+Thông báo bên thứ ba: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)

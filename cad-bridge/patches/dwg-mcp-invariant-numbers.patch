@@ -1,0 +1,72 @@
+diff --git a/src/shared/Drawing/SystemVariableCatalog.cs b/src/shared/Drawing/SystemVariableCatalog.cs
+--- a/src/shared/Drawing/SystemVariableCatalog.cs
++++ b/src/shared/Drawing/SystemVariableCatalog.cs
+@@ -1,5 +1,7 @@
++// Modified by the CAD team (2026-10-07); see patches/ and docs/IMPORT_MANIFEST.json in cad-bridge.
+ using System;
+ using System.Collections.Generic;
++using System.Globalization;
+ 
+ namespace Bimwright.Dwg.Plugin.Drawing
+ {
+@@ -87,7 +89,10 @@
+                         return true;
+ 
+                     case VariableType.Double:
+-                        coercedValue = Convert.ToDouble(rawValue);
++                        // Local fix (2026-10-06): MCP numbers use a dot, independent of Windows culture.
++                        coercedValue = rawValue is string text
++                            ? double.Parse(text, NumberStyles.Float, CultureInfo.InvariantCulture)
++                            : Convert.ToDouble(rawValue, CultureInfo.InvariantCulture);
+                         return true;
+                 }
+             }
+diff --git a/tests/Bimwright.Dwg.Tests/DrawingVariableCatalogTests.cs b/tests/Bimwright.Dwg.Tests/DrawingVariableCatalogTests.cs
+--- a/tests/Bimwright.Dwg.Tests/DrawingVariableCatalogTests.cs
++++ b/tests/Bimwright.Dwg.Tests/DrawingVariableCatalogTests.cs
+@@ -1,4 +1,6 @@
++// Modified by the CAD team (2026-10-07); see patches/ and docs/IMPORT_MANIFEST.json in cad-bridge.
+ using System;
++using System.Globalization;
+ using Bimwright.Dwg.Plugin.Drawing;
+ using Xunit;
+ 
+@@ -50,6 +52,38 @@
+             Assert.Null(error);
+         }
+ 
++        // Local regression (2026-10-06): numeric strings must not depend on host culture.
++        [Theory]
++        [InlineData("ru-RU")]
++        [InlineData("en-US")]
++        public void Coerce_Double_UsesInvariantNumericStrings(string cultureName)
++        {
++            var originalCulture = CultureInfo.CurrentCulture;
++            try
++            {
++                CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo(cultureName);
++
++                Assert.True(SystemVariableCatalog.TryCoerceValue("DIMSCALE", "2.5",
++                    out var coerced, out var error), error);
++                Assert.Equal(2.5d, coerced);
++                Assert.Null(error);
++
++                Assert.True(SystemVariableCatalog.TryCoerceValue("DIMSCALE", 2.5d,
++                    out coerced, out error), error);
++                Assert.Equal(2.5d, coerced);
++                Assert.Null(error);
++
++                Assert.False(SystemVariableCatalog.TryCoerceValue("DIMSCALE", "2,5",
++                    out coerced, out error));
++                Assert.Null(coerced);
++                Assert.Contains("cannot be coerced", error);
++            }
++            finally
++            {
++                CultureInfo.CurrentCulture = originalCulture;
++            }
++        }
++
+         [Fact]
+         public void Coerce_RejectsUnknownVariables()
+         {
