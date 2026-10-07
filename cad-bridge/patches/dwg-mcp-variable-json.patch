@@ -1,0 +1,62 @@
+diff --git a/src/server/Tools/DrawingWriteTools.cs b/src/server/Tools/DrawingWriteTools.cs
+--- a/src/server/Tools/DrawingWriteTools.cs
++++ b/src/server/Tools/DrawingWriteTools.cs
+@@ -1,4 +1,6 @@
++// Modified by the CAD team (2026-10-07); see patches/ and docs/IMPORT_MANIFEST.json in cad-bridge.
+ using System.ComponentModel;
++using System.Text.Json;
+ using System.Threading.Tasks;
+ using ModelContextProtocol.Server;
+ using Newtonsoft.Json.Linq;
+@@ -12,12 +14,12 @@
+             "Set the value of a drawing system variable. Rejects variable names not in the write allowlist.")]
+         public static Task<string> SetSystemVariable(
+             [Description("Name of the system variable to set.")] string name,
+-            [Description("New value. Types are coerced automatically depending on the variable.")] JToken value)
++            [Description("New value. Types are coerced automatically depending on the variable.")] JsonElement value)
+         {
+             var request = new JObject
+             {
+                 ["name"] = name,
+-                ["value"] = value
++                ["value"] = JToken.Parse(value.GetRawText())
+             };
+             return ToolGateway.LoggedCall("set_system_variable", request, request);
+         }
+diff --git a/tests/Bimwright.Dwg.Tests/DrawingOpsSchemaTests.cs b/tests/Bimwright.Dwg.Tests/DrawingOpsSchemaTests.cs
+--- a/tests/Bimwright.Dwg.Tests/DrawingOpsSchemaTests.cs
++++ b/tests/Bimwright.Dwg.Tests/DrawingOpsSchemaTests.cs
+@@ -1,6 +1,9 @@
++// Modified by the CAD team (2026-10-07); see patches/ and docs/IMPORT_MANIFEST.json in cad-bridge.
+ using System;
+ using System.Reflection;
+ using Bimwright.Dwg.Plugin;
++using Bimwright.Dwg.Server.Tools;
++using ModelContextProtocol.Server;
+ using Newtonsoft.Json.Linq;
+ using Xunit;
+ 
+@@ -8,6 +11,23 @@
+ {
+     public class DrawingOpsSchemaTests
+     {
++        [Fact]
++        public void Actual_MCP_variable_schema_does_not_require_recursive_JToken_arrays()
++        {
++            var tool = McpServerTool.Create(
++                typeof(DrawingWriteTools).GetMethod(nameof(DrawingWriteTools.SetSystemVariable)),
++                (object)null);
++            var schema = tool.ProtocolTool.InputSchema;
++            var valueSchema = schema.GetProperty("properties").GetProperty("value");
++            Assert.False(valueSchema.TryGetProperty("type", out var type) &&
++                         type.ValueKind == System.Text.Json.JsonValueKind.String &&
++                         type.GetString() == "array");
++            Assert.False(valueSchema.TryGetProperty("items", out _));
++            foreach (string name in new[] { "name", "value" })
++                Assert.Contains(schema.GetProperty("required").EnumerateArray(),
++                    field => field.GetString() == name);
++        }
++
+         [Fact]
+         public void Validate_ZoomExtentsSchemaAcceptsNoParameters()
+         {

@@ -1,0 +1,1161 @@
+{
+  "upstream": "https://github.com/bimwright/dwg-mcp",
+  "tag": "v2.0.1",
+  "baseCommit": "4d0f75646631186612af926944d7e33affc4757d",
+  "importMode": "source snapshot with applied local patches; no nested Git",
+  "files": [
+    {
+      "path": ".gitattributes",
+      "sha256": "925c31a0283d740698b25498113766fb2b6f25b0e9decc9e5d879ba9185bc2e2"
+    },
+    {
+      "path": ".github/workflows/build.yml",
+      "sha256": "a0c68ac22d503a7af8cdaee81bd7d3e2cf7b191fef0a0405043b205bb708b637"
+    },
+    {
+      "path": ".gitignore",
+      "sha256": "9bfa036067b7871324c805ea7ea4bc59e6a7455af193584474a12128a5e2a591"
+    },
+    {
+      "path": ".mcp.json.example",
+      "sha256": "97c7d80f35eec9ff0addd82b9367a205320cbfd11e40f543ee63679d7ab12505"
+    },
+    {
+      "path": "ARCHITECTURE.md",
+      "sha256": "c2e10bb5849c3a27d9d50c0932f60dd6124f539c28993a636daf52d768ba5c39"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "sha256": "7ace4946ed7330c962ae9ab4deb0a3916ddfbd1c6aefbcd3239e4da8fccff21b"
+    },
+    {
+      "path": "CODE_OF_CONDUCT.md",
+      "sha256": "e6543142fbc8a6da2e0cf4a6595c0c2f8aeb7dd08947123c0639f6ef68ccfbf5"
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "sha256": "0d02499520444eef84ede4e729943b92fbf030a9cec4773f56227edc820cd6e7"
+    },
+    {
+      "path": "docs/testing/fresh-install-checklist.md",
+      "sha256": "b4a8a04d863bbd0a87a8b05a595ceda7f3d3fe45df91161ff71071a6a022fff7"
+    },
+    {
+      "path": "lib/acad24/README.md",
+      "sha256": "c8dffd9ea6b96f9021e86fd76691146850cd948d755edd9d654cb05a472c2e5d"
+    },
+    {
+      "path": "LICENSE",
+      "sha256": "3c08935a957398d34fbc6449ab7e64b27bac47db30a3680840e86bf5f29db53e"
+    },
+    {
+      "path": "README.ja.md",
+      "sha256": "9f08e8e092f5a227aff1fcafd880da46963cfe873f6f51bd7a245b8232e6f6eb"
+    },
+    {
+      "path": "README.md",
+      "sha256": "bcadf8c2abcc7cb5b9bf79c252d83348f608dc9a99cbdcce23695e9dc4060b2e"
+    },
+    {
+      "path": "README.vi.md",
+      "sha256": "6aac6848391a0f9d604afbe2f70fba711dd318633ed78dd07dbb060d81f69042"
+    },
+    {
+      "path": "README.zh-CN.md",
+      "sha256": "0a1c25387b5c826ed01607759101d62507c97803ed4f7b47722ed6ced142b9fa"
+    },
+    {
+      "path": "scripts/install.ps1",
+      "sha256": "67ee10fb417310c222990f9d4206dd66b800def1491f1fa8c0a3ca940a0d4aba"
+    },
+    {
+      "path": "scripts/package-client-setup.ps1",
+      "sha256": "d5db273138696d5d0b8583ad0a3924ae4219cc19d87f306ea7d24164e9d93b69"
+    },
+    {
+      "path": "scripts/PackageContents.xml",
+      "sha256": "2cb526190b1ba478e4ca5a406d4bccd503243ae42743898d77177727b13cf4c7"
+    },
+    {
+      "path": "scripts/uninstall-all.ps1",
+      "sha256": "a080224730fcd95e1ce6745b791dfe8c7236ccffd4a2307ff576c07fc5a9b3cb"
+    },
+    {
+      "path": "scripts/uninstall.ps1",
+      "sha256": "dd43030c99da3e86b2aa09eb2bbfafbea4b15d6379d5e1b2c85acaa9ec7dd8f7"
+    },
+    {
+      "path": "server.json",
+      "sha256": "4cf9c476df10f08ec124d0c089d5e3ec78191386a9b8a11f67e6d0a65fc5ea99"
+    },
+    {
+      "path": "src/Bimwright.Dwg.sln",
+      "sha256": "3a7b1966c0745a4418326e00fd36c3101fd11e1e273f6343e22b9c20cfc95437"
+    },
+    {
+      "path": "src/plugin-acad22/Bimwright.Dwg.Plugin.Acad22.csproj",
+      "sha256": "2460a6cdff5b88ceab238a41bffe6f1a8f3d325e935573df9d43a77cfdf933fe"
+    },
+    {
+      "path": "src/plugin-acad23/Bimwright.Dwg.Plugin.Acad23.csproj",
+      "sha256": "c5137ff26752e26339307e3abf86ec64163e2c6a00679a6e8458d485b5f98677"
+    },
+    {
+      "path": "src/plugin-acad24/App.cs",
+      "sha256": "f22d5ab5b55ee5b52c6467a290ac4b06c8c3e5876007b26b3114f6e6e87e992a"
+    },
+    {
+      "path": "src/plugin-acad24/Bimwright.Dwg.Plugin.Acad24.csproj",
+      "sha256": "bf20b713edecdb97c6b76c98c0c097a6a5ac1f22aa159e548eb6f17f14182177"
+    },
+    {
+      "path": "src/plugin-acad25/Bimwright.Dwg.Plugin.Acad25.csproj",
+      "sha256": "03403e07cdf1355533705cfb040b040155edb54d55b3ae4e411756c616d951f3"
+    },
+    {
+      "path": "src/plugin-acad26/Bimwright.Dwg.Plugin.Acad26.csproj",
+      "sha256": "35eaf6e84a93801d01aff3edd355d8db2a8aeea5160eb12923356deab7dcbbf3"
+    },
+    {
+      "path": "src/plugin-acad27/Bimwright.Dwg.Plugin.Acad27.csproj",
+      "sha256": "7e81345317ca0f801aed989877fcf50c537b4805cb30880057c2e761b41b7297"
+    },
+    {
+      "path": "src/server/AuthToken.cs",
+      "sha256": "c623d68f713b1597ef4a9b145aa5d14e1058bb9fde3ec2517fdaf8cd956de152"
+    },
+    {
+      "path": "src/server/Bake/BakeDb.cs",
+      "sha256": "1d2f0faa79a1d9c6b5a5bc03660c84d0d8bcb3aa4929aab9c5ce2b96880e1357"
+    },
+    {
+      "path": "src/server/Bake/BakePaths.cs",
+      "sha256": "dad76e78d76695a629b437728dc25fd20fab381ed9839106481cd25d3bc85d02"
+    },
+    {
+      "path": "src/server/Bake/BakeSuggestionRecord.cs",
+      "sha256": "b58dce67867f371db50074e57fbd7a1566bf1acf239ed0d9032ae6495bbb9ffa"
+    },
+    {
+      "path": "src/server/Bake/BakeSuggestionStates.cs",
+      "sha256": "eec2b8eda2d2899ae893ee0c12da8352df9160ab695e281f559bd8193d4de2b3"
+    },
+    {
+      "path": "src/server/Bake/ClusterEngine.cs",
+      "sha256": "8c8c748d8f978fe3086734a7f0aab4d6a3000e34997883cf9b56f0a061d69687"
+    },
+    {
+      "path": "src/server/Bake/SuggestionProposer.cs",
+      "sha256": "dbf7af7809cf69a87435ab481c706563118a4e03a19255a0c113fe738df3aede"
+    },
+    {
+      "path": "src/server/Bake/ToolBakerAuditLog.cs",
+      "sha256": "a4d9225087ad9d62a13f2f16c5e8e33c9d747b9fdacd4a4ccd301f0edfc44f5a"
+    },
+    {
+      "path": "src/server/Bake/UsageEvent.cs",
+      "sha256": "1923b04f62d7dde3f53c2f9e9cf8481bdef1f312f2b9f8d13b17ad6fa734a2d8"
+    },
+    {
+      "path": "src/server/Bake/UsageEventLogger.cs",
+      "sha256": "8956c5c3005319100cfd3a8dcf01ab5cda3d2c3d82b66fc86a7a4e381bb0377b"
+    },
+    {
+      "path": "src/server/Bimwright.Dwg.Server.csproj",
+      "sha256": "0d43cc3f14fdf6d3b0bf862a25588f4f02239c0045368d360a19372f53ab3974"
+    },
+    {
+      "path": "src/server/Dto.cs",
+      "sha256": "467f808d389a1bde2d937da3fee4e502c0a106e015c73451b845dc5abe5acfb4"
+    },
+    {
+      "path": "src/server/DwgMcpConfig.cs",
+      "sha256": "1cd764fa8e22f9ea8dd3cc18d0825da038306ff70f7e6897bfa3edc8e541cd91"
+    },
+    {
+      "path": "src/server/Handlers/AcceptBakeSuggestionHandler.cs",
+      "sha256": "279e2091d5caeac40095874083af1100293491bbaf8e00a278ff5fc7b3b50f46"
+    },
+    {
+      "path": "src/server/Handlers/DismissBakeSuggestionHandler.cs",
+      "sha256": "6960447b928939083c2ad4aa220730314b4f30209298432aebb0b70dc1960ce2"
+    },
+    {
+      "path": "src/server/Handlers/ListBakeSuggestionsHandler.cs",
+      "sha256": "673737fa14ee0aa3216cf4ee29d5f511d85b0cbd580f7ae984e5470f358e68c7"
+    },
+    {
+      "path": "src/server/LispSecurityScanner.cs",
+      "sha256": "b1e4f42d99e6511d6ed72e4d122f5af030345346c417336d687ad4cea7eed4f6"
+    },
+    {
+      "path": "src/server/Logging/McpLogger.cs",
+      "sha256": "6270f918dfcfcc1a8cb0a9ad366b7aa1a1aa6f4a69ce7aa1816151632a94950a"
+    },
+    {
+      "path": "src/server/Logging/McpSessionLog.cs",
+      "sha256": "19321b86a5e148e0df6b048889a1a54801810ca6ef6ec4ce7c33ca29a21b47d3"
+    },
+    {
+      "path": "src/server/Logging/McpSessionLogEntry.cs",
+      "sha256": "95d52acb187679e841323a9a5ec0fa0d7a56ac070b8e4ffbe676a2b53b5f97f1"
+    },
+    {
+      "path": "src/server/Logging/SummaryGenerator.cs",
+      "sha256": "b90f21e87ae43da58a2dccec397f5654bdb9a2614f63ff1fdafe050c5c83acb6"
+    },
+    {
+      "path": "src/server/Memory/JournalEntry.cs",
+      "sha256": "5af4489251ede0926a25bec6ce212f0e12999b91cb019930bc80f331ed0de31a"
+    },
+    {
+      "path": "src/server/Memory/JournalLogger.cs",
+      "sha256": "d0a1e95c9d3222847eba91e8cfb18f490e97630e9382cf624430a46da429f1e4"
+    },
+    {
+      "path": "src/server/Memory/PatternDetector.cs",
+      "sha256": "833c0f5d2fd1f2745e0ce94d6cc6045c71d7bd58fa3ea17b0281d2b257412525"
+    },
+    {
+      "path": "src/server/Memory/SessionContext.cs",
+      "sha256": "f8f9a220225e692a49c2e26a326f74a534c6dd7955ef39b30f6a992d26d09932"
+    },
+    {
+      "path": "src/server/PluginClient.cs",
+      "sha256": "d8e9c9cf58ea2febb4de4671ed4459919d99908b569646fbc1d47934f468da2a"
+    },
+    {
+      "path": "src/server/Program.cs",
+      "sha256": "76e71be6e5182150785bf1503c193cb314ec35c6cdcb439091da6998e383fd8e"
+    },
+    {
+      "path": "src/server/Properties/AssemblyInfo.cs",
+      "sha256": "845f06a0cd924dd4f9f4ad11aadf2cd3cf0225ad9294a5ac3a5e6d861ccceae3"
+    },
+    {
+      "path": "src/server/ServerLogger.cs",
+      "sha256": "a9299ba13d82da333f71ccd3f95be29b0e783b959956b98da803663b02f7b571"
+    },
+    {
+      "path": "src/server/ServerState.cs",
+      "sha256": "8ca6c3d281d9936779f7f0b3ed21bda303521b35e2c5b95f1e351b5f757d686f"
+    },
+    {
+      "path": "src/server/ToolCatalogBuilder.cs",
+      "sha256": "dd1074df94daf4b906cc27da77c24ac4b6db07f9a7503c54617e0f70a08a895b"
+    },
+    {
+      "path": "src/server/Tools.cs",
+      "sha256": "a77af05b933b140a463ad163d27772c65b2759e5ef0bb40a791a8f3ecf10fd20"
+    },
+    {
+      "path": "src/server/Tools/AnnotationTools.cs",
+      "sha256": "fc89c66e0836496fc4dc99269b04ee5d243ce91142c90a8d5a99813e80f7add8"
+    },
+    {
+      "path": "src/server/Tools/BatchTools.cs",
+      "sha256": "f380077c9a2cbe6b3e274123158b81399bf77d888e0f472eef7e0aa97db2e291"
+    },
+    {
+      "path": "src/server/Tools/BlockTools.cs",
+      "sha256": "923a62d673718d3c0cba84824d26adbcd84e0fa80b43e01fcedb7a601203d381"
+    },
+    {
+      "path": "src/server/Tools/BlockWriteTools.cs",
+      "sha256": "30143678c109d7d900855ddb9684bbf5159e07ea4d48c51f2c6fc497c0ff4d91"
+    },
+    {
+      "path": "src/server/Tools/CodeTools.cs",
+      "sha256": "be419293bfb8657f90a98c85a3c7fd23601f5592f51aa1d9f247d5c41eafdf54"
+    },
+    {
+      "path": "src/server/Tools/DimensionTools.cs",
+      "sha256": "3fce279d46c6006af046667f8339ab7bfb24dc2ce73041aa75a61906ecc5feac"
+    },
+    {
+      "path": "src/server/Tools/DrawingTools.cs",
+      "sha256": "9bd994e28b9822066a72729c3a65743492bf20b714868197eeb84d28ea7503fb"
+    },
+    {
+      "path": "src/server/Tools/DrawingWriteTools.cs",
+      "sha256": "0e1bb84aa14ae1b5f7b90be0a678a54b87028356e589f188e28803074f140e6b"
+    },
+    {
+      "path": "src/server/Tools/EntityStyleTools.cs",
+      "sha256": "674c310581fa09403ea6a195c6eca835bc9ddfa39d10cfbc9dd326a5c3552584"
+    },
+    {
+      "path": "src/server/Tools/ExportTools.cs",
+      "sha256": "3834babd8992b7644117fdfd07313d9cdefc53c1bc380967b75055e0deda4046"
+    },
+    {
+      "path": "src/server/Tools/MetaTools.cs",
+      "sha256": "7cf16b55d2cb91297ecd847ba5a3f92a37178a812895de187ad37be58680cecb"
+    },
+    {
+      "path": "src/server/Tools/ModifyTools.cs",
+      "sha256": "8cde7804194ee201a3e44ebb0382c1595be2f4f19e10daad57087c50c8bbb0f6"
+    },
+    {
+      "path": "src/server/Tools/QueryTools.cs",
+      "sha256": "d60c20b3aa80b1abb4a1f359ff7d7605efc8824742dbd2a0a354e46de2f74e39"
+    },
+    {
+      "path": "src/server/Tools/ToolBakerTools.cs",
+      "sha256": "1e67d56ee317afff90db0c03afaaa25430198d0d7254a547e0140bed57b00b44"
+    },
+    {
+      "path": "src/server/Tools/ToolBakerWriteTools.cs",
+      "sha256": "2a208b348399d91756ab44dc91c0e11ff71a5c6814a576b734fa748a1462efee"
+    },
+    {
+      "path": "src/server/Tools/ViewTools.cs",
+      "sha256": "7785b2a6c457def7ce1ec6b84d4baa70eb1da6ebb0429f8f2d2fb28fb0408a3f"
+    },
+    {
+      "path": "src/server/ToolsetFilter.cs",
+      "sha256": "e24861cb16d77cc3a0315f73d6280484c5539ef472a8f492a3600cfa834d4931"
+    },
+    {
+      "path": "src/server/ViewImageResponse.cs",
+      "sha256": "9b98bab4ea454ec8e2b3b65846c4a2be3f0e252a538312a33754ca6a22ef5a3a"
+    },
+    {
+      "path": "src/shared/Annotation/AnnotationEntityFactory.cs",
+      "sha256": "3397c5706b82c61f729d9d5ad77b50677121cabb685cf7739d4ab5287b478b68"
+    },
+    {
+      "path": "src/shared/Annotation/AnnotationRequestValidation.cs",
+      "sha256": "9431e3a5b07a9f5d8925048f3f3b671c188716af22b71de4556f463880493162"
+    },
+    {
+      "path": "src/shared/assets/fonts/OpenSans-CondensedLight.ttf",
+      "sha256": "bd09013ebb713ef8bdf17fd7bac92e51a6ff2f2e6844f561ae0cda2a457a9ed0"
+    },
+    {
+      "path": "src/shared/assets/fonts/README.md",
+      "sha256": "8617020ae8add2c4f3cb5dd57791ed42218cdc23abc4541bb6d884f0f7249f75"
+    },
+    {
+      "path": "src/shared/Blocks/BlockAttributeService.cs",
+      "sha256": "ca19395d49f9f907a963957be9ff01363d1ea6032c913350b679040a8682b93c"
+    },
+    {
+      "path": "src/shared/Blocks/BlockDefinitionResolver.cs",
+      "sha256": "854f2a3c8619d2933191c410dfd3e9dc4c79285b5fe4c3de4dde964f7376e69e"
+    },
+    {
+      "path": "src/shared/Blocks/BlockReferenceResolver.cs",
+      "sha256": "6205bd1522711f1f4f83a072f8518048310b2a12569efe0128a23b6fdd7a4723"
+    },
+    {
+      "path": "src/shared/Cad/CadEntityProperties.cs",
+      "sha256": "1b7f6391a12032b57cf3d003f24c98aeb51e784b235578f4d4bebb26ef6d4beb"
+    },
+    {
+      "path": "src/shared/Cad/CadHandleResolver.cs",
+      "sha256": "49fc5f15aa65dd4802f39041f15084132d8d8d3df2970063da00d56dc5cc96e7"
+    },
+    {
+      "path": "src/shared/Cad/CadLayerService.cs",
+      "sha256": "24f528f47e1ae4abacf20cfcf88dc463be450b863d16ea4535efb6498a5ea1b3"
+    },
+    {
+      "path": "src/shared/Cad/CadPrimitiveValidation.cs",
+      "sha256": "0eada88997345fa4ccbf814e9600ed989295f9a27db1c83b18af20322012d614"
+    },
+    {
+      "path": "src/shared/Cad/CadPrimitiveWriter.cs",
+      "sha256": "4e1660ab7b1ea2006e1624a73790acd538340b27d57da6752a146163817afa38"
+    },
+    {
+      "path": "src/shared/Cad/CadQueryService.cs",
+      "sha256": "c76f2d315dff91db19a5ca08e3206b603eba2aad7436db89443666856254dc46"
+    },
+    {
+      "path": "src/shared/Cad/CadTransformService.cs",
+      "sha256": "f3b2611a654cc0ec40c08bda6654bd223d036af767a82c33c9fffc34a5973c0d"
+    },
+    {
+      "path": "src/shared/Cad/CadWire.cs",
+      "sha256": "4a23187da9f68897aa0d971c340d3328784e5350858262ed3713e21f64725d0e"
+    },
+    {
+      "path": "src/shared/Cad/CreateHatchInput.cs",
+      "sha256": "24e4d7a15a6749a110ab97ba099eccc53ed55118d4a099748fbee5c7f82ec32f"
+    },
+    {
+      "path": "src/shared/Cad/LineweightSpec.cs",
+      "sha256": "01637d32e0612949f93f5450614c5914f8074be48ce0b1dfe6b33161bf17262f"
+    },
+    {
+      "path": "src/shared/Clustering/SpatialClusterer.cs",
+      "sha256": "a606e5ac9427db092ea0f665643c6174ea442299c10c6996b493a3f43ef4a0f1"
+    },
+    {
+      "path": "src/shared/Config/PluginSettings.cs",
+      "sha256": "b3f480b1c7e6c3378b93ad809b9286423550a97b5b624be2157e6b61cc5f78e4"
+    },
+    {
+      "path": "src/shared/Dimensions/DimensionEntityFactory.cs",
+      "sha256": "7627d44f4d6e6dd529584ec1c1093e610a24afc5b2d513d815e2ba8aff3c7f9a"
+    },
+    {
+      "path": "src/shared/Dimensions/DimensionRequestValidator.cs",
+      "sha256": "e8c9ab1dea79b18bfb8fa26250ebcfee94647aace1fdb229026f5d4e3e31fbd2"
+    },
+    {
+      "path": "src/shared/Dimensions/DimensionStyleResolver.cs",
+      "sha256": "f1e3ce6f47a210fd768a9c89b43dd3b9073e52d091a1cce3009bd72cc3a485a8"
+    },
+    {
+      "path": "src/shared/Dimensions/DimensionTargetResolver.cs",
+      "sha256": "d4f67a8fe1cb23004a08ee14e15d21186a8205d9cf55e525f5e68c9b9169fa49"
+    },
+    {
+      "path": "src/shared/Drawing/DrawingSaveService.cs",
+      "sha256": "e5038b430ab3ffe15b6173113bf5e99300d50c4d53c078ca4cd61b4fdfd84db7"
+    },
+    {
+      "path": "src/shared/Drawing/PurgeDrawingService.cs",
+      "sha256": "72d2e63e32f73ab5a644db7b0a59875fea766235f01d0974998c1f614de784c9"
+    },
+    {
+      "path": "src/shared/Drawing/SystemVariableCatalog.cs",
+      "sha256": "62cad8fbe5b9313f3670ef026026e5d81195e595718fa76bd6cc26cb516c3c61"
+    },
+    {
+      "path": "src/shared/Export/ExportPathPolicy.cs",
+      "sha256": "4e092759bdad6abdd147f07661a968d3d5e5435029f919a9c0e572383fed7386"
+    },
+    {
+      "path": "src/shared/Handlers/Annotation/AnnotationHandlerSupport.cs",
+      "sha256": "42a100511e21d7cc5e70a015b0a1960bdf9c8de35cb90f87f0a175bf48de2be2"
+    },
+    {
+      "path": "src/shared/Handlers/Annotation/CreateLeaderHandler.cs",
+      "sha256": "a0e4e001379e1049e24c4a3f4d50d4346c1c80df689f9262202b5232fb57d43b"
+    },
+    {
+      "path": "src/shared/Handlers/Annotation/CreateMTextHandler.cs",
+      "sha256": "342383ce3f5d18990555ef3095e686305ead064df97bdd5561ed98c791af3310"
+    },
+    {
+      "path": "src/shared/Handlers/Annotation/CreateTableHandler.cs",
+      "sha256": "1533b8a1cf6e29cd8b9e503f4da619176f1a26b0399579b35a574bd4b22d300c"
+    },
+    {
+      "path": "src/shared/Handlers/Annotation/CreateTextHandler.cs",
+      "sha256": "7893bab672426c393a99c8908cf1f42d241291ce49ebf801298d7b34fc7847e9"
+    },
+    {
+      "path": "src/shared/Handlers/ApplyBakeSuggestionHandler.cs",
+      "sha256": "85254a3ccaf13a10c0a2b55c321fda7dd2d0a3e6d4d42e10c085a47892c72dcf"
+    },
+    {
+      "path": "src/shared/Handlers/ApplyUnicodeStyleHandler.cs",
+      "sha256": "88ad400d58b428f724d9851c0331ef0085f70cb63726f606be7076084b5619b8"
+    },
+    {
+      "path": "src/shared/Handlers/BatchExecuteHandler.cs",
+      "sha256": "0564bbd250e8c448882d9fd7662d8978fa4005e936879a3c057cec31cba0f27b"
+    },
+    {
+      "path": "src/shared/Handlers/Blocks/BlockHandlers.cs",
+      "sha256": "d8827d10e0ec3ae6084992c41a770442ef03df27134883202d3c6211151b14bb"
+    },
+    {
+      "path": "src/shared/Handlers/ChangeColorHandler.cs",
+      "sha256": "722774036a52dc3b6623e28ae797c3e36ec1fcec871bc5d958226f6949967c02"
+    },
+    {
+      "path": "src/shared/Handlers/ChangeLayerHandler.cs",
+      "sha256": "57be60bbe3e6ceb192817286605b686ad4696a077fde9254e499449af8aab74a"
+    },
+    {
+      "path": "src/shared/Handlers/CollapseAndRewriteHandler.cs",
+      "sha256": "c16230a1fc5c03959c3bbd32e1fb7cb88ba04a893e5cf670412589ad1dc8b83a"
+    },
+    {
+      "path": "src/shared/Handlers/CopyEntitiesHandler.cs",
+      "sha256": "87fa102c086d9ffb7bcad89c66b76c25456053203a1309b176c47b65b29aff13"
+    },
+    {
+      "path": "src/shared/Handlers/CountEntitiesHandler.cs",
+      "sha256": "a02bbf9f8af57f8a8b48eceade62095997b37ae5e6d83e3a8bcbbd959adc5f04"
+    },
+    {
+      "path": "src/shared/Handlers/CreateArcHandler.cs",
+      "sha256": "bd1e7a1653d737861f07a8d1543f8015474f2a62c78fa5ef7cbdfe6eb9f5b670"
+    },
+    {
+      "path": "src/shared/Handlers/CreateCircleHandler.cs",
+      "sha256": "d210d945ccc6d1c38897df13881073ff53994d20996cd9527ab5f1e22fd94a2f"
+    },
+    {
+      "path": "src/shared/Handlers/CreateEllipseHandler.cs",
+      "sha256": "429ec2860f6450244b475dd76ee60fef9dfb3dc793f52ddb3b1e4c57f14e5c7f"
+    },
+    {
+      "path": "src/shared/Handlers/CreateHatchHandler.cs",
+      "sha256": "106b7d4e29cce7ed0dda061b4641a13f1e7ad8567cbf11dc63bca33ec93ddf59"
+    },
+    {
+      "path": "src/shared/Handlers/CreateLayerHandler.cs",
+      "sha256": "f88a26c9832fae662c0ed145b8d7b03cc0476d5a043cdcd482792d3bbe39d78e"
+    },
+    {
+      "path": "src/shared/Handlers/CreateLineHandler.cs",
+      "sha256": "26a130431442c45131eff11c3440c5137c99834a29b4e4be7f48836c593ca9f9"
+    },
+    {
+      "path": "src/shared/Handlers/CreatePointHandler.cs",
+      "sha256": "8844633249ca590725b1afff1ca4e369335780ce519d1fe1c73c97ad3eabde0f"
+    },
+    {
+      "path": "src/shared/Handlers/CreatePolylineHandler.cs",
+      "sha256": "f2788e7fac76a3cf91f336184deabf126a14b17c7abaaed3065bb9effc3993a2"
+    },
+    {
+      "path": "src/shared/Handlers/CreateRectangleHandler.cs",
+      "sha256": "2cd4492252f1d1d0ce5496a852bd42755426b6e83446e3b10ddadfd832f930ba"
+    },
+    {
+      "path": "src/shared/Handlers/Dimensions/DimensionHandlers.cs",
+      "sha256": "efcfb828d3a0bce1ba97e7b969efc829840f63738f71d61d6503de6088fffbda"
+    },
+    {
+      "path": "src/shared/Handlers/Dimensions/DimensionHandlerSupport.cs",
+      "sha256": "bd36105b5a47a312493962984e00427a6ebb544804f09de4be8c8dacc5b32d26"
+    },
+    {
+      "path": "src/shared/Handlers/Drawing/DrawingHandlers.cs",
+      "sha256": "da0ff73f1deec3767863646bf7a5460cdb6bbd9e93c7ebf85fba82bfef8d70bb"
+    },
+    {
+      "path": "src/shared/Handlers/EraseEntitiesHandler.cs",
+      "sha256": "52db5a784435983156a22b55ac31a7be5045bd8499b39f1dbdbfd70046d92d01"
+    },
+    {
+      "path": "src/shared/Handlers/Export/ExportHandlers.cs",
+      "sha256": "9c5001a776ee5f4dcbadd0bfcc2ad26ea9196a4eabad9b474af3e8e82dc57b61"
+    },
+    {
+      "path": "src/shared/Handlers/GetDrawingInfoHandler.cs",
+      "sha256": "2dd7880240c07cd7efd22090f63de50a896c3eb8c9aae802015faba24622bd15"
+    },
+    {
+      "path": "src/shared/Handlers/GetEntityPropertiesHandler.cs",
+      "sha256": "cae6ba89daf6e11e98a8452a037326cea41611700757745361e29b4a5b34db28"
+    },
+    {
+      "path": "src/shared/Handlers/GetSelectedTextsHandler.cs",
+      "sha256": "19838f2c8e8289c57d04a8fb9be2ba44cd3e1d4a589637a24f0a451c8821f1c0"
+    },
+    {
+      "path": "src/shared/Handlers/ListBakedToolsHandler.cs",
+      "sha256": "2c4f85fbf37c372046a7256a0916173cdbdfd02475a2a1863dd28b43f0fe271b"
+    },
+    {
+      "path": "src/shared/Handlers/ListLayersHandler.cs",
+      "sha256": "e44058b125c49ee48e886cc2dba4f4a69e5996a1eb364b60131b6eaba371bd0d"
+    },
+    {
+      "path": "src/shared/Handlers/MoveEntitiesHandler.cs",
+      "sha256": "05625e623c9919f355c8f3a118ddd1c47e852eb51cbd92ea2ca3b66ff1564f56"
+    },
+    {
+      "path": "src/shared/Handlers/OffsetEntitiesHandler.cs",
+      "sha256": "9a137cd3c18bebba629f6e79fc1d0e3544265d26d86f39e9ab390dfbcdd9bfe9"
+    },
+    {
+      "path": "src/shared/Handlers/QueryEntitiesHandler.cs",
+      "sha256": "9c5c7fc0594650aedc6597fc6744a07f6e6bccf60d219292dd7faf48538ecd49"
+    },
+    {
+      "path": "src/shared/Handlers/RotateEntitiesHandler.cs",
+      "sha256": "b04c276e6bfdbcc718f740eaa6aaee05fb9d3f851e4735747c83292475418cca"
+    },
+    {
+      "path": "src/shared/Handlers/RunBakedToolHandler.cs",
+      "sha256": "fca1a36272b6dd94a3a4c401b65565fc0b2466c84e0bc9cb4f29410267283f07"
+    },
+    {
+      "path": "src/shared/Handlers/RunLispHandler.cs",
+      "sha256": "aa4175a46501281793139585733fd9668dc0ecb54802a12cdf946da01f01286b"
+    },
+    {
+      "path": "src/shared/Handlers/ScaleEntitiesHandler.cs",
+      "sha256": "e79f9694ee72cb6c6a8e1e59db911476116e0e368da427a314ad54faa2a4be11"
+    },
+    {
+      "path": "src/shared/Handlers/SelectByLayerHandler.cs",
+      "sha256": "901ffdf15fb7e840df639c0eeec6e67bab1dc1e69384b77c03272e0ce8ae7fc6"
+    },
+    {
+      "path": "src/shared/Handlers/SelectByTypeHandler.cs",
+      "sha256": "2c8408540f96f3f570815656151ecc34bd44d00db146e26914f58f1b226b4a78"
+    },
+    {
+      "path": "src/shared/Handlers/SendCodeHandler.cs",
+      "sha256": "a86c9923e6728847c1d32039736f27fbfcdec4e1cc4e6cc13d534120332f71f5"
+    },
+    {
+      "path": "src/shared/Handlers/SetLayerLineweightHandler.cs",
+      "sha256": "2fc6f73a01e183eda2b7ac8fc8a7dc98835cddc804f095ead260415acc60e7c8"
+    },
+    {
+      "path": "src/shared/Handlers/SetLineweightHandler.cs",
+      "sha256": "1e7a3f3a6396ef5a75eb3a2019f19e4784216823a43932b52c9eaeef0d50aef3"
+    },
+    {
+      "path": "src/shared/Handlers/TranslateAndRewriteHandler.cs",
+      "sha256": "ce5e5a36fc768cf48af47b232f53175a40c52b8df474edd6c4fa753296891583"
+    },
+    {
+      "path": "src/shared/Handlers/UpdateTextsHandler.cs",
+      "sha256": "1ac096f3a0672c840b684397f2872c4f030451ba6873cf149f806fee0be91c81"
+    },
+    {
+      "path": "src/shared/Handlers/View/ViewHandlers.cs",
+      "sha256": "f26e09f0b5caae8e37204bd9fa09215f985e904fde633a161edc60bab61be89a"
+    },
+    {
+      "path": "src/shared/Infrastructure/BatchExecutor.cs",
+      "sha256": "68b1d2c1f4d03fe925ea2c8ab9da71677f7d96c6c799ee5e4aa0aaad6bed05f5"
+    },
+    {
+      "path": "src/shared/Infrastructure/ClusterStateStore.cs",
+      "sha256": "957e266dde9b66db6ff46a3a92b5ae86e79eacce50bb70cf62174c0a52d4f2ac"
+    },
+    {
+      "path": "src/shared/Infrastructure/CommandDispatcher.cs",
+      "sha256": "41d1b3054c06b712a171acf014f0f37086911601552f7320078d4b5b00538f9f"
+    },
+    {
+      "path": "src/shared/Infrastructure/CommandResult.cs",
+      "sha256": "341fe8b7b97423292ccf69b83453300919e5f1c6b8e9f954ddb10137d4badba8"
+    },
+    {
+      "path": "src/shared/Infrastructure/DocumentInvoker.cs",
+      "sha256": "59ef42a11ee379b57decda0f61e893748a530aa13f2cb8736c88cd97a9dd6da6"
+    },
+    {
+      "path": "src/shared/Infrastructure/DwgApiExecutor.cs",
+      "sha256": "6d506d6508e83c5875740edb30dc904279ae95152767ae077db76c95b5b6f1ec"
+    },
+    {
+      "path": "src/shared/Infrastructure/IAcadCommand.cs",
+      "sha256": "86fcc1c5013e15f9844de7e8de6f3652803b67645305d8ee367948985637a715"
+    },
+    {
+      "path": "src/shared/Infrastructure/MainThreadExecutor.cs",
+      "sha256": "d0821b2f20bf13021871b9886d041df3c4006a0bcb18dc71d76a0b09a4d279b9"
+    },
+    {
+      "path": "src/shared/Infrastructure/PluginLog.cs",
+      "sha256": "4959cf135cdf01614a9f108fe20e346aac6bd3bc03b3ab311ff2d6ecba19d181"
+    },
+    {
+      "path": "src/shared/Infrastructure/PluginTarget.cs",
+      "sha256": "b18de0d0299e76dd7b6bc486e8fc76ad99a5e624ad34e6ac7dc6097234d7eaac"
+    },
+    {
+      "path": "src/shared/Infrastructure/ResponseSizeGuard.cs",
+      "sha256": "f50ba8eaba1a77b7704b70cce54088e72c6449ba9f40edad30e82f262c768cfd"
+    },
+    {
+      "path": "src/shared/Infrastructure/SchemaValidator.cs",
+      "sha256": "b4e1819ba8089755e6f916b9ac3f3ec9560e6d8992a0aabd4ae750813e981a3e"
+    },
+    {
+      "path": "src/shared/Infrastructure/SocketServer.cs",
+      "sha256": "d304d58e88ffbbe29a3571bdc73e131f222a4fd063a7a2546a36588c2e3e6fe9"
+    },
+    {
+      "path": "src/shared/Localization/L.cs",
+      "sha256": "5f73811d0d4eaa5db899ec728e8399be4fbc28d6887ce63c9ada1f28b9045eef"
+    },
+    {
+      "path": "src/shared/Rewriting/BboxFitSizer.cs",
+      "sha256": "86589d225fa93be39487e54c8ffae52c632ba8776e3969570217d5d23e84acb6"
+    },
+    {
+      "path": "src/shared/Rewriting/FinalTextScalePolicy.cs",
+      "sha256": "4d7d8d3ac7de6bc75e73766bd1a88c631fd75109d1b43db42f54900d9aa206a8"
+    },
+    {
+      "path": "src/shared/Rewriting/RewriteExecutor.cs",
+      "sha256": "b799befb9b782539b9b9689349e98dabfbdce611c0cf98526364ddc398dca997"
+    },
+    {
+      "path": "src/shared/Rewriting/RewriteRequestBuilder.cs",
+      "sha256": "f824a63572eb16060dcc5bc27ca822594d9256f4726341de980431ee71eeb607"
+    },
+    {
+      "path": "src/shared/Rewriting/RewriteTypes.cs",
+      "sha256": "00e9d7c20b16ea068bef7c6849b842031d63c792afbb53bbcf9085e75278b302"
+    },
+    {
+      "path": "src/shared/Rewriting/TextMetrics.cs",
+      "sha256": "758afb5b7ad9216186cde94084640f5ac9d912a3818c81ff43f1dee8cbb9fa75"
+    },
+    {
+      "path": "src/shared/Security/BakeRedactor.cs",
+      "sha256": "b32f2a3785d2c903d21b5590d66d00086048381c320e6784fc06b732c0d2f254"
+    },
+    {
+      "path": "src/shared/Security/ErrorSanitizer.cs",
+      "sha256": "8f73256919a0ec205f12b93324b63c4ce996961a2adaa8911afdd2d6def88437"
+    },
+    {
+      "path": "src/shared/Security/LispExecutionPolicy.cs",
+      "sha256": "2c57b2c17bf5bbb135d7c78cf41e0b59202f00f1a18a29f35bfd7e667906e61d"
+    },
+    {
+      "path": "src/shared/Security/McpResponsePrivacy.cs",
+      "sha256": "b72cf83c6076a7600bbd179aa178c185e59734f28485a26969edef59cc9685e5"
+    },
+    {
+      "path": "src/shared/Security/PathAllowlist.cs",
+      "sha256": "1d94fb1ff07f71776f700d94b8921c1216b304feaa8dbd77d09749256b544b97"
+    },
+    {
+      "path": "src/shared/Security/SecretMasker.cs",
+      "sha256": "d9bc7f9c6e76483f6204afcdb29523aa15f64908c9ad25cc18b17154bfcaabc3"
+    },
+    {
+      "path": "src/shared/ToolBaker/BakeCompilerPolicy.cs",
+      "sha256": "6b131741a326b0726fc756c7ca8c68e9748eb3766b4523d9970063e29f3744f7"
+    },
+    {
+      "path": "src/shared/ToolBaker/BakedToolDispatchAuthorizer.cs",
+      "sha256": "f0b4ac749d8ee3c26c58fa37d5d5e112e0f61ccc1a497077c7ee6d28302b8975"
+    },
+    {
+      "path": "src/shared/ToolBaker/BakedToolParameterDefaults.cs",
+      "sha256": "82871a45073ee2ac46be42b8b64cf95ed282f16f9e27ccc65cbf11aa2ab2167f"
+    },
+    {
+      "path": "src/shared/ToolBaker/BakedToolRecord.cs",
+      "sha256": "246f9ecf5adc6c6b772e231e5ca47c5cf9be97013a67c36366544c2b6950bf96"
+    },
+    {
+      "path": "src/shared/ToolBaker/BakedToolRuntimeCache.cs",
+      "sha256": "0ab8eb237b43970d0c161a8533610def5f75f2e19e3797203c2d811c1bd9e840"
+    },
+    {
+      "path": "src/shared/ToolBaker/BakedToolRuntimeCommandFactory.cs",
+      "sha256": "da3bbab0e348f0e4c83145697731d7338f57a11287a2fc5875488f552dfbbf18"
+    },
+    {
+      "path": "src/shared/ToolBaker/BakedToolRuntimeSource.cs",
+      "sha256": "9dfc7f88910382ae3bb3b4d26d15a38971b078f4b1d049e56438fb190c64c17d"
+    },
+    {
+      "path": "src/shared/ToolBaker/ToolCompiler.cs",
+      "sha256": "27d6ee9f9431d635ba85ec0f3b88c8d10500e6cb5bc66d75fcdda15d20d64e66"
+    },
+    {
+      "path": "src/shared/ToolCatalog/ToolCatalogStore.cs",
+      "sha256": "329d3b68bb8cc6a3f7a685a27a9ea6e75897758309e3ad20b45427e4ee0869f6"
+    },
+    {
+      "path": "src/shared/Transport/ITransportServer.cs",
+      "sha256": "056732e1c50052ec9c3359d778f7f09d4cdc8034b683ab1814793264ac321043"
+    },
+    {
+      "path": "src/shared/Transport/PipeTransportServer.cs",
+      "sha256": "d5811d9531319cd1540ec43a81301c26d7983aa47983efe512965dd9405ed0e0"
+    },
+    {
+      "path": "src/shared/Transport/TcpTransportServer.cs",
+      "sha256": "5b82367e1573f103074a01750108263a6a4aa5d558233f0dd955947904063e8a"
+    },
+    {
+      "path": "src/shared/Unicode/McpLayerService.cs",
+      "sha256": "60795b93b9ddbd8d7b66800b3c576999d05f3797002888d6194c069b6c05fb1e"
+    },
+    {
+      "path": "src/shared/Unicode/UnicodeScaleHeuristics.cs",
+      "sha256": "849987e21c3e3ac09c12ccbebe9d0b683277bd3d5f0dd9ca0912655c777233d5"
+    },
+    {
+      "path": "src/shared/Unicode/UnicodeStyleService.cs",
+      "sha256": "d621959ec12c9ab43415466a3e821883c648b4f1c9924d9c746c597f5c1cce71"
+    },
+    {
+      "path": "src/shared/View/CaptureViewContract.cs",
+      "sha256": "ae6797547afb025dcd93533bc95300c28255fe4f730cf6c76e16363b4a919a96"
+    },
+    {
+      "path": "src/shared/View/CaptureViewMath.cs",
+      "sha256": "e429ea15686eec5705380dca4a085982784db5074ef65e6c3d9787dd7d645bc5"
+    },
+    {
+      "path": "src/shared/View/CaptureViewService.cs",
+      "sha256": "4b53c6e26e8fc1a29a53e5e052393016f8c56682fd596555bc80a11954e9482c"
+    },
+    {
+      "path": "src/shared/View/DrawingRevision.cs",
+      "sha256": "16e2cbfb5b661a6535966dbc795e684cf02ffbf0be94ea0a2a77e41fc6e128df"
+    },
+    {
+      "path": "src/shared/View/ViewCaptureStore.cs",
+      "sha256": "71ef91baff1e6465ae334213a395e90ecf5dcc8807e2197fdcab755c068abd3f"
+    },
+    {
+      "path": "src/shared/View/ViewReadingContract.cs",
+      "sha256": "33d3f94c9e67c8f83d2698a822e5e0713994cbdebd7bc8cdc17378db4f6ebd75"
+    },
+    {
+      "path": "src/shared/View/ViewReadingService.cs",
+      "sha256": "dedd7e3d965eccbd75c695d3f2124c559d7ad5d951b04c857b9bc1f4a4661aa8"
+    },
+    {
+      "path": "src/shared/View/ViewReadingWorkflow.cs",
+      "sha256": "a72fa04efb5be81bf74d74c2457f8fbbe1de5a0aa30ecf5832562cdb6017492b"
+    },
+    {
+      "path": "src/shared/View/ViewZoomService.cs",
+      "sha256": "13ef653f24f9bdc54c03304ccd46a5e31522aa7485e4b8dfaa0803da9ead86d0"
+    },
+    {
+      "path": "src/shared/Views/BrandAssets.cs",
+      "sha256": "b11c9885cdcc891cce3a9b8961ae85fd491a93d1d34ed9a6bfa30de9d50d142b"
+    },
+    {
+      "path": "src/shared/Views/Settings/SettingsWindow.cs",
+      "sha256": "b497f5fdfd16f275e50086c2e63cd1bcdd7133b58aafc691d7400d15f8717452"
+    },
+    {
+      "path": "src/shared/Views/Toast/ActivityAggregator.cs",
+      "sha256": "a9576d23d027b49a1a9cb6691ef148fa0a4aa8ec80010c9871a65ca474b4545c"
+    },
+    {
+      "path": "src/shared/Views/Toast/McpToastHost.cs",
+      "sha256": "fb8af69a8308f3c5443209da6802dbf19f314c6235bf9cf33a51dc50fa1a1398"
+    },
+    {
+      "path": "src/shared/Views/Toast/McpToastManager.cs",
+      "sha256": "ea3d176beab553108d1f81f0c9b4cb52280a17361ba5cdfbd1db8bc0c1fe4f7b"
+    },
+    {
+      "path": "src/shared/Views/Toast/McpToastNotifier.cs",
+      "sha256": "af8b567ea0075a140db1bc78bf1d4108ca0a46ac1cf558966a4b2869222170bf"
+    },
+    {
+      "path": "src/shared/Views/Toast/McpToastTheme.cs",
+      "sha256": "ca759abd37eef4e972bfaeb00a7539ad6855cfd299339dec839748f1ea9189c3"
+    },
+    {
+      "path": "src/shared/Views/Toast/McpToastViewModel.cs",
+      "sha256": "fca39afb8ec08ef0a01bae9f412c67610734e706b0cfcdae12fa936a655a82d8"
+    },
+    {
+      "path": "src/shared/Views/Toast/McpToastWindow.cs",
+      "sha256": "e53b6bad580aade7a66f518d05dace4044dbe409b46d1c4c5b715acd59432584"
+    },
+    {
+      "path": "src/shared/Views/Toast/RollingToastNumber.cs",
+      "sha256": "4235c08b9bd186d66ad24e2c02e4b73b965d5d15a7089acf8893261f6b101888"
+    },
+    {
+      "path": "src/shared/Views/Toast/ToastContentBuilder.cs",
+      "sha256": "062f3f153a28658c7fc034302eb42d0f748e866f962e54b7fc1476f5dcdef8f8"
+    },
+    {
+      "path": "src/shared/Views/Toast/ToolNameFormatter.cs",
+      "sha256": "91f9d8935999d8102b1dac75852b7cf72306efc1e7ee3bd0771959bfb8443d0e"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/AcceptBakeSuggestionApplyFlowTests.cs",
+      "sha256": "dbc7d147bbbbcede3a4f0275326bdc8f8281bd1a412b43fea191568eac69d30f"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/ActivityAggregatorTests.cs",
+      "sha256": "6eafad090de723ae5ebafae12c85cec81f20bf5e90deab4c9890e62a322487db"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/AnnotationEntityFactorySourceTests.cs",
+      "sha256": "a9902ef21d78f59754f3d960d7546322755f4df50f994e9430f60c558e2043aa"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/AnnotationHandlerSupportSourceTests.cs",
+      "sha256": "73ab6c176e489a5353ee5456112e20622533481363589fbbc1e154d2f010031e"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/AnnotationRequestValidationTests.cs",
+      "sha256": "1652c56fe50cf758133b6e6d401153600d2c870a1b6f926be45960bf9979aad6"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/AnnotationSchemaTests.cs",
+      "sha256": "03871097bce1ff170e652fc99ba89088b5842ddc88cd2e4bdb9850bb7f6cacb0"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/BakeDbTests.cs",
+      "sha256": "d960cef287e3c6fef262ded3097fb08963b99c3ff3244267a4ccf0d62fcb093d"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/BakeRedactorTests.cs",
+      "sha256": "b2d663822a9f7bb55c63d93e6d3f157fa26de2be79de62f39edea6752851cd58"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/BatchExecutorTests.cs",
+      "sha256": "4f2c18948ed610a9bd9d07847afac9e1b090c13104f2cc7106cfe9fe2b2e63b0"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/BboxFitSizerTests.cs",
+      "sha256": "c0379708858a7fdd06cbfa9f90a2a3199c8748ff684afc106f6535c1d05cdde4"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/Bimwright.Dwg.Tests.csproj",
+      "sha256": "1a1acfe67e5863118a2c6456b89c89c3178e07cae1c69dce4fcc9c1281a15f71"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/BlockSchemaTests.cs",
+      "sha256": "234a146a4f8c7f1be9363b79eefe0ffc06ba2b6566062bdf6242f9fd92260c05"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/BlockSourceContractTests.cs",
+      "sha256": "57ef131fc2a93f03376c8631cef292d8809eef198ec3abec522a3d2858f497e8"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/CadPrimitiveValidationTests.cs",
+      "sha256": "58cc01f168031a486dbbce0f8ef63fc81153527f0c6b35eb4ffe3f54bb3941eb"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/CadTransformServiceTests.cs",
+      "sha256": "1eb1f02d2a4520e9586ae62c00f243c87cfb03566bf43a0aee7ad9ec2f292cc3"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/CadWireTests.cs",
+      "sha256": "1109191321295b8a8501d25eb612635848b63ce36b02c29d8f01a2d3d4f2bffb"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/CaptureViewContractTests.cs",
+      "sha256": "a5964be29dd37bcd3e16c1f2e97a5de0e501805708f24c156385d4201cb7d437"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/CaptureViewMathTests.cs",
+      "sha256": "42c9b8e18b6f064db93d57d2e442773267d005f012e524d92379c76cbc8a59fd"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/CoreCadSchemaTests.cs",
+      "sha256": "f9c49225c0d9cc0627f073e2368bafc67d393f3ae6ded4ca991355285b9309b6"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/CreateHatchInputTests.cs",
+      "sha256": "97149ed6f0f672a8f89bc13fe3d5dadd1956d4e87bdb993aa6bbbe12b4063186"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/DimensionHandlerSourceTests.cs",
+      "sha256": "c73e2146beac037d7c4c14c96838122e4623fe2306987b363e060801c75b9936"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/DimensionRequestValidatorTests.cs",
+      "sha256": "8ecec47e8dd690b182c05352b21366d566ad496579300033e65ea803e2d886e7"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/DimensionSchemaTests.cs",
+      "sha256": "11601ae99ced9e732780a342fc8e3b3c4e0ed51d2e8419888e5d1d78fcf11c5d"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/DiscoveryFileTests.cs",
+      "sha256": "7f6285c70466ed024e3d66e87d2c5c4ad55552d86fe0f96308b92dbcb4886ea6"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/DrawingOpsSchemaTests.cs",
+      "sha256": "5a82a4fd3d008863189e58c3b4a945e368a57d488b4b674a7652c4129dbb7110"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/DrawingRevisionTests.cs",
+      "sha256": "71a47ed43ae7404b7e605ecd4975afc4860f01e31deffc2b9a17b35aad6d6d19"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/DrawingVariableCatalogTests.cs",
+      "sha256": "42361548ce2b50bca6395cc7872801aecd0acd1c91e1da528e26b68d6a71c42f"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/DwgApiExecutorTests.cs",
+      "sha256": "1423eeac783e4cc74ccf9df6032c464244106abd8bdcdca486bcd1bf8c4e6e22"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/DwgMcpConfigTests.cs",
+      "sha256": "9e491b3db05c6693ef5610b4a4a53738d32ba683fdd4389c43758a783155d3f0"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/EntityStyleToolSchemaTests.cs",
+      "sha256": "0b923e673a16b39e290ed968c38edcc1a321bd2b44546cb0b01760319f7f4046"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/ErrorSanitizerTests.cs",
+      "sha256": "855807dbd97393f60299a38e8943c77b60fe2d0e82f02e132a3439ee90679602"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/ExportPathPolicyTests.cs",
+      "sha256": "fef0bc2a5447952fcbb033b45a4e585b8227822276808d77af8cf200016b178c"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/FakeNamedPipeServer.cs",
+      "sha256": "8b07b708901c44a173612e9baeb64301d8b6842d9572a43857276e299bca5eb9"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/FakePluginServer.cs",
+      "sha256": "b07235414ecde2ff05cf6e545ef5c49479000b4faecb7220ceec1010e71b48e8"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/FinalTextScalePolicyTests.cs",
+      "sha256": "a246c4fe74d8bdd7425d82c269a0b227189e283997f404343df09f6f659ea61d"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/LineweightSpecTests.cs",
+      "sha256": "8a4dad9afd4b526ff5dc45f343e0f2be9f35fbfea7df4e4b8093b3496c809371"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/LispExecutionPolicyTests.cs",
+      "sha256": "088b87f55045f28c092c8f1b3e6eb8c537fa534fa65a0de2011815fe43be2804"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/LispSecurityScannerTests.cs",
+      "sha256": "b8df04f083a1dcb03e1a553d75a844acf12618e21d3bfbeaa3bf75d38765541f"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/MainThreadExecutorTests.cs",
+      "sha256": "fe33bed91bd6150519a72a346d4f3fe528da376655baf69d124603e67f21c773"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/MemoryLoggingTests.cs",
+      "sha256": "34f853323994d77572f83b5f4670473796afc8af778a09d3fb2d6ea1593ce192"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/OffsetEntitiesHandlerSourceTests.cs",
+      "sha256": "8ad04467cfaab6193e24b1121167199a231528a29606624d8976dde402a5a76c"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/PluginClientTests.cs",
+      "sha256": "46593206099b935d04f6150811a170362a2c4f5a45aef9e6a2258bc5a75e68cc"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/ProgramOptionsTests.cs",
+      "sha256": "d59cd5850164f6fb74b2d3360b947116b7df95e90b4cc7dabbd65c12cbdced99"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/ResponseSizeGuardTests.cs",
+      "sha256": "a06b8b4a6799046cd39447d02e5f70630e7bd4a866d499e7bb796f34c78f6364"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/RewriteActionNamesTests.cs",
+      "sha256": "1c8c21ce853bb81aa9343ca7a44f5abd86629b37c5dc3c1e491d35532da815bf"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/RewriteRequestBuilderBboxFitTests.cs",
+      "sha256": "1f92863733d78daf6b74cb71879169e5631052527107bd4a67c48385cbacc867"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/RewriteRequestBuilderTests.cs",
+      "sha256": "88d49dde671e4d06dcd670c50874eda56369ae24d01b5573d62e85a321747eb2"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/RewriteRequestBuilderWidthPolicyTests.cs",
+      "sha256": "cb63d481f57eaff916617614ff5732d438812e0cfa84a778b1a8d501a1c44617"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/SchemaValidatorTests.cs",
+      "sha256": "505bb18ce9a8f09da0de638d2a52e22dd953fe55d2d216f486153b19543d8102"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/ScriptHandlerTests.cs",
+      "sha256": "ab02d4d9b27c8b2518b50a3e99b6537fc4898fca58dfad92d122ad0e4b33429c"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/SecretMaskerTests.cs",
+      "sha256": "f78cae2f1a11a5db6769407ca80350f5d6adb3500ace7fde4242e6f139abeeef"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/SmokeTests.cs",
+      "sha256": "45a5e6fd0454cb641132794696de7d3056c89119d1ba79d6ecb3ddd6f10685ed"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/SpatialClustererOptionsTests.cs",
+      "sha256": "a5024b5da52735d06391bfa98dac673b19799085cbb55505f850f3090aa02dd2"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/SpatialClustererTests.cs",
+      "sha256": "156cd2606d369294b77e9d4b0f49431d4096301697b3ef97005c57a55333e4a0"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/Stubs/UnicodeStyleServiceStub.cs",
+      "sha256": "6cd7261f89905db2317b9aad53e5e9a896e63a3769e88739fa43187e3b191ef2"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/TestDoubles/AutoCadRevisionStubs.cs",
+      "sha256": "ae66ec2a72f2c3d6ce022b0785f0a90d15ca0714cc2fc820c1ca8d5e068e546e"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/TestDoubles/AutoCadScriptStubs.cs",
+      "sha256": "032a9b9daabc0b99f11dadc6ebf7cebc0d30a9e4a1e56d8a62e5ed728943285e"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/TextMetricsTests.cs",
+      "sha256": "7dd5e366c331bbeebff3e1ae0ed86ccdef76cc666524c28d1c00d06f13bac6f7"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/ToastContentBuilderTests.cs",
+      "sha256": "14b4354abf671c3014ef0e33e6d733316e276c5da6b61d1d6dd14877824e10d9"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/ToolBakerRuntimeTests.cs",
+      "sha256": "d9d2671bc56bb94a65c5d7d82545e1d52720f2f6fa1010a238bffebaebe4f5a0"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/ToolCatalogBuilderTests.cs",
+      "sha256": "f04a5cca68b136e58526690835506d2434ec0dd3b159a3b39fe2d1f2ce121df8"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/ToolCatalogStoreTests.cs",
+      "sha256": "369e1fecc172d63e1c312f23c7167d6aa90bc41fec26e9551a86f53a202b83a4"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/ToolsetFilterTests.cs",
+      "sha256": "ae22a8901e637706e80357d06bb42520a6062cce17cce24dd846bac5516fd0e2"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/ToolsListSnapshotTests.cs",
+      "sha256": "138b9bd7145f5b6e7768263b416a9ea082d4fb409dd55315ab96fd3da09d5599"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/TranslateAndRewriteDtoTests.cs",
+      "sha256": "0bc5e9da63bcdc20a7a21ac41270f0c71d8143900ee046f60b4647e4cee060cf"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/TransportSpecTests.cs",
+      "sha256": "7f386d972ab55ac99f04972c8ad9c71880f1828886470dbd87c62f013c4834aa"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/UnicodeScaleHeuristicsTests.cs",
+      "sha256": "c41ab25efc505faf49b9223a41fdd52c53dfb6a70d6808c8de0d0f41661dda9e"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/ViewImageResponseTests.cs",
+      "sha256": "df8417b0e0008946ac2b7ec21d541127b42d57da69b6e938b220ef3e3047170a"
+    },
+    {
+      "path": "tests/Bimwright.Dwg.Tests/ViewReadingTests.cs",
+      "sha256": "ba28e05b7fa8830bba7675e052b41608754cfcf9e6204a0efa83200388ab27b7"
+    },
+    {
+      "path": "THIRD_PARTY_NOTICES.md",
+      "sha256": "e5fd82543edc84d60c1df68461a17ad9c233160fab2d267cbb4d90fdaeeb3a61"
+    }
+  ],
+  "hashScope": "Final imported upstream source bytes; text LF and PowerShell CRLF match .gitattributes. Generated build output is excluded.",
+  "localChanges": [
+    "invariant numeric strings",
+    "JsonElement system-variable MCP schema",
+    "typed lineweight and SOLID hatch tools",
+    "AutoCAD 2026 .NET 8 compile references",
+    "selected-year packaging, enclosing Git root and third-party notices",
+    "modified-file notices"
+  ]
+}
