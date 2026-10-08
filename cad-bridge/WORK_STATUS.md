@@ -1,12 +1,14 @@
 # CAD bridge — состояние работы
 
-## Текущее состояние — 2026-10-07
+## Текущее состояние — 2026-10-08
 
 - Единственные исходники и технические инструкции: `team/Projects/cad-bridge`
   в репозитории `git@github.com:tovarishnakhimovets-droid/Projects.git`.
-  Пользователь выполнил merge PR #2 и pull; HEAD develop:
-  `0e81f072084414eb275ed3e17a98fe4bfbd30820`. Дерево совпало с проверенным
-  импортом `a54a174d2459bc063085450e04c15d2c970bd0ab`; пересборка не требовалась.
+  Пользователь выполнил merge PR #2 и pull; исходный импорт
+  `a54a174d2459bc063085450e04c15d2c970bd0ab` принят merge `0e81f07`.
+  База подготовки текущего документационного коммита — `develop`, `7ba4b30`
+  (уборка и ссылка на пакет); удалённая `develop` сверена через ls-remote.
+  Изменения кода после этого коммита при текущей проверке не обнаружены.
   Git-команды, публикацию и merge выполняет пользователь.
 - Снимок upstream v2.0.1 (`4d0f75646631186612af926944d7e33affc4757d`)
   содержит все локальные исправления. Пять патчей уже применены; повторно
@@ -29,9 +31,23 @@
   используют `D:\CAD-Automation\releases\dwg-2027\2026-10-06-style-tools`.
   Этот runtime сохранён по исходному пути, чтобы не ломать открытые приложения.
   Источник кода переключён на принятый Git checkout; runtime обновляется отдельно.
-- AutoCAD 2026 у ГИПа: установка, автозагрузка и нативное подключение пока
-  не подтверждены. Первый запрос после установки — dwg_get_drawing_info;
-  мутации и сохранение для проверки связи не требуются.
+- AutoCAD 2026 у ГИПа: пользователь прислал успешный вывод install.ps1 для
+  team.2 / Years 2026 / Client none; bundle и server установлены, check OK.
+  Автозагрузка и нативное подключение пока не подтверждены. Первый запрос при
+  доступном MCP — dwg_get_drawing_info; изменения и сохранение не нужны.
+
+## Civil 3D 2027: загрузка и read-only связь — 2026-10-08
+
+- Пользователь вручную загрузил существующий Acad27 plugin из действующего
+  style-tools runtime через NETLOAD в Civil 3D 2027. Плагин сообщил канал
+  BimwrightDwg-2027-15816; процесс 15816 запущен с /product C3D и C3D_Metric.
+  Discovery dwg-2027 подтвердил тот же PID и pipe до вызова инструмента.
+- Прямой dwg_get_drawing_info из текущего чата вернул ok=true:
+  Чертеж1.dwg, Model, слой 0, единицы Meters, исходный шаблон acadiso.dwt.
+  Изменения и сохранение чертежа не выполнялись.
+- Подтверждены ручная загрузка существующей DLL и чтение метаданных DWG в Civil.
+  Это не проверка всех операций или специальных объектов Civil. Native Civil
+  tools пока отсутствуют; фильтр автозагрузки Platform=AutoCAD не менялся.
 
 ## Подтверждённые возможности
 
@@ -46,27 +62,39 @@
   Это не проверка всех 42 операций и не live-проверка 2026.
 - Для ГИПа AutoCAD 2026 / .NET 8: plugin-acad26 net8.0-windows, официальные
   compile-only ссылки AutoCAD.NET 25.1.0. Общая реализация совпадает с 2027.
-  Установка, автозагрузка и нативное подключение 2026 пока не подтверждены.
+  Установка у ГИПа подтверждена выводом install.ps1; автозагрузка и нативное
+  подключение 2026 пока не подтверждены.
 - Пакет team.2 включает оба года и self-contained win-x64 сервер. team.1
   был только для 2027. ZIP вне Git; установка описана в docs/TEAM_SETUP.md.
 
-## Известные пробелы из рабочих задач
+## Очередь доработок из рабочих задач
 
-- Full-path document guard отсутствует. has_saved_path может относиться к DWT
-  и не подтверждает сохранённый DWG. Нужны отдельный контракт и тесты диагностики.
+Все пункты ниже ожидают распределения между участниками. Реализация общих
+инструментов не начата; сценарии НВ остаются прототипами. Перед началом указать
+исполнителя и рабочую ветку в строке задачи. Детали проверок сохранены ниже в
+истории НВ; порядок строк не задаёт приоритет.
+
+| ID | Доработка | Следующий шаг |
+| --- | --- | --- |
+| CAD-01 | Сохранение текущего открытого DWG: eFilerError; SaveAs не переименовал вкладку | Проверить имена документа/БД, доступ к записи и блокировки; определить правильный жизненный цикл сохранения. Live-save только по запросу. |
+| CAD-02 | Проверка документа по полному пути; has_saved_path учитывает DWT | Определить контракт диагностики и проверки ожидаемого DWG перед записью; проверить сохранённый и несохранённый документ. |
+| CAD-03 | Инвентаризация Civil/Map proxy-объектов | Ограничить объём/время, вернуть классы, владельцев, разрешения и признак полноты результата. |
+| CAD-04 | Удаление явно выбранных proxy-объектов | Проверять документ, fingerprint, класс и разрешение удаления; одна транзакция, без неявного удаления служебных корней. |
+| CAD-05 | Разбиение сети в узлах | Выделить геометрию и preflight из прототипа: заданные handles/допуски, сохранение изгибов/свойств, карта разбиения и проверка конечных точек. |
+| CAD-06 | Совместное изменение конца полилинии и блока потребителя | Заданные объекты и ожидаемая геометрия, одна транзакция для конца трубы, блока и атрибутов; точное совпадение конечных координат. |
+
+ГИП пока собирает свои задачи, конкретные запросы ещё не получены. Добавлять их
+в эту очередь с примером и ожидаемым результатом, затем согласовывать исполнителя.
+Совместный процесс описан в docs/CAD_WORKFLOW.md.
+
+Другие ограничения и проверки:
+
 - AutoLISP блокируется upstream; не обходить отказ через C#.
 - SOLID hatch поддерживает одну Circle/closed planar lightweight Polyline,
   без островов и произвольных узоров. Наклонные границы и видимый draw order
   отдельно live не подтверждены.
-- В другом проекте прототипированы inventory/удаление Civil ProxyObject и
-  network noding. Эти typed-инструменты пока отсутствуют. Следующий шаг:
-  bounded inventory с complete/owners/classification и explicit erase с
-  expected document/class, затем чистая геометрия noding, handlers/schema/tests.
-  Сценарии конкретного чертежа не импортированы и не являются готовыми инструментами.
-- dwg_save_drawing через Database.SaveAs текущего открытого DWG дал eFilerError;
-  пользователь сохранил через Ctrl+S. Следующий шаг: document/DB filename,
-  read-only/file-lock diagnostics и bounded fix; live-save только по запросу.
-
+- Civil 3D 2027: ручная загрузка и чтение метаданных проверены; автоматическая
+  загрузка пока не настроена. Контракты специальных Civil-инструментов не заданы.
 
 ## Уборка workspace — 2026-10-07
 
@@ -98,10 +126,12 @@
 
 ## Следующий шаг
 
-1. Пользователь просматривает изменения документации/упаковки в Git и сам
-   выполняет commit/push/merge. Установка ГИПа описана в docs/TEAM_SETUP.md.
-2. Подтвердить read-only связь dwg-2026 у ГИПа. Живые modifying-тесты
-   включаются отдельно. Пробелы proxy/noding/save остаются отдельными задачами.
+1. Пользователь оформляет документационные изменения отдельной рабочей веткой
+   и PR в develop; состав включает запись Civil и сохранённую запись другого
+   чата о вводах НВ. Код, runtime и проверенный ZIP при этом не обновляются.
+2. Получить задачи ГИПа и распределить очередь до начала реализации.
+3. Подтвердить read-only связь dwg-2026 у ГИПа. Живые modifying-тесты
+   включаются отдельно. Установка описана в docs/TEAM_SETUP.md.
 
 ## История проверок до переноса структуры
 
@@ -367,3 +397,28 @@ README.md и AGENTS.md обновлены. Heartbeat cad-mcp приостано�
   diagnostics (включая другие открытые документы после предыдущего SaveAs),
   затем bounded fix и offline checks; live save test только с согласия пользователя.
 - Пользователь подтвердил Ctrl+S в v7: «сохранил». Запрошенная правка слоёв завершена; ошибка typed current-file SaveAs остаётся отдельным bridge issue.
+
+### Inlets one drawing unit inside buildings — 2026-10-07
+
+- Production task in active НВ v7, through installed dwg-2027; no bridge source,
+  runtime DLL or registration changes. User clarified 1 drawing unit = 1 m;
+  INSUNITS=6, authoritative building/PZU insert scales remain 1.
+- scripts/nv-zulu7-read-building-contours.csx reads bounded native Hatch loops
+  from the actual building block, including courtyard holes and sampled arcs.
+  Area unavailable on school hatch; other 18 native areas match reconstructed
+  footprints within 0.02 square units. This is a project prototype.
+- scripts/nv-zulu7-place-consumers.csx changed only 24 inlet endpoints and their
+  24 existing consumer blocks in one guarded transaction. Document/fingerprint,
+  expected geometry, IDs/layers, unlocked layers and unit depth were checked
+  before mutation. Directions and all other vertices retained. One previously
+  deep consumer at garage668 was shortened from depth9.814442 to depth1.
+- Native final positions: all24 inside at distance1.000000 from actual building
+  boundary; endpoint gaps exactly0. Network remains127 pipes/116 nodes; length
+  6768.638446820303m. No full hose/coverage recalculation for endpoint-only edit.
+  User confirmed Ctrl+S in v7. Known typed current-open-file SaveAs error was
+  not repeated; both save branches use Database.SaveAs.
+- General typed gap extends the earlier network-noding contract: guarded atomic
+  polyline endpoint edit plus corresponding block/attribute displacement, with
+  exact endpoint verification. No claim of a released reusable typed tool.
+  Next bridge step remains bounded endpoint/noding API, schema/offline checks,
+  separate release and user-enabled loading/live checks.
