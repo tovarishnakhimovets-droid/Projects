@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.IO;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Bimwright.Dwg.Plugin.Export;
@@ -11,44 +13,49 @@ namespace Bimwright.Dwg.Plugin.Drawing
         {
             error = null;
 
-            if (string.IsNullOrWhiteSpace(outputPath))
+            var identity = DocumentGuard.Capture(doc);
+            var otherOpenPaths = new List<string>();
+            foreach (Document other in Application.DocumentManager)
             {
-                if (confirm != true)
-                {
-                    error = "saving the active drawing file requires confirm=true";
-                    return null;
-                }
-
-                string filename = doc.Name;
-                // If it is a brand new drawing (Drawing1.dwg) and has no physical path:
-                if (string.IsNullOrWhiteSpace(filename) ||
-                    filename.StartsWith("Drawing", StringComparison.OrdinalIgnoreCase) && !filename.Contains("\\"))
-                {
-                    error = "drawing has not been saved yet; please specify an output_path";
-                    return null;
-                }
-
-                doc.Database.SaveAs(filename, DwgVersion.Current);
-                return filename;
+                if (ReferenceEquals(other, doc)) continue;
+                otherOpenPaths.Add(other.Name);
+                otherOpenPaths.Add(other.Database.Filename);
             }
-            else
-            {
-                var normalizedPath = ExportPathPolicy.ValidateAndNormalize(
+            error = DrawingSavePolicy.Preflight(identity.DocumentPath,
+                identity.IsReadOnlyDocument || identity.IsReadOnlyFile == true,
+                outputPath, confirm == true, otherOpenPaths.ToArray());
+            if (error != null) return null;
+
+            string pathError = null;
+            var normalizedPath = string.IsNullOrWhiteSpace(outputPath)
+                ? identity.DocumentPath
+                : ExportPathPolicy.ValidateAndNormalize(
                     outputPath,
                     ".dwg",
                     overwriteExisting,
                     allowRepoOutput,
-                    out var pathError);
-
-                if (normalizedPath == null)
-                {
-                    error = pathError;
-                    return null;
-                }
-
-                doc.Database.SaveAs(normalizedPath, DwgVersion.Current);
-                return normalizedPath;
+                    out pathError);
+            if (normalizedPath == null)
+            {
+                error = pathError;
+                return null;
             }
+            if (File.Exists(normalizedPath) &&
+                (File.GetAttributes(normalizedPath) & FileAttributes.ReadOnly) != 0)
+            {
+                error = "target drawing file is read-only";
+                return null;
+            }
+            // bBakAndRename=true retains the .bak and updates the editor document
+            // name. The two-argument overload does not provide that lifecycle.
+            doc.Database.SaveAs(normalizedPath, true, DwgVersion.Current, doc.Database.SecurityParameters);
+            var after = DocumentGuard.Capture(doc);
+            if (!string.Equals(after.DocumentPath, normalizedPath, StringComparison.OrdinalIgnoreCase))
+            {
+                error = "file write completed but active document name did not update; inspect drawing info before retrying";
+                return null;
+            }
+            return normalizedPath;
         }
     }
 }

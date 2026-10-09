@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Autodesk.AutoCAD.Colors;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
+using Bimwright.Dwg.Plugin.Blocks;
 
 namespace Bimwright.Dwg.Plugin.Cad
 {
@@ -19,6 +20,7 @@ namespace Bimwright.Dwg.Plugin.Cad
             var result = new Dictionary<string, object>
             {
                 ["handle"] = entity.Handle.ToString(),
+                ["owner_handle"] = entity.OwnerId.IsNull ? null : entity.OwnerId.Handle.ToString(),
                 ["type"] = GetEntityType(entity),
                 ["layer"] = entity.Layer,
                 ["color_index"] = (int)entity.ColorIndex,
@@ -40,6 +42,9 @@ namespace Bimwright.Dwg.Plugin.Cad
             {
                 case Line line:
                     DescribeLine(result, line);
+                    break;
+                case DBPoint point:
+                    result["position"] = Point(point.Position);
                     break;
                 case Circle circle:
                     DescribeCircle(result, circle);
@@ -109,6 +114,10 @@ namespace Bimwright.Dwg.Plugin.Cad
         {
             result["vertex_count"] = polyline.NumberOfVertices;
             result["is_closed"] = polyline.Closed;
+            result["normal"] = Vector(polyline.Normal);
+            result["elevation"] = polyline.Elevation;
+            result["thickness"] = polyline.Thickness;
+            result["constant_width"] = polyline.ConstantWidth;
 
             if (TryGetCurveLength(polyline, out var length))
             {
@@ -130,7 +139,9 @@ namespace Bimwright.Dwg.Plugin.Cad
                     x = point.X,
                     y = point.Y,
                     z = point.Z,
-                    bulge = polyline.GetBulgeAt(i)
+                    bulge = polyline.GetBulgeAt(i),
+                    start_width = polyline.GetStartWidthAt(i),
+                    end_width = polyline.GetEndWidthAt(i)
                 });
             }
 
@@ -200,6 +211,11 @@ namespace Bimwright.Dwg.Plugin.Cad
             result["rotation"] = blockReference.Rotation;
             result["scale"] = Scale(blockReference.ScaleFactors);
             result["attribute_count"] = blockReference.AttributeCollection.Count;
+            result["normal"] = Vector(blockReference.Normal);
+            result["is_dynamic"] = blockReference.IsDynamicBlock;
+            var attributes = BlockAttributeService.ReadAttributes(blockReference, tx);
+            result["attributes"] = attributes;
+            result["attributes_complete"] = attributes.Length == blockReference.AttributeCollection.Count;
 
             var name = TryGetBlockName(blockReference, tx);
             if (!string.IsNullOrEmpty(name))
@@ -341,7 +357,7 @@ namespace Bimwright.Dwg.Plugin.Cad
             return angle;
         }
 
-        private static object Point(Point3d point)
+        internal static object Point(Point3d point)
         {
             return new
             {

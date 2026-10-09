@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Autodesk.AutoCAD.DatabaseServices;
+using Bimwright.Dwg.Plugin.Cad;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -63,7 +64,10 @@ namespace Bimwright.Dwg.Plugin.Blocks
                 {
                     tag = attribute.Tag,
                     value = attribute.TextString,
-                    handle = attribute.Handle.ToString()
+                    text = attribute.TextString,
+                    handle = attribute.Handle.ToString(),
+                    position = CadEntityProperties.Point(attribute.Position),
+                    alignment_point = CadEntityProperties.Point(attribute.AlignmentPoint)
                 });
             }
 

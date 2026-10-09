@@ -30,13 +30,17 @@ namespace Bimwright.Dwg.Server.Tools
             [Description("Optional absolute path to save the drawing to. If specified, behaves like SaveAs.")] string output_path = null,
             [Description("Must be set to true when saving to the active drawing file without a path.")] bool? confirm = null,
             [Description("If true, allow overwriting an existing file when output_path is specified.")] bool? overwrite_existing = null,
-            [Description("If true, allow saving the drawing inside the repository directory.")] bool? allow_repo_output = null)
+            [Description("If true, allow saving the drawing inside the repository directory.")] bool? allow_repo_output = null,
+            [Description("Optional expected full DWG path; provide together with expected_fingerprint to guard the active document.")] string expected_document = null,
+            [Description("Optional drawing GUID from dwg_get_drawing_info; requires expected_document.")] string expected_fingerprint = null)
         {
             var request = new JObject();
             if (output_path != null) request["output_path"] = output_path;
             if (confirm.HasValue) request["confirm"] = confirm.Value;
             if (overwrite_existing.HasValue) request["overwrite_existing"] = overwrite_existing.Value;
             if (allow_repo_output.HasValue) request["allow_repo_output"] = allow_repo_output.Value;
+            if (expected_document != null) request["expected_document"] = expected_document;
+            if (expected_fingerprint != null) request["expected_fingerprint"] = expected_fingerprint;
 
             return ToolGateway.LoggedCall("save_drawing", request, request);
         }

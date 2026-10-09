@@ -23,7 +23,8 @@ namespace Bimwright.Dwg.Server.Tools
         [McpServerTool(Name = "dwg_get_entity_properties", ReadOnly = true, Idempotent = true), Description(
             "Return properties for AutoCAD entities identified by handle. " +
             "Input handles is a JSON array of hex handles, e.g. [\"7F5AD\"]. " +
-            "Returns one result record per handle; bad handles do not abort siblings.")]
+            "Returns document_path/fingerprint and one result record per handle; bad handles do not abort siblings. " +
+            "Includes owner_handle. With geometry, reads WCS vertices/point positions, block name and complete attribute handles/texts/positions/alignment points for guarded network operations.")]
         public static Task<string> GetEntityProperties(
             [Description("JSON array of AutoCAD handles, e.g. [\"7F5AD\",\"2A4F\"].")] string handles,
             [Description("When true, include lightweight geometry such as extents, points, lengths, and text positions where available.")] bool includeGeometry = false)

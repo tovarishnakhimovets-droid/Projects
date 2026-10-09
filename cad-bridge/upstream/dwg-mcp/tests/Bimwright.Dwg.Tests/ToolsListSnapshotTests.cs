@@ -51,6 +51,7 @@ namespace Bimwright.Dwg.Tests
                 "dwg_create_text",
                 "dwg_dismiss_bake_suggestion",
                 "dwg_erase_entities",
+                "dwg_erase_proxy_objects",
                 "dwg_explode_block",
                 "dwg_export_dxf",
                 "dwg_get_block_attributes",
@@ -62,12 +63,15 @@ namespace Bimwright.Dwg.Tests
                 "dwg_insert_block",
                 "dwg_inspect_lisp",
                 "dwg_inspect_view_region",
+                "dwg_inventory_proxies",
                 "dwg_list_available_targets",
                 "dwg_list_bake_suggestions",
                 "dwg_list_baked_tools",
                 "dwg_list_blocks",
                 "dwg_list_layers",
                 "dwg_move_entities",
+                "dwg_move_network_endpoint",
+                "dwg_node_network",
                 "dwg_offset_entities",
                 "dwg_purge_drawing",
                 "dwg_query_entities",
@@ -240,6 +244,9 @@ namespace Bimwright.Dwg.Tests
                 "EntityStyleTools",
                 "MetaTools",
                 "ModifyTools",
+                "NetworkTools",
+                "ProxyTools",
+                "ProxyWriteTools",
                 "QueryTools",
                 "ViewTools"
             }, defaultTypeNames);
@@ -251,6 +258,7 @@ namespace Bimwright.Dwg.Tests
             Assert.Equal(new[]
             {
                 "MetaTools",
+                "ProxyTools",
                 "QueryTools",
                 "ViewTools"
             }, defaultReadOnlyTypeNames);

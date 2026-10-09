@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Bimwright.Dwg.Plugin.Cad;
+using Bimwright.Dwg.Plugin.Drawing;
 using Newtonsoft.Json.Linq;
 
 namespace Bimwright.Dwg.Plugin.Handlers
@@ -74,7 +75,9 @@ namespace Bimwright.Dwg.Plugin.Handlers
                 tx.Commit();
             }
 
-            return CommandResult.Success(new { entities = results });
+            var identity = DocumentGuard.Capture(doc);
+            return CommandResult.Success(new { document_path = identity.DocumentPath,
+                fingerprint = identity.Fingerprint, entities = results });
         }
 
         private static bool TryReadHandle(JToken token, out string handle, out string error)
