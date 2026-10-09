@@ -26,6 +26,10 @@ namespace Bimwright.Dwg.Plugin
             _commands = new Dictionary<string, IAcadCommand>
             {
                 { "get_drawing_info",        new GetDrawingInfoHandler() },
+                { "inventory_proxies",       new InventoryProxiesHandler() },
+                { "erase_proxy_objects",     new EraseProxyObjectsHandler() },
+                { "node_network",            new NodeNetworkHandler() },
+                { "move_network_endpoint",   new MoveNetworkEndpointHandler() },
                 { "get_entity_properties",   new GetEntityPropertiesHandler() },
                 { "get_selected_texts",      new GetSelectedTextsHandler() },
                 { "list_layers",             new ListLayersHandler() },

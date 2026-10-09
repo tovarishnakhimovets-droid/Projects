@@ -110,16 +110,26 @@ namespace Bimwright.Dwg.Plugin.Handlers
             var confirm = obj["confirm"]?.Value<bool>();
             var overwriteExisting = obj["overwrite_existing"]?.Value<bool>() ?? false;
             var allowRepoOutput = obj["allow_repo_output"]?.Value<bool>() ?? false;
+            var expectedDocument = obj["expected_document"]?.Value<string>();
+            var expectedFingerprint = obj["expected_fingerprint"]?.Value<string>();
 
             try
             {
+                if (expectedDocument != null || expectedFingerprint != null)
+                {
+                    var guardError = DocumentGuard.Validate(doc, expectedDocument, expectedFingerprint);
+                    if (guardError != null) return CommandResult.Fail(guardError);
+                }
                 var savedPath = DrawingSaveService.Save(doc, outputPath, confirm, overwriteExisting, allowRepoOutput, out var error);
                 if (savedPath == null)
                 {
                     return CommandResult.Fail(error);
                 }
 
-                return CommandResult.Success(new { saved_path = savedPath });
+                var identity = DocumentGuard.Capture(doc);
+                return CommandResult.Success(new { saved_path = savedPath,
+                    document_path = identity.DocumentPath, fingerprint = identity.Fingerprint,
+                    dbmod = identity.DatabaseModified });
             }
             catch (Exception ex)
             {

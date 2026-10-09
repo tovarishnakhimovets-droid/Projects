@@ -86,11 +86,17 @@ Call dwg_get_selected_texts before text writeback. Read-only mode also permits v
             enabled = enabled ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             var toolTypes = new List<Type>();
-            if (enabled.Contains("query")) toolTypes.Add(typeof(QueryTools));
+            if (enabled.Contains("query"))
+            {
+                toolTypes.Add(typeof(QueryTools));
+                toolTypes.Add(typeof(ProxyTools));
+            }
             if (enabled.Contains("modify") && !readOnly)
             {
                 toolTypes.Add(typeof(ModifyTools));
                 toolTypes.Add(typeof(EntityStyleTools));
+                toolTypes.Add(typeof(ProxyWriteTools));
+                toolTypes.Add(typeof(NetworkTools));
             }
             if (enabled.Contains("meta"))
             {
@@ -134,6 +140,9 @@ Call dwg_get_selected_texts before text writeback. Read-only mode also permits v
             if (toolType == typeof(QueryTools)) return mcp.WithTools<QueryTools>();
             if (toolType == typeof(ModifyTools)) return mcp.WithTools<ModifyTools>();
             if (toolType == typeof(EntityStyleTools)) return mcp.WithTools<EntityStyleTools>();
+            if (toolType == typeof(ProxyTools)) return mcp.WithTools<ProxyTools>();
+            if (toolType == typeof(ProxyWriteTools)) return mcp.WithTools<ProxyWriteTools>();
+            if (toolType == typeof(NetworkTools)) return mcp.WithTools<NetworkTools>();
             if (toolType == typeof(MetaTools)) return mcp.WithTools<MetaTools>();
             if (toolType == typeof(BatchTools)) return mcp.WithTools<BatchTools>();
             if (toolType == typeof(ToolBakerTools)) return mcp.WithTools<ToolBakerTools>();

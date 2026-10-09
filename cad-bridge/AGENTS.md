@@ -39,12 +39,21 @@ Explain newly introduced command flags next to the command in plain language.
 - AutoCAD 2027: plugin-acad27 net10.0-windows, dwg-2027 / --target 2027;
   references from the installed AutoCAD 2027. Source is shared under src/shared.
 - External stdio server: net8.0; packaged win-x64 EXE is self-contained.
-- Enabled profile: query,modify,drawing,view, 42 tools. AutoLISP is blocked by
-  upstream: never bypass that refusal through C#. No legacy COM fallback here.
+- Both host years are supported by the same source changes. A developer's installed
+  AutoCAD year does not narrow this contract. Build both plugins for changes to
+  shared code; record which native/live checks remain unavailable on that computer.
+- Profile query,modify,drawing,view: installed team.2/style-tools has 42 tools;
+  the unreleased source candidate has 46. Check the connected server's tools/list
+  before using candidate capabilities. AutoLISP is blocked by upstream: never
+  bypass that refusal through C#. No legacy COM fallback here.
 
-Before drawing edits use dwg_get_drawing_info. It targets the active document and
-provides no full-path guard; has_saved_path may refer to a DWT template, not a saved
-DWG. Inspect only necessary objects. Prefer current selection when the user refers
+Before drawing edits use dwg_get_drawing_info. The source candidate returns the
+active titled DWG's document_path/fingerprint and distinguishes an unsaved document
+from its DWT template. New network/proxy writes require both identity fields and
+fresh object expectations; dry_run validates without writing. Contract and scope
+are in docs/CAD_WORKFLOW.md. Older installed builds have no full-path guard and
+may report has_saved_path for a DWT; do not infer a saved DWG from that result.
+Inspect only necessary objects. Prefer current selection when the user refers
 to it; non-text selection has no typed reader, so use provided handles or a bounded
 query without substituting unrelated objects. Coordinates are drawing units.
 

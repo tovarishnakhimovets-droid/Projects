@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
+using Bimwright.Dwg.Plugin.Drawing;
 using Newtonsoft.Json.Linq;
 
 namespace Bimwright.Dwg.Plugin.Handlers
@@ -15,20 +16,30 @@ namespace Bimwright.Dwg.Plugin.Handlers
         public CommandResult Execute(Document doc, JToken parameters)
         {
             var db = doc.Database;
-            var documentName = ReadScalar(() => doc.Name);
-            var databaseFilename = ReadScalar(() => db.Filename);
-            var originalFilename = ReadScalar(() => db.OriginalFileName);
+            var identity = DocumentGuard.Capture(doc);
+            var documentName = identity.DocumentName;
+            var databaseFilename = identity.DatabaseFilename;
+            var originalFilename = identity.OriginalFilename;
             var safeDocumentName = SafeFileName(documentName);
             var drawingName = FirstNonBlank(
+                safeDocumentName,
                 SafeFileName(databaseFilename),
-                SafeFileName(originalFilename),
-                safeDocumentName);
+                SafeFileName(originalFilename));
 
             return CommandResult.Success(new
             {
                 drawing_name = drawingName,
                 document_name = safeDocumentName,
-                has_saved_path = HasSavedPath(databaseFilename, originalFilename, documentName),
+                has_saved_path = identity.DocumentPath != null,
+                document_path = identity.DocumentPath,
+                fingerprint = identity.Fingerprint,
+                database_filename = databaseFilename,
+                original_filename = originalFilename,
+                is_titled = identity.IsTitled,
+                file_exists = identity.Exists,
+                file_read_only = identity.IsReadOnlyFile,
+                document_read_only = identity.IsReadOnlyDocument,
+                dbmod = identity.DatabaseModified,
                 current_layer = GetCurrentLayerName(db),
                 current_space = db.TileMode ? "model" : "paper",
                 current_space_record = GetCurrentSpaceRecordName(db),
@@ -87,38 +98,6 @@ namespace Bimwright.Dwg.Plugin.Handlers
             catch
             {
                 return null;
-            }
-        }
-
-        private static string ReadScalar(Func<string> read)
-        {
-            try
-            {
-                var value = read();
-                return string.IsNullOrWhiteSpace(value) ? null : value;
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
-        private static bool HasSavedPath(string databaseFilename, string originalFilename, string documentName)
-        {
-            return !string.IsNullOrWhiteSpace(databaseFilename) ||
-                !string.IsNullOrWhiteSpace(originalFilename) ||
-                IsRootedPath(documentName);
-        }
-
-        private static bool IsRootedPath(string value)
-        {
-            try
-            {
-                return !string.IsNullOrWhiteSpace(value) && Path.IsPathRooted(value);
-            }
-            catch
-            {
-                return false;
             }
         }
 

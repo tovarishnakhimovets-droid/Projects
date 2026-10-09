@@ -24,11 +24,11 @@
     <ComponentEntry AppName="Bimwright.Dwg.Plugin.Acad25" ModuleName="./Contents/2025/Bimwright.Dwg.Plugin.Acad25.dll" />
   </Components>
   <Components>
-    <RuntimeRequirements OS="Win64" Platform="AutoCAD" SeriesMin="R25.1" SeriesMax="R25.1" />
+    <RuntimeRequirements OS="Win64" Platform="AutoCAD|Civil3D" SeriesMin="R25.1" SeriesMax="R25.1" />
     <ComponentEntry AppName="Bimwright.Dwg.Plugin.Acad26" ModuleName="./Contents/2026/Bimwright.Dwg.Plugin.Acad26.dll" />
   </Components>
   <Components>
-    <RuntimeRequirements OS="Win64" Platform="AutoCAD" SeriesMin="R26.0" SeriesMax="R26.0" />
+    <RuntimeRequirements OS="Win64" Platform="AutoCAD|Civil3D" SeriesMin="R26.0" SeriesMax="R26.0" />
     <ComponentEntry AppName="Bimwright.Dwg.Plugin.Acad27" ModuleName="./Contents/2027/Bimwright.Dwg.Plugin.Acad27.dll" />
   </Components>
 </ApplicationPackage>

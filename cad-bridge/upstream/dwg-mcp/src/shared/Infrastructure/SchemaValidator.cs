@@ -448,7 +448,43 @@ namespace Bimwright.Dwg.Plugin
             SchemaProperty.Optional("output_path", JTokenType.String),
             SchemaProperty.Optional("confirm", JTokenType.Boolean),
             SchemaProperty.Optional("overwrite_existing", JTokenType.Boolean),
-            SchemaProperty.Optional("allow_repo_output", JTokenType.Boolean));
+            SchemaProperty.Optional("allow_repo_output", JTokenType.Boolean),
+            SchemaProperty.Optional("expected_document", JTokenType.String),
+            SchemaProperty.Optional("expected_fingerprint", JTokenType.String));
+
+        public static readonly CommandSchema InventoryProxies = CommandSchema.Object(
+            SchemaProperty.Optional("scope", JTokenType.String),
+            SchemaProperty.Optional("after_handle", JTokenType.String),
+            SchemaProperty.Optional("expected_document", JTokenType.String),
+            SchemaProperty.Optional("expected_fingerprint", JTokenType.String),
+            SchemaProperty.Optional("max_handles", JTokenType.Integer),
+            SchemaProperty.Optional("budget_ms", JTokenType.Integer),
+            SchemaProperty.Optional("max_results", JTokenType.Integer),
+            SchemaProperty.Optional("owner_depth", JTokenType.Integer));
+
+        public static readonly CommandSchema EraseProxyObjects = CommandSchema.Object(
+            SchemaProperty.RequiredNonEmptyString("expected_document"),
+            SchemaProperty.RequiredNonEmptyString("expected_fingerprint"),
+            SchemaProperty.Required("targets", JTokenType.Array),
+            SchemaProperty.Optional("dry_run", JTokenType.Boolean));
+
+        public static readonly CommandSchema NodeNetwork = CommandSchema.Object(
+            SchemaProperty.RequiredNonEmptyString("expected_document"),
+            SchemaProperty.RequiredNonEmptyString("expected_fingerprint"),
+            SchemaProperty.Required("sources", JTokenType.Array),
+            SchemaProperty.Required("nodes", JTokenType.Array),
+            SchemaProperty.Required("snap_tolerance", JTokenType.Integer, JTokenType.Float),
+            SchemaProperty.Optional("geometry_tolerance", JTokenType.Integer, JTokenType.Float),
+            SchemaProperty.Optional("min_segment_length", JTokenType.Integer, JTokenType.Float),
+            SchemaProperty.Optional("dry_run", JTokenType.Boolean));
+
+        public static readonly CommandSchema MoveNetworkEndpoint = CommandSchema.Object(
+            SchemaProperty.RequiredNonEmptyString("expected_document"),
+            SchemaProperty.RequiredNonEmptyString("expected_fingerprint"),
+            SchemaProperty.Required("changes", JTokenType.Array),
+            SchemaProperty.Optional("geometry_tolerance", JTokenType.Integer, JTokenType.Float),
+            SchemaProperty.Optional("min_segment_length", JTokenType.Integer, JTokenType.Float),
+            SchemaProperty.Optional("dry_run", JTokenType.Boolean));
 
         public static readonly CommandSchema PurgeDrawing = CommandSchema.Object(
             SchemaProperty.Optional("dry_run", JTokenType.Boolean),

@@ -46,6 +46,10 @@
     <Compile Include="..\shared\Security\LispExecutionPolicy.cs" LinkBase="Shared\Security" />
     <Compile Include="..\shared\Cad\LineweightSpec.cs" LinkBase="Shared\Cad" />
     <Compile Include="..\shared\Cad\CreateHatchInput.cs" LinkBase="Shared\Cad" />
+    <Compile Include="..\shared\Drawing\DrawingIdentityPolicy.cs" LinkBase="Shared\Drawing" />
+    <Compile Include="..\shared\Proxy\ProxyContract.cs" LinkBase="Shared\Proxy" />
+    <Compile Include="..\shared\Network\NetworkInput.cs" LinkBase="Shared\Network" />
+    <Compile Include="..\shared\Network\NetworkGeometry.cs" LinkBase="Shared\Network" />
   </ItemGroup>
 
 </Project>
