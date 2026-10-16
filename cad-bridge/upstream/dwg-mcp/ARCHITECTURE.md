@@ -1,0 +1,226 @@
+# Architecture
+
+## Two processes, one local transport
+
+```
+MCP client (Claude Code / Cursor / OpenCode / ...)
+        |  stdio (NDJSON MCP)
+        v
+Bimwright.Dwg.Server  (.NET 8 console app, global tool)
+        |  TCP (2022-2024) or named pipe (2025-2027), NDJSON + token auth, loopback only
+        v
+Bimwright.Dwg.Plugin  (AutoCAD 2022-2027 shells)
+        |  Document.LockDocument()
+        v
+AutoCAD .NET API  (ObjectARX 2022-2027)
+```
+
+**Server** is an MCP server. It talks stdio to the client, translates each tool call into a JSON envelope, and forwards it over localhost transport to the plugin. Server is a plain .NET 8 global tool with no AutoCAD reference. The default server registers query, modify, routing/meta, and batch tools. `dwg_send_code` ships on the default surface through the `meta` toolset (rvt-mcp parity) and is stripped by `--read-only`; the legacy `code` toolset name remains an explicit opt-in alias.
+
+**Plugin** is an `IExtensionApplication` loaded by AutoCAD. It runs a local listener on a background thread, dispatches requests through `DwgApiExecutor`, locks the document, and executes commands within transactions. Unlike Revit, AutoCAD allows `Document.LockDocument()` from background threads; `DwgApiExecutor` still serializes AutoCAD API work so concurrent requests do not interleave drawing mutations. Plugin-side code execution is enabled by default when the listener starts; `MCPDISABLECODE` disables it for the current plugin session and `MCPENABLECODE` re-enables it.
+
+## Discovery
+
+Plugin writes discovery files on startup:
+
+| AutoCAD | Discovery file | Transport |
+|---------|----------------|-----------|
+| 2022-2024 | `%LOCALAPPDATA%\Bimwright\Dwg\acad-YYYY.json` | TCP loopback. The server also accepts named-pipe discovery. |
+| 2025-2027 | `%LOCALAPPDATA%\Bimwright\Dwg\acad-YYYY.json` | Named pipe (`ACAD2025_OR_GREATER`). 2025 and 2026 are not binary-compatible with 2027. |
+| 2024 only | `%LOCALAPPDATA%\Bimwright\portAcad24.txt` | TCP legacy fallback |
+
+The v2 JSON file contains:
+
+```json
+{
+  "schema_version": 2,
+  "acad_year": 2024,
+  "transport": "tcp",
+  "host": "127.0.0.1",
+  "port": 49152,
+  "pipe_name": null,
+  "auth_token": "32-char hex token",
+  "pid": 1234,
+  "process_name": "acad",
+  "started_at_utc": "2026-05-25T00:00:00Z"
+}
+```
+
+Server reads v2 files from `%LOCALAPPDATA%\Bimwright\Dwg\`, verifies the PID is alive, removes invalid stale files, and auto-selects the newest discovered target unless `--target`, `BIMWRIGHT_DWG_TARGET`, or `dwg_switch_target` pins a year. Target values are always 4-digit years: `2022` through `2027`. The reader still accepts the transitional `target`/`version` string fields for compatibility with earlier refactor builds.
+
+## Auth protocol
+
+1. Plugin generates a new auth token (GUID) each time the listener starts.
+2. Token is written to the discovery file.
+3. Every TCP request envelope includes `"auth": "<token>"`.
+4. Plugin rejects requests with missing or wrong token: `{ok:false, error:"unauthorized"}`.
+5. Server reads token from the selected discovery file before each connection.
+
+## Request lifecycle
+
+1. MCP client sends `tools/call` over stdio.
+2. Server tool classes receive the call via `[McpServerTool]`. Default toolsets are `query`, `modify`, and `meta`; `code` and `toolbaker` are opt-in toolsets.
+3. `LoggedCall` wrapper logs start, creates request envelope with auth token.
+4. `PluginClient.SendAsync` opens a TCP or named pipe connection based on discovery.
+5. Plugin's listener thread reads the NDJSON line, `CommandDispatcher.Dispatch` is called:
+   - Auth token verified.
+   - `run_lisp` always rejected before document locking; no scanner verdict or session toggle authorizes it. `send_code` is rejected when `MCPDISABLECODE` disabled the current plugin session.
+   - Handler looked up by command name.
+   - `DocumentInvoker.Invoke` locks the active document.
+   - General CAD handlers operate on that active document and resolve entity references from AutoCAD hex handles.
+   - Handler executes within a Transaction.
+   - Response serialized as JSON.
+6. Response travels back over TCP.
+7. `LoggedCall` logs finish (duration, success/error).
+
+Timeout: 30s per request on the server side. `send_code` runs synchronous Roslyn snippets inline on the document-lock thread (`LockDocument` is thread-affine, so a worker thread would fail writes with `eLockViolation`) with cooperative 30s cancellation; a script blocked in a native call keeps the executor queued until it returns. Syntax containing `async`/`await` or `#load` directives is rejected before execution, and external source resolution is disabled so loaded files cannot escape the syntax check; callers must not offload AutoCAD API calls to other threads. Return values are serialized with a contract resolver that rejects AutoCAD/COM runtime types before traversing their properties, including nested values. Connection-per-call for TCP; named pipe transport is also supported by the server discovery contract.
+
+`run_lisp` is a compatibility refusal in this build: the server returns `lisp_execution_blocked` before reading any source or contacting AutoCAD. The plugin independently rejects it before document locking, and its handler also refuses direct calls. Batch preflight and ToolBaker deny it. There is no approved-script trust mechanism or isolated executor, so all `file`/`code`/`command` inputs are blocked, including apparently harmless expressions. `MCPENABLECODE` only enables C#; it cannot enable LISP. The former wrapper/command queue/result-file path has been removed: no SECURELOAD changes, trusted-path enrollment, delayed execution or result polling occurs through this tool.
+
+`dwg_inspect_lisp` remains available for static triage. It continues severity detection after its 200-finding display cap and marks sources over 2,000,000 characters as incompletely inspected/dangerous. Reports always include `execution_authorized=false`, `safety_assured=false`, and limitations. `clean` only means no known pattern matched, not safe; unknown/dynamic dependencies remain outside static analysis. Bare SHELL input and literal command forms are flagged conservatively. `send_code` remains a full-trust escape hatch, not a sandbox or machine-wide malware protection. Agent instructions prohibit using it, batches or ToolBaker to bypass LISP refusal; this instruction is not a technical sandbox for arbitrary C#.
+
+Both server and plugin must be updated and restarted for these guards to apply to all supported entry points. New server + old plugin rejects MCP `dwg_run_lisp` locally; new plugin + old server rejects the wire command. Old server + old plugin retains the previous execution behavior. Any future reintroduction of LISP execution requires a new isolation/trust design and lifecycle acceptance; the removed executor is not a safe fallback.
+
+## Threading model
+
+```
+Background TCP listener thread
+    |
+    v (new thread per client connection)
+Client handler thread
+    |
+    v DwgApiExecutor queue
+    |
+    v Document.LockDocument()
+    |
+    v Transaction { handler.Execute() }
+    |
+    v Response written, connection closed
+```
+
+AutoCAD allows multiple threads to lock the same document sequentially. Each request gets its own lock scope and transaction. `DwgApiExecutor` provides a process-local queue above the lock so requests are processed in order and earlier failures do not block later work.
+
+## Handler dispatch
+
+`CommandDispatcher` uses an explicit dictionary (not reflection). `send_code` sits in the dispatch table like every other command; dispatch rejects it only when `MCPDISABLECODE` has disabled the current plugin session (`MCPENABLECODE` re-enables). The snippet below is abbreviated around the full runtime class, but it includes representative Plan 2 query/create/modify wire commands so it stays aligned with the toolset table.
+
+```csharp
+_commands = new Dictionary<string, IAcadCommand>
+{
+    { "get_drawing_info",       new GetDrawingInfoHandler() },
+    { "get_entity_properties",  new GetEntityPropertiesHandler() },
+    { "list_layers",            new ListLayersHandler() },
+    { "query_entities",         new QueryEntitiesHandler() },
+    { "count_entities",         new CountEntitiesHandler() },
+    { "select_by_layer",        new SelectByLayerHandler() },
+    { "select_by_type",         new SelectByTypeHandler() },
+    { "get_selected_texts",      new GetSelectedTextsHandler() },
+    { "update_texts",            new UpdateTextsHandler() },
+    { "create_layer",           new CreateLayerHandler() },
+    { "create_line",            new CreateLineHandler() },
+    { "create_circle",          new CreateCircleHandler() },
+    { "create_point",           new CreatePointHandler() },
+    { "create_polyline",        new CreatePolylineHandler() },
+    { "create_rectangle",       new CreateRectangleHandler() },
+    { "create_arc",             new CreateArcHandler() },
+    { "create_ellipse",         new CreateEllipseHandler() },
+    { "change_layer",           new ChangeLayerHandler() },
+    { "change_color",           new ChangeColorHandler() },
+    { "move_entities",          new MoveEntitiesHandler() },
+    { "rotate_entities",        new RotateEntitiesHandler() },
+    { "scale_entities",         new ScaleEntitiesHandler() },
+    { "copy_entities",          new CopyEntitiesHandler() },
+    { "erase_entities",         new EraseEntitiesHandler() },
+    { "offset_entities",        new OffsetEntitiesHandler() },
+    { "send_code",               new SendCodeHandler() },
+    { "apply_unicode_style",     new ApplyUnicodeStyleHandler() },
+    { "collapse_and_rewrite",    new CollapseAndRewriteHandler() },
+    { "translate_and_rewrite",   new TranslateAndRewriteHandler() },
+    { "list_baked_tools",        new ListBakedToolsHandler() },
+    { "zoom_extents",            new ZoomExtentsHandler() },
+    { "zoom_window",             new ZoomWindowHandler() },
+    { "zoom_to_entity",          new ZoomToEntityHandler() },
+    { "export_dxf",              new ExportDxfHandler() },
+    { "get_variables",           new GetVariablesHandler() },
+    { "set_system_variable",     new SetSystemVariableHandler() },
+    { "save_drawing",            new SaveDrawingHandler() },
+    { "purge_drawing",           new PurgeDrawingHandler() },
+};
+_commands.Add("apply_bake", new ApplyBakeSuggestionHandler((cmd, p) => ValidateCommand(cmd, p, out _)));
+_commands.Add("batch_execute", new BatchExecuteHandler(ExecuteCommand));
+_commands.Add("run_baked_tool", new RunBakedToolHandler(ExecuteCommand));
+```
+
+MCP-facing names are registered separately on the server with a `dwg_` prefix. For example, `dwg_translate_and_rewrite` forwards the internal wire command `translate_and_rewrite`.
+
+## Toolsets and read-only mode
+
+Toolsets are resolved by `DwgMcpConfig` and `ToolsetFilter`:
+
+| Toolset | MCP tools |
+|---------|-----------|
+| `query` | `dwg_get_drawing_info`, `dwg_get_entity_properties`, `dwg_list_layers`, `dwg_query_entities`, `dwg_count_entities`, `dwg_select_by_layer`, `dwg_select_by_type`, `dwg_get_selected_texts` |
+| `modify` | `dwg_create_layer`, `dwg_create_line`, `dwg_create_circle`, `dwg_create_point`, `dwg_create_polyline`, `dwg_create_rectangle`, `dwg_create_arc`, `dwg_create_ellipse`, `dwg_change_layer`, `dwg_change_color`, `dwg_move_entities`, `dwg_rotate_entities`, `dwg_scale_entities`, `dwg_copy_entities`, `dwg_erase_entities`, `dwg_offset_entities`, `dwg_update_texts`, `dwg_translate_and_rewrite`, `dwg_apply_unicode_style`, `dwg_collapse_and_rewrite` |
+| `meta` | `dwg_batch_execute`, `dwg_list_available_targets`, `dwg_get_current_target`, `dwg_switch_target`, `dwg_send_code`, `dwg_run_lisp` |
+| `toolbaker` | `dwg_list_baked_tools`, `dwg_run_baked_tool`, `dwg_list_bake_suggestions`, `dwg_accept_bake_suggestion`, `dwg_dismiss_bake_suggestion`, `dwg_create_bake_issue_draft` |
+| `code` | legacy alias — registers `dwg_send_code` and `dwg_run_lisp` (already on via `meta` by default) |
+| `annotation` | `dwg_create_text`, `dwg_create_mtext`, `dwg_create_leader`, `dwg_create_table` |
+| `block` | `dwg_list_blocks`, `dwg_get_block_attributes`, `dwg_insert_block`, `dwg_set_block_attributes`, `dwg_explode_block` |
+| `dimension` | `dwg_create_linear_dimension`, `dwg_create_aligned_dimension`, `dwg_create_radial_dimension`, `dwg_create_diameter_dimension` |
+| `view` | `dwg_zoom_extents`, `dwg_zoom_window`, `dwg_zoom_to_entity`, and default-on `dwg_capture_view_image` |
+| `export` | `dwg_export_dxf`, and deferred `dwg_export_pdf`, `dwg_export_image` |
+| `drawing` | `dwg_get_variables`, `dwg_set_system_variable`, `dwg_save_drawing`, `dwg_purge_drawing` |
+
+`--read-only` or `BIMWRIGHT_DWG_READ_ONLY=1` removes write-capable toolsets/methods completely (`modify`, `dwg_send_code`/`dwg_run_lisp`, `annotation`, `dimension`, `dwg_batch_execute`, ToolBaker write tools, `export` tools, and `drawing` write tools).
+- **Block Toolset Split**: The `block` toolset splits registration between read-only `BlockTools` (`dwg_list_blocks`, `dwg_get_block_attributes`) and write-capable `BlockWriteTools` (`dwg_insert_block`, `dwg_set_block_attributes`, `dwg_explode_block`). In read-only mode, only the read-only wrappers are registered, preserving safe drawing inspection.
+- **View Navigation and Read-Only**: The `view` toolset is default-on and retains the viewport navigation tools (`dwg_zoom_extents`, `dwg_zoom_window`, `dwg_zoom_to_entity`) in read-only mode, but strips the `dwg_capture_view_image` tool (which is disabled in read-only mode).
+- **Drawing Operations and Read-Only**: The `drawing` toolset retains `dwg_get_variables` in read-only mode, but strips `dwg_set_system_variable`, `dwg_save_drawing`, and `dwg_purge_drawing`.
+- **Deferred Angular Dimensions**: The `dimension` toolset only registers linear, aligned, radial, and diametric dimension creators. Angular dimensions are deferred and not included in this release.
+- **Deferred File Export Tools**: The `dwg_export_pdf` and `dwg_export_image` tools have been deferred to ensure absolute reliability of drawing view captures and plot configurations. `dwg_capture_view_image` is fully enabled by default.
+
+The default startup surface is 39 registered tools (`dwg_send_code`/`dwg_run_lisp` via `meta`, `dwg_inspect_lisp` via `query`). Enabling the optional `toolbaker`, `annotation`, `block`, `dimension`, `export`, and `drawing` toolsets exposes 63 registered MCP tools. Both counts include `dwg_run_lisp`, which only returns a compatibility refusal.
+
+Plan 2 entity query/select tools are model-space only. `dwg_select_by_layer` and `dwg_select_by_type` return handle lists and do not mutate AutoCAD pickfirst selection. Create, copy, offset, and modify handlers identify generated or modified entities with AutoCAD hex handles.
+
+## Manual smoke checklist
+
+In a scratch DWG:
+
+1. Run `dwg_get_drawing_info`.
+2. Run `dwg_list_layers`.
+3. Create `BIMWRIGHT_TEST` with `dwg_create_layer`.
+4. Create a point, polyline, rectangle, arc, and ellipse on `BIMWRIGHT_TEST` with `dwg_create_point`, `dwg_create_polyline`, `dwg_create_rectangle`, `dwg_create_arc`, and `dwg_create_ellipse`; record the returned hex handles and reserve one curve, such as the arc or ellipse, for color and offset checks.
+5. Query, count, and select those entities by layer and type with `dwg_query_entities`, `dwg_count_entities`, `dwg_select_by_layer`, and `dwg_select_by_type`; confirm select tools return handle lists and do not change pickfirst selection.
+6. Move, rotate, and scale non-reserved scratch entities with `dwg_move_entities`, `dwg_rotate_entities`, and `dwg_scale_entities`.
+7. Copy one non-reserved scratch entity with `dwg_copy_entities`, then erase only that disposable copied temp entity with `dwg_erase_entities`.
+8. Change color on the reserved curve with `dwg_change_color`, then offset that curve with `dwg_offset_entities` and confirm the returned generated handles are hex handles.
+9. Confirm the existing text translation workflow still works: select scratch text, run `dwg_get_selected_texts`, then rewrite it with `dwg_translate_and_rewrite`.
+10. Verify Plan 4 View, Export, and Drawing check:
+    - Run `dwg_zoom_extents`.
+    - Run `dwg_zoom_window` with target points.
+    - Zoom to an entity with `dwg_zoom_to_entity` using a recorded hex handle.
+    - Read drawing variables with `dwg_get_variables`.
+    - Export drawing to dxf with `dwg_export_dxf` (guarded by path policy).
+    - Run `dwg_purge_drawing` with `dry_run=true`, then with `confirm=true` (on a copied/disposable DWG only).
+    - Run `dwg_save_drawing` with `confirm=true` (on a copied/disposable DWG only).
+
+## ToolBaker
+
+ToolBaker storage is server-owned SQLite at `%LOCALAPPDATA%\Bimwright\Dwg\baked\bake.db`. Accepting a suggestion sends the internal `apply_bake` command to the plugin for policy validation and schema smoke-test. The server redacts baked source before persistence and records usage events in the `usage_events` table for pattern detection.
+
+At runtime, `dwg_run_baked_tool` reads the accepted record from SQLite and sends that record to the plugin. The plugin does not own a separate registry file. V1 baked tools are declarative preset or macro records that dispatch existing `IAcadCommand` handlers; future generated-source paths must pass `BakeCompilerPolicy` before they can be enabled.
+
+## Multi-version shells
+
+The repo contains shell projects for AutoCAD 2022-2027:
+
+| Shell | TFM |
+|-------|-----|
+| `src/plugin-acad22` | `net48` |
+| `src/plugin-acad23` | `net48` |
+| `src/plugin-acad24` | `net48` |
+| `src/plugin-acad25` | `net8.0-windows` |
+| `src/plugin-acad26` | `net8.0-windows` |
+| `src/plugin-acad27` | `net10.0-windows` |
+
+The normal solution build includes the available local 2024 shell. Release packaging for another AutoCAD year requires a prepared machine with that year's Autodesk managed assemblies and should build the matching shell explicitly.

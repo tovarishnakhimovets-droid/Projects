@@ -1,0 +1,42 @@
+diff --git a/src/plugin-acad26/Bimwright.Dwg.Plugin.Acad26.csproj b/src/plugin-acad26/Bimwright.Dwg.Plugin.Acad26.csproj
+--- a/src/plugin-acad26/Bimwright.Dwg.Plugin.Acad26.csproj
++++ b/src/plugin-acad26/Bimwright.Dwg.Plugin.Acad26.csproj
+@@ -1,3 +1,4 @@
++<!-- Modified by the CAD team (2026-10-07); see patches/ and docs/IMPORT_MANIFEST.json in cad-bridge. -->
+ <Project Sdk="Microsoft.NET.Sdk">
+   <PropertyGroup>
+     <TargetFramework>net8.0-windows</TargetFramework>
+@@ -7,9 +8,10 @@
+     <AutoCadVersionYear>2026</AutoCadVersionYear>
+     <DefineConstants>$(DefineConstants);ACAD2026;ACAD2025_OR_GREATER;ACAD2026_OR_GREATER</DefineConstants>
+     <AutoCad2026Dir Condition="'$(AutoCad2026Dir)' == ''">C:\Program Files\Autodesk\AutoCAD 2026</AutoCad2026Dir>
++    <UseAutoCadNuGetRefs Condition="'$(UseAutoCadNuGetRefs)' == ''">false</UseAutoCadNuGetRefs>
+   </PropertyGroup>
+ 
+-  <Target Name="ValidateAutoCadReferences" BeforeTargets="ResolveReferences">
++  <Target Name="ValidateAutoCadReferences" BeforeTargets="ResolveReferences" Condition="'$(UseAutoCadNuGetRefs)' != 'true'">
+     <Error Condition="!Exists('$(AutoCad2026Dir)\accoremgd.dll') or !Exists('$(AutoCad2026Dir)\acdbmgd.dll') or !Exists('$(AutoCad2026Dir)\acmgd.dll')"
+            Text="AutoCAD 2026 managed assemblies were not found under '$(AutoCad2026Dir)'. Install AutoCAD 2026 or build with /p:AutoCad2026Dir=&quot;C:\Path\To\AutoCAD 2026&quot;." />
+   </Target>
+@@ -19,7 +21,7 @@
+     <Compile Include="..\shared\**\*.cs" LinkBase="Shared" />
+   </ItemGroup>
+ 
+-  <ItemGroup>
++  <ItemGroup Condition="'$(UseAutoCadNuGetRefs)' != 'true'">
+     <Reference Include="accoremgd">
+       <HintPath>$(AutoCad2026Dir)\accoremgd.dll</HintPath>
+       <Private>false</Private>
+@@ -32,6 +34,12 @@
+       <HintPath>$(AutoCad2026Dir)\acmgd.dll</HintPath>
+       <Private>false</Private>
+     </Reference>
++  </ItemGroup>
++
++  <!-- Autodesk's pinned .NET 8 reference package; host DLLs are never shipped.
++       25.1.1 targets .NET 10 and must not replace 25.1.0 for this build. -->
++  <ItemGroup Condition="'$(UseAutoCadNuGetRefs)' == 'true'">
++    <PackageReference Include="AutoCAD.NET" Version="25.1.0" PrivateAssets="all" IncludeAssets="compile" />
+   </ItemGroup>
+ 
+   <ItemGroup>

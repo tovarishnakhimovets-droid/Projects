@@ -1,0 +1,43 @@
+# Generated output and local environments
+**/bin/
+**/obj/
+**/artifacts/
+**/artifacts-*/
+**/build/
+**/releases/
+**/.runtime/
+**/.venv/
+**/__pycache__/
+**/.pytest_cache/
+**/.vs/
+**/.idea/
+*.pdb
+*.dll
+*.exe
+*.user
+*.suo
+*.cache
+*.log
+*.nupkg
+*.zip
+
+# Local client settings and secrets
+**/.codex/
+**/.agents/
+**/.mcp.json
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.*.example
+**/.worktrees/
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# This project contains bridge source, not production drawings
+/cad-bridge/**/*.dwg
+/cad-bridge/**/*.dxf
+/cad-bridge/**/*.dwt
+/cad-bridge/**/*.bak
+/cad-bridge/**/*.dwl
+/cad-bridge/**/*.dwl2

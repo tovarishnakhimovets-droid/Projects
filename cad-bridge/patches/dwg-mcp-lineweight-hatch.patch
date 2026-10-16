@@ -1,0 +1,1488 @@
+diff --git a/src/server/Bimwright.Dwg.Server.csproj b/src/server/Bimwright.Dwg.Server.csproj
+--- a/src/server/Bimwright.Dwg.Server.csproj
++++ b/src/server/Bimwright.Dwg.Server.csproj
+@@ -1,3 +1,4 @@
++<!-- Modified by the CAD team (2026-10-07); see patches/ and docs/IMPORT_MANIFEST.json in cad-bridge. -->
+ <Project Sdk="Microsoft.NET.Sdk">
+ 
+   <PropertyGroup>
+@@ -43,6 +44,8 @@
+     <Compile Include="..\shared\Security\ErrorSanitizer.cs" LinkBase="Shared\Security" />
+     <Compile Include="..\shared\Security\BakeRedactor.cs" LinkBase="Shared\Security" />
+     <Compile Include="..\shared\Security\LispExecutionPolicy.cs" LinkBase="Shared\Security" />
++    <Compile Include="..\shared\Cad\LineweightSpec.cs" LinkBase="Shared\Cad" />
++    <Compile Include="..\shared\Cad\CreateHatchInput.cs" LinkBase="Shared\Cad" />
+   </ItemGroup>
+ 
+ </Project>
+diff --git a/src/server/Program.cs b/src/server/Program.cs
+--- a/src/server/Program.cs
++++ b/src/server/Program.cs
+@@ -1,3 +1,4 @@
++// Modified by the CAD team (2026-10-07); see patches/ and docs/IMPORT_MANIFEST.json in cad-bridge.
+ using System;
+ using System.Collections.Generic;
+ using System.Linq;
+@@ -86,7 +87,11 @@
+ 
+             var toolTypes = new List<Type>();
+             if (enabled.Contains("query")) toolTypes.Add(typeof(QueryTools));
+-            if (enabled.Contains("modify") && !readOnly) toolTypes.Add(typeof(ModifyTools));
++            if (enabled.Contains("modify") && !readOnly)
++            {
++                toolTypes.Add(typeof(ModifyTools));
++                toolTypes.Add(typeof(EntityStyleTools));
++            }
+             if (enabled.Contains("meta"))
+             {
+                 toolTypes.Add(typeof(MetaTools));
+@@ -128,6 +133,7 @@
+         {
+             if (toolType == typeof(QueryTools)) return mcp.WithTools<QueryTools>();
+             if (toolType == typeof(ModifyTools)) return mcp.WithTools<ModifyTools>();
++            if (toolType == typeof(EntityStyleTools)) return mcp.WithTools<EntityStyleTools>();
+             if (toolType == typeof(MetaTools)) return mcp.WithTools<MetaTools>();
+             if (toolType == typeof(BatchTools)) return mcp.WithTools<BatchTools>();
+             if (toolType == typeof(ToolBakerTools)) return mcp.WithTools<ToolBakerTools>();
+diff --git a/src/shared/Cad/CadEntityProperties.cs b/src/shared/Cad/CadEntityProperties.cs
+--- a/src/shared/Cad/CadEntityProperties.cs
++++ b/src/shared/Cad/CadEntityProperties.cs
+@@ -1,5 +1,7 @@
++// Modified by the CAD team (2026-10-07); see patches/ and docs/IMPORT_MANIFEST.json in cad-bridge.
+ using System;
+ using System.Collections.Generic;
++using Autodesk.AutoCAD.Colors;
+ using Autodesk.AutoCAD.DatabaseServices;
+ using Autodesk.AutoCAD.Geometry;
+ 
+@@ -19,7 +21,12 @@
+                 ["handle"] = entity.Handle.ToString(),
+                 ["type"] = GetEntityType(entity),
+                 ["layer"] = entity.Layer,
+-                ["color_index"] = (int)entity.ColorIndex
++                ["color_index"] = (int)entity.ColorIndex,
++                ["lineweight_mm"] = LineweightSpec.GetMillimeters((int)entity.LineWeight),
++                ["lineweight_mode"] = LineweightSpec.GetMode((int)entity.LineWeight),
++                ["color_rgb"] = entity.Color.ColorMethod == ColorMethod.ByColor
++                    ? (object)new[] { (int)entity.Color.Red, (int)entity.Color.Green, (int)entity.Color.Blue }
++                    : null
+             };
+ 
+             if (!includeGeometry)
+@@ -204,6 +211,9 @@
+         private static void DescribeHatch(IDictionary<string, object> result, Hatch hatch)
+         {
+             result["pattern_name"] = hatch.PatternName;
++            result["pattern"] = hatch.PatternName;
++            result["associative"] = hatch.Associative;
++            result["solid_fill"] = hatch.IsSolidFill;
+             result["pattern_scale"] = hatch.PatternScale;
+             result["pattern_angle"] = hatch.PatternAngle;
+             result["is_associative"] = hatch.Associative;
+diff --git a/src/shared/Cad/CadLayerService.cs b/src/shared/Cad/CadLayerService.cs
+--- a/src/shared/Cad/CadLayerService.cs
++++ b/src/shared/Cad/CadLayerService.cs
+@@ -1,3 +1,4 @@
++// Modified by the CAD team (2026-10-07); see patches/ and docs/IMPORT_MANIFEST.json in cad-bridge.
+ using System;
+ using System.Collections.Generic;
+ using System.Linq;
+@@ -29,7 +30,9 @@
+                         color_index = (int)layer.Color.ColorIndex,
+                         is_locked = layer.IsLocked,
+                         is_frozen = layer.IsFrozen,
+-                        is_off = layer.IsOff
++                        is_off = layer.IsOff,
++                        lineweight_mm = LineweightSpec.GetMillimeters((int)layer.LineWeight),
++                        lineweight_mode = LineweightSpec.GetMode((int)layer.LineWeight)
+                     });
+                 }
+ 
+diff --git a/src/shared/Infrastructure/CommandDispatcher.cs b/src/shared/Infrastructure/CommandDispatcher.cs
+--- a/src/shared/Infrastructure/CommandDispatcher.cs
++++ b/src/shared/Infrastructure/CommandDispatcher.cs
+@@ -1,3 +1,4 @@
++// Modified by the CAD team (2026-10-07); see patches/ and docs/IMPORT_MANIFEST.json in cad-bridge.
+ using System;
+ using System.Collections.Generic;
+ using Newtonsoft.Json;
+@@ -55,6 +56,9 @@
+                 { "create_diameter_dimension", new CreateDiameterDimensionHandler() },
+                 { "change_layer",            new ChangeLayerHandler() },
+                 { "change_color",            new ChangeColorHandler() },
++                { "set_lineweight",          new SetLineweightHandler() },
++                { "set_layer_lineweight",    new SetLayerLineweightHandler() },
++                { "create_hatch",            new CreateHatchHandler() },
+                 { "move_entities",           new MoveEntitiesHandler() },
+                 { "rotate_entities",         new RotateEntitiesHandler() },
+                 { "scale_entities",          new ScaleEntitiesHandler() },
+diff --git a/src/shared/Infrastructure/SchemaValidator.cs b/src/shared/Infrastructure/SchemaValidator.cs
+--- a/src/shared/Infrastructure/SchemaValidator.cs
++++ b/src/shared/Infrastructure/SchemaValidator.cs
+@@ -1,3 +1,4 @@
++// Modified by the CAD team (2026-10-07); see patches/ and docs/IMPORT_MANIFEST.json in cad-bridge.
+ using System;
+ using System.Collections.Generic;
+ using System.Linq;
+@@ -271,6 +272,23 @@
+             SchemaProperty.Required("handles", JTokenType.Array),
+             SchemaProperty.Required("color_index", JTokenType.Integer));
+ 
++        public static readonly CommandSchema SetLineweight = CommandSchema.Object(
++            SchemaProperty.Required("handles", JTokenType.Array),
++            SchemaProperty.Optional("lineweight_mm", JTokenType.Float, JTokenType.Integer),
++            SchemaProperty.Optional("mode", JTokenType.String));
++
++        public static readonly CommandSchema SetLayerLineweight = CommandSchema.Object(
++            SchemaProperty.Required("layers", JTokenType.Array),
++            SchemaProperty.Required("lineweight_mm", JTokenType.Float, JTokenType.Integer));
++
++        public static readonly CommandSchema CreateHatch = CommandSchema.Object(
++            SchemaProperty.RequiredNonEmptyString("boundary_handle"),
++            SchemaProperty.Optional("layer", JTokenType.String),
++            SchemaProperty.Optional("color_index", JTokenType.Integer),
++            SchemaProperty.Optional("color_rgb", JTokenType.Array),
++            SchemaProperty.Optional("associative", JTokenType.Boolean),
++            SchemaProperty.Optional("draw_order", JTokenType.String));
++
+         public static readonly CommandSchema MoveEntities = CommandSchema.Object(
+             SchemaProperty.Required("handles", JTokenType.Array),
+             SchemaProperty.Required("vector", JTokenType.Object));
+diff --git a/tests/Bimwright.Dwg.Tests/ToolsListSnapshotTests.cs b/tests/Bimwright.Dwg.Tests/ToolsListSnapshotTests.cs
+--- a/tests/Bimwright.Dwg.Tests/ToolsListSnapshotTests.cs
++++ b/tests/Bimwright.Dwg.Tests/ToolsListSnapshotTests.cs
+@@ -1,3 +1,4 @@
++// Modified by the CAD team (2026-10-07); see patches/ and docs/IMPORT_MANIFEST.json in cad-bridge.
+ using System;
+ using System.Collections.Generic;
+ using System.IO;
+@@ -36,6 +37,7 @@
+                 "dwg_create_circle",
+                 "dwg_create_diameter_dimension",
+                 "dwg_create_ellipse",
++                "dwg_create_hatch",
+                 "dwg_create_layer",
+                 "dwg_create_leader",
+                 "dwg_create_line",
+@@ -79,6 +81,8 @@
+                 "dwg_select_by_type",
+                 "dwg_send_code",
+                 "dwg_set_block_attributes",
++                "dwg_set_layer_lineweight",
++                "dwg_set_lineweight",
+                 "dwg_set_system_variable",
+                 "dwg_switch_target",
+                 "dwg_translate_and_rewrite",
+@@ -233,6 +237,7 @@
+             {
+                 "BatchTools",
+                 "CodeTools",
++                "EntityStyleTools",
+                 "MetaTools",
+                 "ModifyTools",
+                 "QueryTools",
+diff --git a/src/server/Tools/EntityStyleTools.cs b/src/server/Tools/EntityStyleTools.cs
+new file mode 100644
+--- /dev/null
++++ b/src/server/Tools/EntityStyleTools.cs
+@@ -0,0 +1,103 @@
++using System;
++using System.ComponentModel;
++using System.Linq;
++using System.Threading.Tasks;
++using Bimwright.Dwg.Plugin.Cad;
++using ModelContextProtocol.Server;
++using Newtonsoft.Json;
++using Newtonsoft.Json.Linq;
++
++namespace Bimwright.Dwg.Server.Tools
++{
++    [McpServerToolType]
++    public class EntityStyleTools
++    {
++        [McpServerTool(Name = "dwg_set_lineweight", ReadOnly = false, Idempotent = true), Description(
++            "Set lineweight for 1-1000 entities identified by handles. " +
++            "mode is explicit (requires lineweight_mm), by_layer, or by_block. " +
++            "Millimeters must be an exact supported AutoCAD lineweight, e.g. 0.30. " +
++            "All targets are checked before writing; the whole request is one transaction. " +
++            "Does not change LWDISPLAY or save the drawing.")]
++        public static Task<string> SetLineweight(
++            [Description("Array of unique AutoCAD hexadecimal handles.")] string[] handles,
++            [Description("Lineweight in millimeters, required only for mode=explicit.")] double? lineweight_mm = null,
++            [Description("explicit, by_layer, or by_block.")] string mode = "explicit")
++        {
++            if (!ValidateNames(handles, "handles", out var error)) return InputError(error);
++            var weight = lineweight_mm.HasValue ? new JValue(lineweight_mm.Value) : null;
++            if (!LineweightSpec.TryParse(weight, mode, out _, out error)) return InputError(error);
++            var request = new JObject { ["handles"] = new JArray(handles), ["mode"] = mode };
++            if (weight != null) request["lineweight_mm"] = weight;
++            return ToolGateway.LoggedCall("set_lineweight", request, request);
++        }
++
++        [McpServerTool(Name = "dwg_set_layer_lineweight", ReadOnly = false, Idempotent = true), Description(
++            "Set the explicit lineweight of 1-1000 existing layers in millimeters. " +
++            "For example 0.30 sets 0.30 mm. Entities using ByLayer inherit this value. " +
++            "Locked, dependent, missing, or unwritable targets refuse the whole request. " +
++            "All changes use one transaction; does not change LWDISPLAY or save.")]
++        public static Task<string> SetLayerLineweight(
++            [Description("Array of unique existing layer names.")] string[] layers,
++            [Description("An exact supported AutoCAD lineweight in millimeters, e.g. 0.30.")] double lineweight_mm)
++        {
++            if (!ValidateNames(layers, "layers", out var error)) return InputError(error);
++            if (!LineweightSpec.TryParse(new JValue(lineweight_mm), "explicit", out _, out error))
++                return InputError(error);
++            var request = new JObject
++            {
++                ["layers"] = new JArray(layers),
++                ["lineweight_mm"] = lineweight_mm
++            };
++            return ToolGateway.LoggedCall("set_layer_lineweight", request, request);
++        }
++
++        [McpServerTool(Name = "dwg_create_hatch", ReadOnly = false, Idempotent = false), Description(
++            "Create one SOLID Hatch inside a Circle or a closed planar lightweight Polyline " +
++            "identified by boundary_handle in the current space. Holes/islands and other " +
++            "patterns are not supported. layer must exist; defaults to the boundary layer. " +
++            "Use either ACI color_index or true color_rgb [r,g,b], or omit both for ByLayer. " +
++            "above_entities places the fill above existing entities and the boundary above " +
++            "the fill; below_entities puts the fill at the bottom. Returns the hatch handle. " +
++            "Validates before writing and creates the hatch in one transaction. Does not save.")]
++        public static Task<string> CreateHatch(
++            [Description("Handle of one Circle or closed lightweight Polyline in the current space.")] string boundary_handle,
++            [Description("Optional existing target layer; defaults to the boundary layer.")] string layer = null,
++            [Description("Optional ACI index 1-256 (256 means ByLayer). Cannot be combined with color_rgb.")] int? color_index = null,
++            [Description("Optional true color [r,g,b], exactly three integers 0-255. White: [255,255,255].")] int[] color_rgb = null,
++            [Description("Associate the hatch with its boundary.")] bool associative = true,
++            [Description("above_entities or below_entities.")] string draw_order = "above_entities")
++        {
++            var request = new JObject
++            {
++                ["boundary_handle"] = boundary_handle,
++                ["associative"] = associative,
++                ["draw_order"] = draw_order
++            };
++            if (layer != null) request["layer"] = layer;
++            if (color_index.HasValue) request["color_index"] = color_index.Value;
++            if (color_rgb != null) request["color_rgb"] = new JArray(color_rgb);
++            if (!CreateHatchInput.TryParse(request, out _, out var error)) return InputError(error);
++            return ToolGateway.LoggedCall("create_hatch", request, request);
++        }
++
++        private static bool ValidateNames(string[] names, string field, out string error)
++        {
++            error = null;
++            if (names == null || names.Length == 0 || names.Length > 1000 ||
++                names.Any(string.IsNullOrWhiteSpace))
++            {
++                error = field + " must contain 1-1000 non-empty strings";
++                return false;
++            }
++            if (names.Distinct(StringComparer.OrdinalIgnoreCase).Count() != names.Length)
++            {
++                error = field + " must not contain duplicates";
++                return false;
++            }
++            return true;
++        }
++
++        private static Task<string> InputError(string error)
++            => Task.FromResult(JsonConvert.SerializeObject(new { ok = false, error }));
++    }
++}
+diff --git a/src/shared/Cad/LineweightSpec.cs b/src/shared/Cad/LineweightSpec.cs
+new file mode 100644
+--- /dev/null
++++ b/src/shared/Cad/LineweightSpec.cs
+@@ -0,0 +1,102 @@
++using System;
++using Newtonsoft.Json.Linq;
++
++namespace Bimwright.Dwg.Plugin.Cad
++{
++    /// <summary>
++    /// Host-free wire validation. AutoCAD LineWeight stores hundredths of a millimeter.
++    /// https://help.autodesk.com/cloudhelp/2026/ENU/OARX-ManagedRefGuide/files/OARX-ManagedRefGuide-Autodesk_AutoCAD_DatabaseServices_LineWeight.html
++    /// </summary>
++    public static class LineweightSpec
++    {
++        private static readonly int[] ExplicitValues =
++        {
++            0, 5, 9, 13, 15, 18, 20, 25, 30, 35, 40, 50,
++            53, 60, 70, 80, 90, 100, 106, 120, 140, 158, 200, 211
++        };
++
++        public static bool TryParse(JToken mm, string mode, out int value, out string error)
++        {
++            value = 0;
++            error = null;
++            mode = mode ?? "explicit";
++
++            if (mode == "by_layer" || mode == "by_block")
++            {
++                // A supplied JSON null is also a conflicting lineweight_mm field.
++                if (mm != null)
++                {
++                    error = "lineweight_mm must be omitted for by_layer or by_block mode";
++                    return false;
++                }
++
++                value = mode == "by_layer" ? -1 : -2;
++                return true;
++            }
++
++            if (mode != "explicit")
++            {
++                error = "mode must be explicit, by_layer, or by_block";
++                return false;
++            }
++
++            if (mm == null || (mm.Type != JTokenType.Float && mm.Type != JTokenType.Integer))
++            {
++                error = "explicit mode requires a numeric lineweight_mm";
++                return false;
++            }
++
++            double millimeters;
++            try
++            {
++                millimeters = mm.Value<double>();
++            }
++            catch (Exception ex) when (ex is FormatException || ex is InvalidCastException || ex is OverflowException)
++            {
++                error = "lineweight_mm must be a finite supported AutoCAD value";
++                return false;
++            }
++
++            if (double.IsNaN(millimeters) || double.IsInfinity(millimeters))
++            {
++                error = "lineweight_mm must be finite";
++                return false;
++            }
++
++            // Compare against exact wire values, rather than rounding mm * 100.
++            foreach (var candidate in ExplicitValues)
++            {
++                if (millimeters == candidate / 100d)
++                {
++                    value = candidate;
++                    return true;
++                }
++            }
++
++            error = "lineweight_mm must be one of the supported AutoCAD values; no rounding is applied";
++            return false;
++        }
++
++        public static bool TryParseLayer(JToken mm, out int value, out string error)
++            => TryParse(mm, "explicit", out value, out error);
++
++        public static double? GetMillimeters(int value)
++        {
++            var mode = GetMode(value);
++            return mode == "explicit" ? (double?)(value / 100d) : null;
++        }
++
++        public static string GetMode(int value)
++        {
++            switch (value)
++            {
++                case -1: return "by_layer";
++                case -2: return "by_block";
++                case -3: return "default";
++                default:
++                    if (Array.IndexOf(ExplicitValues, value) >= 0) return "explicit";
++                    throw new ArgumentOutOfRangeException(nameof(value), "Unsupported AutoCAD lineweight");
++            }
++        }
++    }
++}
+diff --git a/src/shared/Cad/CreateHatchInput.cs b/src/shared/Cad/CreateHatchInput.cs
+new file mode 100644
+--- /dev/null
++++ b/src/shared/Cad/CreateHatchInput.cs
+@@ -0,0 +1,157 @@
++using System;
++using System.Globalization;
++using System.Linq;
++using Newtonsoft.Json.Linq;
++
++namespace Bimwright.Dwg.Plugin.Cad
++{
++    /// <summary>Host-free validation shared by the MCP facade and AutoCAD handler.</summary>
++    public sealed class CreateHatchInput
++    {
++        private CreateHatchInput() { }
++
++        public string BoundaryHandle { get; private set; }
++        public long BoundaryHandleValue { get; private set; }
++        public string Layer { get; private set; }
++        public int? ColorIndex { get; private set; }
++        public int[] ColorRgb { get; private set; }
++        public bool Associative { get; private set; }
++        public string DrawOrder { get; private set; }
++
++        public static bool TryParse(JToken parameters, out CreateHatchInput input, out string error)
++        {
++            input = null;
++            error = null;
++            if (!(parameters is JObject obj))
++            {
++                error = "params must be an object";
++                return false;
++            }
++
++            var handleToken = obj["boundary_handle"];
++            if (handleToken?.Type != JTokenType.String)
++            {
++                error = "boundary_handle must be a non-empty hexadecimal string";
++                return false;
++            }
++
++            var handle = handleToken.Value<string>();
++            if (string.IsNullOrEmpty(handle) || handle.Any(c => !Uri.IsHexDigit(c)) ||
++                !long.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var handleValue) ||
++                handleValue <= 0L)
++            {
++                error = "boundary_handle must be a positive hexadecimal handle in the supported range, without whitespace";
++                return false;
++            }
++
++            string layer = null;
++            var layerToken = obj["layer"];
++            if (IsProvided(layerToken))
++            {
++                if (layerToken.Type != JTokenType.String || string.IsNullOrWhiteSpace(layerToken.Value<string>()))
++                {
++                    error = "layer must be a non-empty layer name";
++                    return false;
++                }
++                layer = layerToken.Value<string>();
++            }
++
++            var indexToken = obj["color_index"];
++            var rgbToken = obj["color_rgb"];
++            if (IsProvided(indexToken) && IsProvided(rgbToken))
++            {
++                error = "color_index and color_rgb are mutually exclusive";
++                return false;
++            }
++
++            int? colorIndex = null;
++            if (IsProvided(indexToken))
++            {
++                if (!TryReadInteger(indexToken, 1, 256, out var index))
++                {
++                    error = "color_index must be an integer ACI color index between 1 and 256";
++                    return false;
++                }
++                colorIndex = index;
++            }
++
++            int[] colorRgb = null;
++            if (IsProvided(rgbToken))
++            {
++                if (!(rgbToken is JArray rgb) || rgb.Count != 3)
++                {
++                    error = "color_rgb must be an array of exactly three integers between 0 and 255";
++                    return false;
++                }
++                colorRgb = new int[3];
++                for (var i = 0; i < colorRgb.Length; i++)
++                {
++                    if (!TryReadInteger(rgb[i], 0, 255, out colorRgb[i]))
++                    {
++                        error = "color_rgb[" + i + "] must be an integer between 0 and 255";
++                        return false;
++                    }
++                }
++            }
++
++            var associative = true;
++            var associativeToken = obj["associative"];
++            if (IsProvided(associativeToken))
++            {
++                if (associativeToken.Type != JTokenType.Boolean)
++                {
++                    error = "associative must be a boolean";
++                    return false;
++                }
++                associative = associativeToken.Value<bool>();
++            }
++
++            var drawOrder = "above_entities";
++            var orderToken = obj["draw_order"];
++            if (IsProvided(orderToken))
++            {
++                if (orderToken.Type != JTokenType.String ||
++                    (orderToken.Value<string>() != "above_entities" && orderToken.Value<string>() != "below_entities"))
++                {
++                    error = "draw_order must be above_entities or below_entities";
++                    return false;
++                }
++                drawOrder = orderToken.Value<string>();
++            }
++
++            input = new CreateHatchInput
++            {
++                BoundaryHandle = handle,
++                BoundaryHandleValue = handleValue,
++                Layer = layer,
++                ColorIndex = colorIndex,
++                ColorRgb = colorRgb,
++                Associative = associative,
++                DrawOrder = drawOrder
++            };
++            return true;
++        }
++
++        private static bool IsProvided(JToken token)
++            => token != null && token.Type != JTokenType.Null;
++
++        private static bool TryReadInteger(JToken token, int minimum, int maximum, out int value)
++        {
++            value = 0;
++            if (token?.Type != JTokenType.Integer)
++                return false;
++            try
++            {
++                var number = token.Value<long>();
++                if (number < minimum || number > maximum)
++                    return false;
++                value = (int)number;
++                return true;
++            }
++            catch (Exception ex) when (ex is FormatException || ex is InvalidCastException || ex is OverflowException)
++            {
++                return false;
++            }
++        }
++    }
++}
+diff --git a/src/shared/Handlers/SetLineweightHandler.cs b/src/shared/Handlers/SetLineweightHandler.cs
+new file mode 100644
+--- /dev/null
++++ b/src/shared/Handlers/SetLineweightHandler.cs
+@@ -0,0 +1,169 @@
++using System;
++using System.Collections.Generic;
++using Autodesk.AutoCAD.ApplicationServices;
++using Autodesk.AutoCAD.DatabaseServices;
++using Bimwright.Dwg.Plugin.Cad;
++using Newtonsoft.Json.Linq;
++
++namespace Bimwright.Dwg.Plugin.Handlers
++{
++    public class SetLineweightHandler : IAcadCommand
++    {
++        public string Name => "set_lineweight";
++        public string Description => "Set lineweight on a bounded entity batch after complete preflight, in one transaction.";
++        public CommandSchema Schema => CommandSchemas.SetLineweight;
++
++        public CommandResult Execute(Document doc, JToken parameters)
++        {
++            if (!(parameters is JObject obj)) return CommandResult.Fail("params must be an object");
++            var handles = obj["handles"] as JArray;
++            if (handles == null || handles.Count < 1 || handles.Count > 1000)
++                return CommandResult.Fail("handles must be an array containing 1 to 1000 strings");
++            var modeToken = obj["mode"];
++            if (modeToken != null && modeToken.Type != JTokenType.String)
++                return CommandResult.Fail("mode must be a string");
++            if (!LineweightSpec.TryParse(obj["lineweight_mm"], modeToken?.Value<string>(), out var weight, out var error))
++                return CommandResult.Fail(error);
++
++            var requested = new List<string>();
++            var distinct = new HashSet<long>();
++            foreach (var token in handles)
++            {
++                if (token.Type != JTokenType.String)
++                    return CommandResult.Fail("handles entries must be hexadecimal strings");
++                var handle = token.Value<string>();
++                if (!CadWire.TryParseHandleValue(handle, out var handleValue, out error))
++                    return CommandResult.Fail(error);
++                // Reject aliases such as 1/01 as well as case-insensitive duplicates.
++                if (!distinct.Add(handleValue)) return CommandResult.Fail("handles must not contain duplicates");
++                requested.Add(handle);
++            }
++
++            try
++            {
++                if (!LineweightTargetPreflight.TryCheckDrawing(doc, out error)) return CommandResult.Fail(error);
++                var db = doc.Database;
++                using (var tx = db.TransactionManager.StartTransaction())
++                {
++                    var entities = new List<Entity>();
++                    foreach (var handle in requested)
++                    {
++                        if (!CadHandleResolver.TryResolve(db, handle, out var id, out error))
++                            return CommandResult.Fail($"handle {handle}: {error}");
++                        if (id.IsErased) return CommandResult.Fail($"handle {handle}: entity is erased");
++                        var entity = tx.GetObject(id, OpenMode.ForRead) as Entity;
++                        if (entity == null) return CommandResult.Fail($"handle {handle}: object is not an entity");
++                        if (!LineweightTargetPreflight.TryCheckEntity(tx, entity, out error))
++                            return CommandResult.Fail($"handle {handle}: {error}");
++                        entities.Add(entity);
++                    }
++
++                    // Prove all targets can be opened for write before the first setter.
++                    foreach (var entity in entities)
++                    {
++                        entity.UpgradeOpen();
++                        if (!entity.IsWriteEnabled) return CommandResult.Fail("entity is read-only");
++                    }
++
++                    var changed = new List<string>();
++                    foreach (var entity in entities)
++                    {
++                        if ((int)entity.LineWeight == weight) continue;
++                        entity.LineWeight = (LineWeight)weight;
++                        changed.Add(entity.Handle.ToString());
++                    }
++                    tx.Commit();
++                    return CommandResult.Success(new
++                    {
++                        handles = changed.ToArray(),
++                        lineweight_mm = LineweightSpec.GetMillimeters(weight),
++                        mode = LineweightSpec.GetMode(weight),
++                        count = changed.Count
++                    });
++                }
++            }
++            catch (Exception ex)
++            {
++                // An uncommitted transaction aborts the entire batch, including setter failures.
++                return CommandResult.Fail("failed to set lineweight: " + ErrorSanitizer.Sanitize(ex.Message));
++            }
++        }
++    }
++
++    internal static class LineweightTargetPreflight
++    {
++        internal static bool TryCheckDrawing(Document doc, out string error)
++        {
++            error = null;
++            if (doc == null || !ReferenceEquals(doc, Application.DocumentManager.MdiActiveDocument))
++            {
++                error = "the target document is no longer active";
++                return false;
++            }
++            if (doc.IsReadOnly)
++            {
++                error = "the active drawing is read-only";
++                return false;
++            }
++            return true;
++        }
++
++        internal static bool TryCheckLayer(LayerTableRecord layer, out string error)
++        {
++            error = null;
++            if (layer.IsErased || layer.ObjectId.IsErased) error = "layer is erased";
++            else if (layer.IsDependent) error = "xref-dependent layer cannot be modified";
++            else if (layer.IsLocked) error = "layer is locked";
++            return error == null;
++        }
++
++        internal static bool TryCheckEntity(Transaction tx, Entity entity, out string error)
++        {
++            error = null;
++            if (entity.IsErased || entity.ObjectId.IsErased)
++            {
++                error = "entity is erased";
++                return false;
++            }
++            var layer = (LayerTableRecord)tx.GetObject(entity.LayerId, OpenMode.ForRead);
++            if (!TryCheckLayer(layer, out error)) return false;
++
++            DBObject current = entity;
++            var visited = new HashSet<ObjectId>();
++            while (current != null)
++            {
++                if (!visited.Add(current.ObjectId))
++                {
++                    error = "entity has an invalid owner chain";
++                    return false;
++                }
++                if (current is BlockReference reference)
++                {
++                    var referencedBlock = (BlockTableRecord)tx.GetObject(reference.BlockTableRecord, OpenMode.ForRead);
++                    if (referencedBlock.IsDependent || referencedBlock.IsFromExternalReference)
++                    {
++                        error = "xref entity cannot be modified";
++                        return false;
++                    }
++                }
++                if (current is BlockTableRecord owner)
++                {
++                    if (owner.IsDependent || owner.IsFromExternalReference)
++                    {
++                        error = "xref entity cannot be modified";
++                        return false;
++                    }
++                    return true;
++                }
++                if (current.OwnerId.IsNull)
++                {
++                    error = "entity has no owning block";
++                    return false;
++                }
++                current = tx.GetObject(current.OwnerId, OpenMode.ForRead);
++            }
++            error = "entity owner is unavailable";
++            return false;
++        }
++    }
++}
+diff --git a/src/shared/Handlers/SetLayerLineweightHandler.cs b/src/shared/Handlers/SetLayerLineweightHandler.cs
+new file mode 100644
+--- /dev/null
++++ b/src/shared/Handlers/SetLayerLineweightHandler.cs
+@@ -0,0 +1,88 @@
++using System;
++using System.Collections.Generic;
++using Autodesk.AutoCAD.ApplicationServices;
++using Autodesk.AutoCAD.DatabaseServices;
++using Bimwright.Dwg.Plugin.Cad;
++using Newtonsoft.Json.Linq;
++
++namespace Bimwright.Dwg.Plugin.Handlers
++{
++    public class SetLayerLineweightHandler : IAcadCommand
++    {
++        public string Name => "set_layer_lineweight";
++        public string Description => "Set an explicit lineweight on existing unlocked local layers in one transaction.";
++        public CommandSchema Schema => CommandSchemas.SetLayerLineweight;
++
++        public CommandResult Execute(Document doc, JToken parameters)
++        {
++            if (!(parameters is JObject obj)) return CommandResult.Fail("params must be an object");
++            var names = obj["layers"] as JArray;
++            if (names == null || names.Count < 1 || names.Count > 1000)
++                return CommandResult.Fail("layers must be an array containing 1 to 1000 strings");
++            if (!LineweightSpec.TryParseLayer(obj["lineweight_mm"], out var weight, out var error))
++                return CommandResult.Fail(error);
++
++            var requested = new List<string>();
++            var distinct = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
++            foreach (var token in names)
++            {
++                if (token.Type != JTokenType.String) return CommandResult.Fail("layers entries must be strings");
++                var name = token.Value<string>();
++                if (string.IsNullOrWhiteSpace(name)) return CommandResult.Fail("layer name must not be empty");
++                if (!distinct.Add(name)) return CommandResult.Fail("layers must not contain duplicates");
++                requested.Add(name);
++            }
++
++            try
++            {
++                if (!LineweightTargetPreflight.TryCheckDrawing(doc, out error)) return CommandResult.Fail(error);
++                foreach (var name in requested)
++                    if (!CadLayerService.TryValidateLayerName(name, out error)) return CommandResult.Fail(error);
++
++                var db = doc.Database;
++                using (var tx = db.TransactionManager.StartTransaction())
++                {
++                    var table = (LayerTable)tx.GetObject(db.LayerTableId, OpenMode.ForRead);
++                    var layers = new List<LayerTableRecord>();
++                    foreach (var name in requested)
++                    {
++                        if (!table.Has(name)) return CommandResult.Fail($"layer not found: {name}");
++                        var id = table[name];
++                        if (id.IsErased) return CommandResult.Fail($"layer is erased: {name}");
++                        var layer = (LayerTableRecord)tx.GetObject(id, OpenMode.ForRead);
++                        if (!LineweightTargetPreflight.TryCheckLayer(layer, out error))
++                            return CommandResult.Fail($"layer {name}: {error}");
++                        layers.Add(layer);
++                    }
++
++                    // Opening every layer first keeps late read-only failures ahead of writes.
++                    foreach (var layer in layers)
++                    {
++                        layer.UpgradeOpen();
++                        if (!layer.IsWriteEnabled) return CommandResult.Fail("layer is read-only");
++                    }
++
++                    var changed = new List<string>();
++                    foreach (var layer in layers)
++                    {
++                        if ((int)layer.LineWeight == weight) continue;
++                        layer.LineWeight = (LineWeight)weight;
++                        changed.Add(layer.Name);
++                    }
++                    tx.Commit();
++                    return CommandResult.Success(new
++                    {
++                        layers = changed.ToArray(),
++                        lineweight_mm = LineweightSpec.GetMillimeters(weight),
++                        mode = "explicit",
++                        count = changed.Count
++                    });
++                }
++            }
++            catch (Exception ex)
++            {
++                return CommandResult.Fail("failed to set layer lineweight: " + ErrorSanitizer.Sanitize(ex.Message));
++            }
++        }
++    }
++}
+diff --git a/src/shared/Handlers/CreateHatchHandler.cs b/src/shared/Handlers/CreateHatchHandler.cs
+new file mode 100644
+--- /dev/null
++++ b/src/shared/Handlers/CreateHatchHandler.cs
+@@ -0,0 +1,257 @@
++using System;
++using Autodesk.AutoCAD.ApplicationServices;
++using Autodesk.AutoCAD.Colors;
++using Autodesk.AutoCAD.DatabaseServices;
++using Autodesk.AutoCAD.Geometry;
++using Bimwright.Dwg.Plugin.Cad;
++using Newtonsoft.Json.Linq;
++
++namespace Bimwright.Dwg.Plugin.Handlers
++{
++    public class CreateHatchHandler : IAcadCommand
++    {
++        public string Name => "create_hatch";
++        public string Description => "Create a solid hatch from one circle or closed lightweight polyline in the current drawing space.";
++        public CommandSchema Schema => CommandSchemas.CreateHatch;
++
++        public CommandResult Execute(Document doc, JToken parameters)
++        {
++            if (!CreateHatchInput.TryParse(parameters, out var input, out var inputError))
++                return CommandResult.Fail(inputError);
++            if (doc == null)
++                return CommandResult.Fail("an active document is required");
++
++            try
++            {
++                if (doc.IsReadOnly)
++                    return CommandResult.Fail("the active document is read-only");
++                var db = doc.Database;
++                if (db == null)
++                    return CommandResult.Fail("the active document has no database");
++
++                using (var tx = db.TransactionManager.StartTransaction())
++                {
++                    if (!CadHandleResolver.TryResolve(db, input.BoundaryHandle, out var boundaryId, out var handleError))
++                        return CommandResult.Fail("boundary_handle: " + handleError);
++                    if (!boundaryId.IsValid || boundaryId.IsErased || boundaryId.IsEffectivelyErased)
++                        return CommandResult.Fail("boundary_handle must identify a valid, non-erased entity");
++
++                    var boundary = tx.GetObject(boundaryId, OpenMode.ForRead) as Entity;
++                    if (boundary == null)
++                        return CommandResult.Fail("boundary_handle must identify an entity");
++                    if (boundary.OwnerId != db.CurrentSpaceId)
++                        return CommandResult.Fail("the boundary must belong to the current drawing space");
++                    if (!TryGetBoundaryPlane(boundary, out var normal, out var elevation, out var boundaryError))
++                        return CommandResult.Fail(boundaryError);
++
++                    var currentSpace = (BlockTableRecord)tx.GetObject(db.CurrentSpaceId, OpenMode.ForRead);
++                    if (currentSpace.IsDependent || currentSpace.IsFromExternalReference || currentSpace.IsFromOverlayReference)
++                        return CommandResult.Fail("the current drawing space is an external reference and is read-only");
++                    if (!TryGetWritableLayer(tx, boundary.LayerId, "boundary", out _, out var boundaryLayerError))
++                        return CommandResult.Fail(boundaryLayerError);
++
++                    var targetLayerId = boundary.LayerId;
++                    if (input.Layer != null)
++                    {
++                        var layers = (LayerTable)tx.GetObject(db.LayerTableId, OpenMode.ForRead);
++                        if (!layers.Has(input.Layer))
++                            return CommandResult.Fail("the target layer must already exist: " + input.Layer);
++                        targetLayerId = layers[input.Layer];
++                    }
++                    if (!TryGetWritableLayer(tx, targetLayerId, "target", out var layerName, out var targetLayerError))
++                        return CommandResult.Fail(targetLayerError);
++
++                    // All input, geometry, ownership and layer checks finish before
++                    // opening anything for write or creating a database entity.
++                    if (!currentSpace.IsWriteEnabled)
++                        currentSpace.UpgradeOpen();
++                    if (input.Associative && !boundary.IsWriteEnabled)
++                        boundary.UpgradeOpen();
++                    var drawOrder = (DrawOrderTable)tx.GetObject(currentSpace.DrawOrderTableId, OpenMode.ForWrite);
++
++                    using (var hatch = new Hatch())
++                    {
++                        hatch.SetDatabaseDefaults(db);
++                        hatch.LayerId = targetLayerId;
++                        hatch.Normal = normal;
++                        hatch.Elevation = elevation;
++                        hatch.HatchStyle = HatchStyle.Normal;
++                        ApplyColor(hatch, input);
++
++                        var hatchId = currentSpace.AppendEntity(hatch);
++                        tx.AddNewlyCreatedDBObject(hatch, true);
++                        hatch.SetHatchPattern(HatchPatternType.PreDefined, "SOLID");
++                        // Autodesk requires database residency before Associative,
++                        // and Associative must be set before building the loop.
++                        hatch.Associative = input.Associative;
++                        hatch.AppendLoop(HatchLoopTypes.Outermost, new ObjectIdCollection { boundaryId });
++                        hatch.EvaluateHatch(true);
++
++                        var hatchIds = new ObjectIdCollection { hatchId };
++                        if (input.DrawOrder == "above_entities")
++                        {
++                            drawOrder.MoveToTop(hatchIds);
++                            drawOrder.MoveAbove(new ObjectIdCollection { boundaryId }, hatchId);
++                        }
++                        else
++                        {
++                            drawOrder.MoveToBottom(hatchIds);
++                        }
++
++                        var result = new
++                        {
++                            handle = hatch.Handle.ToString(),
++                            boundary_handle = boundary.Handle.ToString(),
++                            pattern = hatch.PatternName,
++                            layer = layerName,
++                            color = DescribeColor(input),
++                            associative = hatch.Associative,
++                            draw_order = input.DrawOrder
++                        };
++                        tx.Commit();
++                        return CommandResult.Success(result);
++                    }
++                }
++            }
++            catch (Exception ex)
++            {
++                // Disposing the uncommitted transaction also removes a hatch
++                // whose loop evaluation or draw-order adjustment failed.
++                return CommandResult.Fail("failed to create hatch: " + ex.Message);
++            }
++        }
++
++        private static bool TryGetWritableLayer(
++            Transaction tx, ObjectId layerId, string role, out string layerName, out string error)
++        {
++            layerName = null;
++            error = null;
++            if (layerId.IsNull || !layerId.IsValid || layerId.IsErased || layerId.IsEffectivelyErased)
++            {
++                error = "the " + role + " layer is invalid or erased";
++                return false;
++            }
++            var layer = tx.GetObject(layerId, OpenMode.ForRead) as LayerTableRecord;
++            if (layer == null)
++            {
++                error = "the " + role + " layer is invalid";
++                return false;
++            }
++            layerName = layer.Name;
++            if (layer.IsLocked)
++            {
++                error = "the " + role + " layer is locked: " + layerName;
++                return false;
++            }
++            if (layer.IsDependent)
++            {
++                error = "the " + role + " layer is an external-reference layer and is read-only: " + layerName;
++                return false;
++            }
++            return true;
++        }
++
++        private static bool TryGetBoundaryPlane(
++            Entity boundary, out Vector3d normal, out double elevation, out string error)
++        {
++            normal = Vector3d.ZAxis;
++            elevation = 0d;
++            error = null;
++            if (!boundary.IsPlanar)
++            {
++                error = "the hatch boundary must be planar";
++                return false;
++            }
++
++            double area;
++            if (boundary is Circle circle)
++            {
++                if (!IsFinite(circle.Radius) || circle.Radius <= 0d ||
++                    !IsFinite(circle.Center.X) || !IsFinite(circle.Center.Y) || !IsFinite(circle.Center.Z))
++                {
++                    error = "the boundary circle must have finite coordinates and a positive radius";
++                    return false;
++                }
++                normal = circle.Normal;
++                if (!TryNormalize(ref normal))
++                {
++                    error = "the hatch boundary must have a finite, nonzero plane normal";
++                    return false;
++                }
++                elevation = new Vector3d(circle.Center.X, circle.Center.Y, circle.Center.Z).DotProduct(normal);
++                area = Math.PI * circle.Radius * circle.Radius;
++            }
++            else if (boundary is Polyline polyline)
++            {
++                if (!polyline.Closed || polyline.NumberOfVertices < 2)
++                {
++                    error = "the lightweight polyline boundary must be closed and contain at least two vertices";
++                    return false;
++                }
++                for (var i = 0; i < polyline.NumberOfVertices; i++)
++                {
++                    var point = polyline.GetPoint2dAt(i);
++                    if (!IsFinite(point.X) || !IsFinite(point.Y) || !IsFinite(polyline.GetBulgeAt(i)))
++                    {
++                        error = "the lightweight polyline boundary must have finite vertices and bulges";
++                        return false;
++                    }
++                }
++                normal = polyline.Normal;
++                if (!TryNormalize(ref normal))
++                {
++                    error = "the hatch boundary must have a finite, nonzero plane normal";
++                    return false;
++                }
++                elevation = polyline.Elevation;
++                area = Math.Abs(polyline.Area);
++            }
++            else
++            {
++                error = "boundary_handle must identify a circle or a closed lightweight polyline";
++                return false;
++            }
++
++            if (!IsFinite(elevation) || !IsFinite(area) || area <= 0d)
++            {
++                error = "the hatch boundary must enclose a finite, nonzero area on a finite plane";
++                return false;
++            }
++            return true;
++        }
++
++        private static bool TryNormalize(ref Vector3d normal)
++        {
++            if (!IsFinite(normal.X) || !IsFinite(normal.Y) || !IsFinite(normal.Z) ||
++                !IsFinite(normal.Length) || normal.Length <= 0d)
++                return false;
++            normal = normal.GetNormal();
++            return true;
++        }
++
++        private static bool IsFinite(double value)
++            => !double.IsNaN(value) && !double.IsInfinity(value);
++
++        private static void ApplyColor(Entity entity, CreateHatchInput input)
++        {
++            if (input.ColorRgb != null)
++            {
++                entity.Color = Color.FromRgb((byte)input.ColorRgb[0], (byte)input.ColorRgb[1], (byte)input.ColorRgb[2]);
++                return;
++            }
++            var index = input.ColorIndex ?? 256;
++            entity.Color = Color.FromColorIndex(index == 256 ? ColorMethod.ByLayer : ColorMethod.ByAci, (short)index);
++        }
++
++        private static object DescribeColor(CreateHatchInput input)
++        {
++            var index = input.ColorIndex ?? 256;
++            return new
++            {
++                method = input.ColorRgb != null ? "ByColor" : index == 256 ? "ByLayer" : "ByAci",
++                color_index = input.ColorRgb != null ? (int?)null : index,
++                rgb = input.ColorRgb
++            };
++        }
++    }
++}
+diff --git a/tests/Bimwright.Dwg.Tests/LineweightSpecTests.cs b/tests/Bimwright.Dwg.Tests/LineweightSpecTests.cs
+new file mode 100644
+--- /dev/null
++++ b/tests/Bimwright.Dwg.Tests/LineweightSpecTests.cs
+@@ -0,0 +1,113 @@
++using System;
++using System.Globalization;
++using Bimwright.Dwg.Plugin.Cad;
++using Newtonsoft.Json.Linq;
++using Xunit;
++
++namespace Bimwright.Dwg.Tests
++{
++    public class LineweightSpecTests
++    {
++        [Theory]
++        [InlineData("ru-RU")]
++        [InlineData("en-US")]
++        public void Parse_UsesNumericMillimetersIndependentOfCulture(string culture)
++        {
++            var original = CultureInfo.CurrentCulture;
++            try
++            {
++                CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo(culture);
++                Assert.True(LineweightSpec.TryParse(JToken.Parse("0.3"), null, out var value, out var error), error);
++                Assert.Equal(30, value);
++                Assert.Null(error);
++                Assert.False(LineweightSpec.TryParse(new JValue("0,3"), "explicit", out _, out _));
++                Assert.False(LineweightSpec.TryParse(new JValue("0.3"), "explicit", out _, out _));
++            }
++            finally
++            {
++                CultureInfo.CurrentCulture = original;
++            }
++        }
++
++        [Theory]
++        [InlineData(0d, 0)]
++        [InlineData(0.05d, 5)]
++        [InlineData(0.09d, 9)]
++        [InlineData(0.13d, 13)]
++        [InlineData(0.15d, 15)]
++        [InlineData(0.18d, 18)]
++        [InlineData(0.20d, 20)]
++        [InlineData(0.25d, 25)]
++        [InlineData(0.30d, 30)]
++        [InlineData(0.35d, 35)]
++        [InlineData(0.40d, 40)]
++        [InlineData(0.50d, 50)]
++        [InlineData(0.53d, 53)]
++        [InlineData(0.60d, 60)]
++        [InlineData(0.70d, 70)]
++        [InlineData(0.80d, 80)]
++        [InlineData(0.90d, 90)]
++        [InlineData(1.00d, 100)]
++        [InlineData(1.06d, 106)]
++        [InlineData(1.20d, 120)]
++        [InlineData(1.40d, 140)]
++        [InlineData(1.58d, 158)]
++        [InlineData(2.00d, 200)]
++        [InlineData(2.11d, 211)]
++        public void Parse_AcceptsTheDocumentedAutodeskWeights(double mm, int expected)
++        {
++            Assert.True(LineweightSpec.TryParseLayer(new JValue(mm), out var value, out var error), error);
++            Assert.Equal(expected, value);
++            Assert.Equal(mm, LineweightSpec.GetMillimeters(value));
++            Assert.Equal("explicit", LineweightSpec.GetMode(value));
++        }
++
++        [Theory]
++        [InlineData(0.31d)]
++        [InlineData(0.30000000000000004d)]
++        [InlineData(-0.3d)]
++        [InlineData(3d)]
++        [InlineData(double.NaN)]
++        [InlineData(double.PositiveInfinity)]
++        [InlineData(double.NegativeInfinity)]
++        public void Parse_RejectsUnsupportedOrNonFiniteWeightsWithoutRounding(double mm)
++        {
++            Assert.False(LineweightSpec.TryParse(new JValue(mm), "explicit", out _, out var error));
++            Assert.NotNull(error);
++        }
++
++        [Theory]
++        [InlineData("by_layer", -1)]
++        [InlineData("by_block", -2)]
++        public void Parse_InheritedModesRequireNoMillimeterField(string mode, int expected)
++        {
++            Assert.True(LineweightSpec.TryParse(null, mode, out var value, out var error), error);
++            Assert.Equal(expected, value);
++            Assert.Equal(mode, LineweightSpec.GetMode(value));
++            Assert.Null(LineweightSpec.GetMillimeters(value));
++            Assert.False(LineweightSpec.TryParse(new JValue(0.3d), mode, out _, out _));
++            Assert.False(LineweightSpec.TryParse(JValue.CreateNull(), mode, out _, out _));
++        }
++
++        [Fact]
++        public void Parse_RejectsMissingWeightWrongTypesAndUnsupportedModes()
++        {
++            Assert.False(LineweightSpec.TryParse(null, "explicit", out _, out _));
++            Assert.False(LineweightSpec.TryParse(JValue.CreateNull(), "explicit", out _, out _));
++            Assert.False(LineweightSpec.TryParse(new JValue(true), "explicit", out _, out _));
++            Assert.False(LineweightSpec.TryParse(new JObject(), "explicit", out _, out _));
++            Assert.False(LineweightSpec.TryParse(new JValue(0.3d), "default", out _, out _));
++            Assert.False(LineweightSpec.TryParse(new JValue(0.3d), "ByLayer", out _, out _));
++            Assert.False(LineweightSpec.TryParse(new JValue(0.3d), "", out _, out _));
++        }
++
++        [Fact]
++        public void Read_DefaultHasNoExplicitMillimeterValue()
++        {
++            Assert.Equal("default", LineweightSpec.GetMode(-3));
++            Assert.Null(LineweightSpec.GetMillimeters(-3));
++            // ByDIPs is an internal Autodesk value, not a supported drawing mode.
++            Assert.Throws<ArgumentOutOfRangeException>(() => LineweightSpec.GetMode(-4));
++        }
++    }
++}
+diff --git a/tests/Bimwright.Dwg.Tests/CreateHatchInputTests.cs b/tests/Bimwright.Dwg.Tests/CreateHatchInputTests.cs
+new file mode 100644
+--- /dev/null
++++ b/tests/Bimwright.Dwg.Tests/CreateHatchInputTests.cs
+@@ -0,0 +1,100 @@
++using Bimwright.Dwg.Plugin.Cad;
++using Newtonsoft.Json.Linq;
++using Xunit;
++
++namespace Bimwright.Dwg.Tests
++{
++    public class CreateHatchInputTests
++    {
++        [Fact]
++        public void DefaultsKeepBoundaryLayerAndByLayerColor()
++        {
++            Assert.True(CreateHatchInput.TryParse(JObject.Parse("{\"boundary_handle\":\"1aB\"}"), out var input, out var error), error);
++            Assert.Equal(0x1abL, input.BoundaryHandleValue);
++            Assert.Null(input.Layer);
++            Assert.Null(input.ColorIndex);
++            Assert.Null(input.ColorRgb);
++            Assert.True(input.Associative);
++            Assert.Equal("above_entities", input.DrawOrder);
++        }
++
++        [Fact]
++        public void ExplicitOptionsAcceptNonAssociativeRgbFillBelowEntities()
++        {
++            var request = JObject.Parse("{\"boundary_handle\":\"2F\",\"layer\":\"НК1\",\"color_rgb\":[255,255,255],\"associative\":false,\"draw_order\":\"below_entities\"}");
++            Assert.True(CreateHatchInput.TryParse(request, out var input, out var error), error);
++            Assert.Equal("НК1", input.Layer);
++            Assert.Equal(new[] { 255, 255, 255 }, input.ColorRgb);
++            Assert.False(input.Associative);
++            Assert.Equal("below_entities", input.DrawOrder);
++        }
++
++        [Theory]
++        [InlineData("{\"boundary_handle\":\"A\",\"color_index\":1}", 1)]
++        [InlineData("{\"boundary_handle\":\"A\",\"color_index\":256}", 256)]
++        public void AciAcceptsBothEndpoints(string json, int expected)
++        {
++            Assert.True(CreateHatchInput.TryParse(JObject.Parse(json), out var input, out var error), error);
++            Assert.Equal(expected, input.ColorIndex);
++        }
++
++        [Theory]
++        [InlineData("{\"boundary_handle\":\"A\",\"color_index\":7,\"color_rgb\":[255,255,255]}", "mutually exclusive")]
++        [InlineData("{\"boundary_handle\":\"A\",\"color_index\":0}", "color_index")]
++        [InlineData("{\"boundary_handle\":\"A\",\"color_index\":257}", "color_index")]
++        [InlineData("{\"boundary_handle\":\"A\",\"color_index\":7.0}", "color_index")]
++        [InlineData("{\"boundary_handle\":\"A\",\"color_index\":\"7\"}", "color_index")]
++        [InlineData("{\"boundary_handle\":\"A\",\"color_rgb\":[255,255]}", "color_rgb")]
++        [InlineData("{\"boundary_handle\":\"A\",\"color_rgb\":[-1,0,0]}", "color_rgb[0]")]
++        [InlineData("{\"boundary_handle\":\"A\",\"color_rgb\":[0,256,0]}", "color_rgb[1]")]
++        [InlineData("{\"boundary_handle\":\"A\",\"color_rgb\":[0,0,255.0]}", "color_rgb[2]")]
++        [InlineData("{\"boundary_handle\":\"A\",\"color_rgb\":[0,0,\"255\"]}", "color_rgb[2]")]
++        [InlineData("{\"boundary_handle\":\"A\",\"color_rgb\":[0,0,null]}", "color_rgb[2]")]
++        [InlineData("{\"boundary_handle\":\"A\",\"associative\":\"false\"}", "associative")]
++        [InlineData("{\"boundary_handle\":\"A\",\"draw_order\":\"top\"}", "draw_order")]
++        [InlineData("{\"boundary_handle\":\"A\",\"layer\":\" \"}", "layer")]
++        [InlineData("{\"boundary_handle\":\"A\",\"layer\":42}", "layer")]
++        public void InvalidOptionsAreRejectedBeforeHostAccess(string json, string expectedError)
++        {
++            Assert.False(CreateHatchInput.TryParse(JObject.Parse(json), out var input, out var error));
++            Assert.Null(input);
++            Assert.Contains(expectedError, error);
++        }
++
++        [Theory]
++        [InlineData("{}")]
++        [InlineData("{\"boundary_handle\":null}")]
++        [InlineData("{\"boundary_handle\":42}")]
++        [InlineData("{\"boundary_handle\":\"\"}")]
++        [InlineData("{\"boundary_handle\":\"0\"}")]
++        [InlineData("{\"boundary_handle\":\" A\"}")]
++        [InlineData("{\"boundary_handle\":\"+A\"}")]
++        [InlineData("{\"boundary_handle\":\"G\"}")]
++        [InlineData("{\"boundary_handle\":\"8000000000000000\"}")]
++        public void InvalidBoundaryHandlesAreRejected(string json)
++        {
++            Assert.False(CreateHatchInput.TryParse(JObject.Parse(json), out _, out var error));
++            Assert.Contains("boundary_handle", error);
++        }
++
++        [Fact]
++        public void NullOptionalFieldsUseDefaults()
++        {
++            var request = JObject.Parse("{\"boundary_handle\":\"A\",\"layer\":null,\"color_index\":null,\"color_rgb\":null,\"associative\":null,\"draw_order\":null}");
++            Assert.True(CreateHatchInput.TryParse(request, out var input, out var error), error);
++            Assert.Null(input.ColorIndex);
++            Assert.Null(input.ColorRgb);
++            Assert.True(input.Associative);
++            Assert.Equal("above_entities", input.DrawOrder);
++        }
++
++        [Fact]
++        public void NonObjectRequestAndOversizedColorIntegerReturnValidationErrors()
++        {
++            Assert.False(CreateHatchInput.TryParse(new JArray(), out _, out var objectError));
++            Assert.Contains("object", objectError);
++            Assert.False(CreateHatchInput.TryParse(JObject.Parse("{\"boundary_handle\":\"A\",\"color_index\":9223372036854775808}"), out _, out var colorError));
++            Assert.Contains("color_index", colorError);
++        }
++    }
++}
+diff --git a/tests/Bimwright.Dwg.Tests/EntityStyleToolSchemaTests.cs b/tests/Bimwright.Dwg.Tests/EntityStyleToolSchemaTests.cs
+new file mode 100644
+--- /dev/null
++++ b/tests/Bimwright.Dwg.Tests/EntityStyleToolSchemaTests.cs
+@@ -0,0 +1,171 @@
++using System;
++using System.Collections.Generic;
++using System.Linq;
++using System.Reflection;
++using System.Text.Json;
++using System.Threading.Tasks;
++using Bimwright.Dwg.Plugin;
++using Bimwright.Dwg.Server.Tools;
++using ModelContextProtocol.Server;
++using Newtonsoft.Json.Linq;
++using Xunit;
++
++namespace Bimwright.Dwg.Tests
++{
++    public class EntityStyleToolSchemaTests
++    {
++        [Theory]
++        [InlineData(nameof(EntityStyleTools.SetLineweight), "dwg_set_lineweight", "handles")]
++        [InlineData(nameof(EntityStyleTools.SetLayerLineweight), "dwg_set_layer_lineweight", "layers,lineweight_mm")]
++        [InlineData(nameof(EntityStyleTools.CreateHatch), "dwg_create_hatch", "boundary_handle")]
++        public void Actual_MCP_tools_have_write_metadata_and_only_mandatory_arguments(
++            string methodName, string toolName, string requiredFields)
++        {
++            var tool = CreateTool(methodName).ProtocolTool;
++            Assert.Equal(toolName, tool.Name);
++            Assert.NotNull(tool.Annotations);
++            Assert.False(tool.Annotations.ReadOnlyHint);
++            Assert.False(string.IsNullOrWhiteSpace(tool.Description));
++            Assert.Equal(
++                requiredFields.Split(',').OrderBy(name => name, StringComparer.Ordinal),
++                tool.InputSchema.GetProperty("required").EnumerateArray()
++                    .Select(field => field.GetString()).OrderBy(name => name, StringComparer.Ordinal));
++        }
++
++        [Theory]
++        [InlineData(nameof(EntityStyleTools.SetLineweight), "handles", "string")]
++        [InlineData(nameof(EntityStyleTools.SetLayerLineweight), "layers", "string")]
++        [InlineData(nameof(EntityStyleTools.CreateHatch), "color_rgb", "integer")]
++        public void Actual_MCP_array_arguments_have_scalar_items_instead_of_recursive_JToken_schema(
++            string methodName, string fieldName, string itemType)
++        {
++            var schema = CreateTool(methodName).ProtocolTool.InputSchema
++                .GetProperty("properties").GetProperty(fieldName);
++            AssertSchemaType(schema, "array");
++            var items = schema.GetProperty("items");
++            AssertSchemaType(items, itemType);
++            Assert.False(items.TryGetProperty("$ref", out _));
++        }
++
++        [Fact]
++        public void Modify_toolset_registers_entity_style_tools_and_read_only_profile_excludes_them()
++        {
++            var resolver = typeof(Bimwright.Dwg.Server.Program).GetMethod(
++                "ResolveToolTypesForRegistration", BindingFlags.NonPublic | BindingFlags.Static);
++            Assert.NotNull(resolver);
++            var enabled = new HashSet<string>(new[] { "modify" }, StringComparer.OrdinalIgnoreCase);
++            var writable = Assert.IsAssignableFrom<IEnumerable<Type>>(
++                resolver.Invoke(null, new object[] { enabled, false }));
++            var readOnly = Assert.IsAssignableFrom<IEnumerable<Type>>(
++                resolver.Invoke(null, new object[] { enabled, true }));
++            Assert.Contains(typeof(EntityStyleTools), writable);
++            Assert.DoesNotContain(typeof(EntityStyleTools), readOnly);
++        }
++
++        [Theory]
++        [InlineData("SetLineweight", "set_lineweight", "{\"handles\":[\"1A\",\"2B\"],\"lineweight_mm\":0.30,\"mode\":\"explicit\"}")]
++        [InlineData("SetLineweight", "set_lineweight", "{\"handles\":[\"1A\"],\"mode\":\"by_layer\"}")]
++        [InlineData("SetLayerLineweight", "set_layer_lineweight", "{\"layers\":[\"A-PIPE\",\"A-HATCH\"],\"lineweight_mm\":0.30}")]
++        [InlineData("SetLayerLineweight", "set_layer_lineweight", "{\"layers\":[\"A-PIPE\"],\"lineweight_mm\":0}")]
++        [InlineData("CreateHatch", "create_hatch", "{\"boundary_handle\":\"1A\"}")]
++        [InlineData("CreateHatch", "create_hatch", "{\"boundary_handle\":\"1A\",\"layer\":\"A-HATCH\",\"color_index\":7,\"associative\":true}")]
++        [InlineData("CreateHatch", "create_hatch", "{\"boundary_handle\":\"1A\",\"color_rgb\":[139,69,19],\"associative\":false,\"draw_order\":\"below_entities\"}")]
++        public void Handler_schemas_accept_valid_parameter_shapes(string schemaName, string commandName, string json)
++        {
++            var result = SchemaValidator.Validate(commandName, JObject.Parse(json), GetCommandSchema(schemaName));
++            Assert.True(result.Ok, result.Error);
++        }
++
++        [Theory]
++        [InlineData("SetLineweight", "set_lineweight", "handles")]
++        [InlineData("SetLayerLineweight", "set_layer_lineweight", "layers")]
++        [InlineData("SetLayerLineweight", "set_layer_lineweight", "lineweight_mm")]
++        [InlineData("CreateHatch", "create_hatch", "boundary_handle")]
++        public void Handler_schemas_reject_missing_mandatory_fields(
++            string schemaName, string commandName, string fieldName)
++        {
++            var parameters = ValidParameters(commandName);
++            parameters.Remove(fieldName);
++            var result = SchemaValidator.Validate(commandName, parameters, GetCommandSchema(schemaName));
++            Assert.False(result.Ok);
++            Assert.Contains(fieldName, result.Error);
++        }
++
++        [Theory]
++        [InlineData("SetLineweight", "set_lineweight", "handles", "\"1A\"")]
++        [InlineData("SetLineweight", "set_lineweight", "lineweight_mm", "\"0.30\"")]
++        [InlineData("SetLayerLineweight", "set_layer_lineweight", "layers", "{}")]
++        [InlineData("CreateHatch", "create_hatch", "boundary_handle", "[\"1A\"]")]
++        [InlineData("CreateHatch", "create_hatch", "color_rgb", "\"139,69,19\"")]
++        [InlineData("CreateHatch", "create_hatch", "color_index", "7.5")]
++        [InlineData("CreateHatch", "create_hatch", "associative", "\"true\"")]
++        public void Handler_schemas_reject_wrong_field_token_types(
++            string schemaName, string commandName, string fieldName, string invalidJson)
++        {
++            var parameters = ValidParameters(commandName);
++            parameters[fieldName] = JToken.Parse(invalidJson);
++            var result = SchemaValidator.Validate(commandName, parameters, GetCommandSchema(schemaName));
++            Assert.False(result.Ok);
++            Assert.Contains(fieldName, result.Error);
++        }
++
++        [Theory]
++        [InlineData("SetLineweight", "set_lineweight")]
++        [InlineData("SetLayerLineweight", "set_layer_lineweight")]
++        [InlineData("CreateHatch", "create_hatch")]
++        public void Handler_schemas_reject_array_request_roots(string schemaName, string commandName)
++        {
++            var result = SchemaValidator.Validate(commandName, new JArray(), GetCommandSchema(schemaName));
++            Assert.False(result.Ok);
++            Assert.Contains("object", result.Error);
++        }
++
++        [Theory]
++        [InlineData("empty_handles", "handles")]
++        [InlineData("unsupported_lineweight", "lineweight")]
++        [InlineData("conflicting_colors", "color")]
++        [InlineData("unknown_draw_order", "draw_order")]
++        public async Task Invalid_tool_requests_return_validation_errors_before_contacting_CAD(
++            string scenario, string expectedError)
++        {
++            Task<string> call = scenario switch
++            {
++                "empty_handles" => EntityStyleTools.SetLineweight(Array.Empty<string>(), 0.30),
++                "unsupported_lineweight" => EntityStyleTools.SetLayerLineweight(new[] { "A-PIPE" }, 0.123),
++                "conflicting_colors" => EntityStyleTools.CreateHatch("1A", color_index: 7, color_rgb: new[] { 139, 69, 19 }),
++                "unknown_draw_order" => EntityStyleTools.CreateHatch("1A", draw_order: "unexpected"),
++                _ => throw new ArgumentOutOfRangeException(nameof(scenario))
++            };
++            var response = JObject.Parse(await call);
++            Assert.False((bool?)response["ok"]);
++            Assert.Contains(expectedError, response.Value<string>("error"), StringComparison.OrdinalIgnoreCase);
++        }
++
++        private static McpServerTool CreateTool(string methodName)
++            => McpServerTool.Create(typeof(EntityStyleTools).GetMethod(methodName), (object)null);
++
++        private static void AssertSchemaType(JsonElement schema, string expected)
++        {
++            var type = schema.GetProperty("type");
++            if (type.ValueKind == JsonValueKind.String)
++                Assert.Equal(expected, type.GetString());
++            else
++                Assert.Contains(type.EnumerateArray(), item => item.GetString() == expected);
++        }
++
++        private static CommandSchema GetCommandSchema(string schemaName)
++        {
++            var field = typeof(CommandSchemas).GetField(schemaName, BindingFlags.Public | BindingFlags.Static);
++            Assert.NotNull(field);
++            return Assert.IsType<CommandSchema>(field.GetValue(null));
++        }
++
++        private static JObject ValidParameters(string commandName) => commandName switch
++        {
++            "set_lineweight" => JObject.Parse("{\"handles\":[\"1A\"],\"lineweight_mm\":0.30}"),
++            "set_layer_lineweight" => JObject.Parse("{\"layers\":[\"A-PIPE\"],\"lineweight_mm\":0.30}"),
++            "create_hatch" => JObject.Parse("{\"boundary_handle\":\"1A\"}"),
++            _ => throw new ArgumentOutOfRangeException(nameof(commandName))
++        };
++    }
++}
