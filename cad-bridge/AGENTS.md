@@ -20,9 +20,10 @@ source, documentation, status, backup or archive folders. Runtime instruction co
 are generated from this file, never maintained separately. Preserve unique project
 scripts and other chats' work when cleaning the workspace.
 
-The active local AutoCAD 2027 runtime remains
-`D:\CAD-Automation\releases\dwg-2027\2026-10-06-style-tools`.
-Source cleanup or a Git merge does not replace installed DLLs or switch the MCP.
+The runtime path belongs to each computer's MCP configuration. Standard packages
+install under %LOCALAPPDATA%\Bimwright\Dwg\server\current; retained development
+builds may use other paths. Source cleanup or a Git merge does not replace
+installed DLLs or switch the MCP.
 
 The user owns Git setup, branches, staging, commits, pushes and merges. Prepare
 reviewable edits, explain small steps and inspect results; no Git mutations or
@@ -48,7 +49,7 @@ Explain newly introduced command flags next to the command in plain language.
   file execution with tracked job status: 58 tools (20 in read-only mode), checked
   through actual MCP stdio on 2026-10-16. Verify the connected server's tools/list;
   source changes do not update an installed build.
-  Installed builds still refuse AutoLISP. Never bypass a runtime refusal through
+  Older team.2/style-tools builds refuse AutoLISP. Never bypass a runtime refusal through
   C# or legacy COM.
 
 Before drawing edits use dwg_get_drawing_info. The source candidate returns the
