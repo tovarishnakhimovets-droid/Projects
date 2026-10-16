@@ -16,8 +16,31 @@ namespace Bimwright.Dwg.Plugin.View
         private static DocumentCollection documents;
         private Database database;
         private long revision;
+        private int graphicsReadDepth;
+        private long graphicsRevision;
         internal string SessionId { get; } = Guid.NewGuid().ToString("N");
         internal long Revision => Interlocked.Read(ref revision);
+        internal long GraphicsRevision => Interlocked.Read(ref graphicsRevision);
+
+        // Only the synchronous native preview/view+regen calls enter this scope.
+        // It is not a blanket suppression: data writes and structural events still
+        // invalidate history even when a native reactor performs them inside a read.
+        internal IDisposable BeginGraphicsRead()
+        {
+            Interlocked.Increment(ref graphicsReadDepth);
+            return new GraphicsRead(this);
+        }
+
+        private sealed class GraphicsRead : IDisposable
+        {
+            private DrawingRevision owner;
+            internal GraphicsRead(DrawingRevision owner) => this.owner = owner;
+            public void Dispose()
+            {
+                var state = Interlocked.Exchange(ref owner, null);
+                if (state != null) Interlocked.Decrement(ref state.graphicsReadDepth);
+            }
+        }
         internal static DrawingRevision For(Document document)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
@@ -37,11 +60,11 @@ namespace Bimwright.Dwg.Plugin.View
             // Document.Database can return a fresh managed wrapper on every read.
             // Key by the document lifetime and retain the wrapper owning our handlers.
             var state = new DrawingRevision { database = document.Database };
-            state.database.ObjectModified += state.OnObjectChanged;
-            state.database.ObjectAppended += state.OnObjectChanged;
+            state.database.ObjectModified += state.OnObjectModified;
+            state.database.ObjectAppended += state.OnStructuralChange;
             state.database.ObjectErased += state.OnObjectErased;
-            state.database.ObjectUnappended += state.OnObjectChanged;
-            state.database.ObjectReappended += state.OnObjectChanged;
+            state.database.ObjectUnappended += state.OnStructuralChange;
+            state.database.ObjectReappended += state.OnStructuralChange;
             LiveStates.Add(state);
             return state;
         }
@@ -72,24 +95,43 @@ namespace Bimwright.Dwg.Plugin.View
 
         private void Detach()
         {
-            database.ObjectModified -= OnObjectChanged;
-            database.ObjectAppended -= OnObjectChanged;
+            database.ObjectModified -= OnObjectModified;
+            database.ObjectAppended -= OnStructuralChange;
             database.ObjectErased -= OnObjectErased;
-            database.ObjectUnappended -= OnObjectChanged;
-            database.ObjectReappended -= OnObjectChanged;
+            database.ObjectUnappended -= OnStructuralChange;
+            database.ObjectReappended -= OnStructuralChange;
             // AutoCAD owns this database; do not dispose it.
             database = null;
         }
 
-        private void OnObjectChanged(object sender, ObjectEventArgs args) => Changed(args.DBObject);
-        private void OnObjectErased(object sender, ObjectErasedEventArgs args) => Changed(args.DBObject);
+        private void OnStructuralChange(object sender, ObjectEventArgs args) => Interlocked.Increment(ref revision);
+        private void OnObjectErased(object sender, ObjectErasedEventArgs args) => Interlocked.Increment(ref revision);
 
-        private void Changed(DBObject value)
+        private void OnObjectModified(object sender, ObjectEventArgs args)
         {
+            var value = args.DBObject;
             // Navigation itself updates view state; its full metadata is checked
             // independently. All other observed database-object changes invalidate history.
-            if (!(value is ViewportTableRecord) && !(value is Viewport))
-                Interlocked.Increment(ref revision);
+            if (value is ViewportTableRecord || value is Viewport) return;
+            try
+            {
+                // IsModifiedGraphics alone also includes real entity changes.
+                // IsModified reports AssertWriteEnabled; require it and every
+                // other persistent-change flag to be false before accepting a
+                // graphics-only notification from our bounded rendering call.
+                if (Volatile.Read(ref graphicsReadDepth) > 0 && value is Entity &&
+                    value.IsModifiedGraphics && !value.IsModified && !value.IsModifiedXData &&
+                    !value.IsNewObject && !value.IsUndoing && !value.IsEraseStatusToggled)
+                {
+                    Interlocked.Increment(ref graphicsRevision);
+                    return;
+                }
+            }
+            catch
+            {
+                // Unreadable native flags are unknown changes, never proof of a read.
+            }
+            Interlocked.Increment(ref revision);
         }
     }
 }

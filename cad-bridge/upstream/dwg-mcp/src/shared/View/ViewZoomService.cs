@@ -16,15 +16,7 @@ namespace Bimwright.Dwg.Plugin.View
             Point3d min = db.Extmin;
             Point3d max = db.Extmax;
 
-            double width = max.X - min.X;
-            double height = max.Y - min.Y;
-
-            if (width <= 0) width = 100d;
-            if (height <= 0) height = 100d;
-
-            Point3d center3d = new Point3d((min.X + max.X) / 2.0, (min.Y + max.Y) / 2.0, (min.Z + max.Z) / 2.0);
-
-            return SetView(ed, center3d, width, height);
+            return SetView(ed, min, max, 100d);
         }
 
         internal static ViewInfo ZoomWindow(Document doc, Point3d corner1, Point3d corner2)
@@ -38,15 +30,7 @@ namespace Bimwright.Dwg.Plugin.View
             double minZ = Math.Min(corner1.Z, corner2.Z);
             double maxZ = Math.Max(corner1.Z, corner2.Z);
 
-            double width = maxX - minX;
-            double height = maxY - minY;
-
-            if (width <= 0) width = 1d;
-            if (height <= 0) height = 1d;
-
-            Point3d center3d = new Point3d((minX + maxX) / 2.0, (minY + maxY) / 2.0, (minZ + maxZ) / 2.0);
-
-            return SetView(ed, center3d, width, height);
+            return SetView(ed, new Point3d(minX, minY, minZ), new Point3d(maxX, maxY, maxZ));
         }
 
         internal static ViewInfo ZoomToEntity(Document doc, Entity entity)
@@ -54,59 +38,32 @@ namespace Bimwright.Dwg.Plugin.View
             var ed = doc.Editor;
             Extents3d ext = entity.GeometricExtents;
 
-            double width = ext.MaxPoint.X - ext.MinPoint.X;
-            double height = ext.MaxPoint.Y - ext.MinPoint.Y;
-
-            if (width <= 0) width = 1d;
-            if (height <= 0) height = 1d;
-
-            Point3d center3d = new Point3d(
-                (ext.MinPoint.X + ext.MaxPoint.X) / 2.0,
-                (ext.MinPoint.Y + ext.MaxPoint.Y) / 2.0,
-                (ext.MinPoint.Z + ext.MaxPoint.Z) / 2.0);
-
-            return SetView(ed, center3d, width, height);
+            return SetView(ed, ext.MinPoint, ext.MaxPoint);
         }
 
-        private static ViewInfo SetView(Editor ed, Point3d center3d, double width, double height)
+        private static ViewInfo SetView(Editor ed, Point3d minimum, Point3d maximum, double zeroSpan = 1d)
         {
             using (var view = ed.GetCurrentView())
             {
-                Point3d target = view.Target;
-                Vector3d viewDir = view.ViewDirection;
-                double twist = view.ViewTwist;
-
-                Vector3d zAxis = viewDir.GetNormal();
-                Vector3d xAxis;
-                if (zAxis.X == 0d && zAxis.Y == 0d)
-                {
-                    xAxis = Vector3d.XAxis;
-                }
-                else
-                {
-                    xAxis = Vector3d.ZAxis.CrossProduct(zAxis).GetNormal();
-                }
-                Vector3d yAxis = zAxis.CrossProduct(xAxis).GetNormal();
-
-                xAxis = xAxis.RotateBy(twist, zAxis);
-                yAxis = yAxis.RotateBy(twist, zAxis);
-
-                Vector3d rel = center3d - target;
-                double dcsX = rel.DotProduct(xAxis);
-                double dcsY = rel.DotProduct(yAxis);
-
-                Point2d center2d = new Point2d(dcsX, dcsY);
+                if (view.PerspectiveEnabled)
+                    throw new InvalidOperationException("Zoom fitting requires an orthographic view.");
+                var fit = ViewZoomMath.Fit(
+                    new[] { minimum.X, minimum.Y, minimum.Z }, new[] { maximum.X, maximum.Y, maximum.Z },
+                    new[] { view.Target.X, view.Target.Y, view.Target.Z },
+                    new[] { view.ViewDirection.X, view.ViewDirection.Y, view.ViewDirection.Z },
+                    view.ViewTwist, view.Width / view.Height, zeroSpan);
+                Point2d center2d = new Point2d(fit.CenterX, fit.CenterY);
 
                 view.CenterPoint = center2d;
-                view.Height = height;
-                view.Width = width;
+                view.Height = fit.Height;
+                view.Width = fit.Width;
 
                 ed.SetCurrentView(view);
 
                 return new ViewInfo(
                     center: new double[] { center2d.X, center2d.Y },
-                    width: width,
-                    height: height,
+                    width: fit.Width,
+                    height: fit.Height,
                     target: new double[] { view.Target.X, view.Target.Y, view.Target.Z }
                 );
             }

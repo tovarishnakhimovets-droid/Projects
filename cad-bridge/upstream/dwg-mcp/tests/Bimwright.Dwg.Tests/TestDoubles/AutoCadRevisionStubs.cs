@@ -3,8 +3,17 @@ using System.Runtime.CompilerServices;
 
 namespace Autodesk.AutoCAD.DatabaseServices
 {
-    public class DBObject { }
-    public class Viewport : DBObject { }
+    public class DBObject
+    {
+        public bool IsModified { get; set; } = true;
+        public bool IsModifiedGraphics { get; set; }
+        public bool IsModifiedXData { get; set; }
+        public bool IsNewObject { get; set; }
+        public bool IsUndoing { get; set; }
+        public bool IsEraseStatusToggled { get; set; }
+    }
+    public class Entity : DBObject { }
+    public class Viewport : Entity { }
     public class ViewportTableRecord : DBObject { }
     public class ObjectEventArgs : EventArgs { public DBObject DBObject { get; set; } }
     public class ObjectErasedEventArgs : ObjectEventArgs { }

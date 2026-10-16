@@ -11,7 +11,8 @@ namespace Bimwright.Dwg.Plugin.Drawing
         {
             String,
             Int,
-            Double
+            Double,
+            Boolean
         }
 
         public class VariableMetadata
@@ -37,7 +38,8 @@ namespace Bimwright.Dwg.Plugin.Drawing
                 { "DIMSCALE",  new VariableMetadata("DIMSCALE",  VariableType.Double, true) },
                 { "TEXTSIZE",  new VariableMetadata("TEXTSIZE",  VariableType.Double, true) },
                 { "OSMODE",    new VariableMetadata("OSMODE",    VariableType.Int,    true) },
-                { "ORTHOMODE", new VariableMetadata("ORTHOMODE", VariableType.Int,    true) }
+                { "ORTHOMODE", new VariableMetadata("ORTHOMODE", VariableType.Int,    true) },
+                { "LWDISPLAY", new VariableMetadata("LWDISPLAY", VariableType.Boolean, true) }
             };
 
         public static bool IsReadable(string name) => Catalog.ContainsKey(name);
@@ -75,6 +77,22 @@ namespace Bimwright.Dwg.Plugin.Drawing
             {
                 switch (meta.Type)
                 {
+                    case VariableType.Boolean:
+                        if (rawValue is bool boolean)
+                        {
+                            coercedValue = boolean;
+                            return true;
+                        }
+                        // Do not round fractional values or treat arbitrary nonzero numbers as true.
+                        var textValue = Convert.ToString(rawValue, CultureInfo.InvariantCulture);
+                        if (textValue == "0" || textValue == "1")
+                        {
+                            coercedValue = textValue == "1";
+                            return true;
+                        }
+                        error = "LWDISPLAY must be a boolean or exactly 0 or 1";
+                        return false;
+
                     case VariableType.String:
                         coercedValue = rawValue.ToString();
                         return true;

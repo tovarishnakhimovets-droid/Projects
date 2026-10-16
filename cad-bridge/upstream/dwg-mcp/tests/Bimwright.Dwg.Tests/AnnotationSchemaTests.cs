@@ -1,3 +1,4 @@
+// Modified by the CAD team (2026-10-09): text/style tools; see cad-bridge/docs/TEXT_TOOLS.md.
 using System;
 using System.Reflection;
 using Bimwright.Dwg.Plugin;
@@ -10,6 +11,7 @@ namespace Bimwright.Dwg.Tests
     {
         [Theory]
         [InlineData("CreateText", "create_text", "{\"text\":\"Room 101\",\"position\":{\"x\":0,\"y\":0},\"height\":2.5,\"rotation\":0,\"layer\":\"A-TEXT\"}")]
+        [InlineData("CreateText", "create_text", "{\"text\":\"Т1\",\"position\":{\"x\":0,\"y\":0},\"text_style\":\"GOST TYPE A\",\"width_factor\":0.8,\"color_index\":256}")]
         [InlineData("CreateMText", "create_mtext", "{\"text\":\"General notes\",\"location\":{\"x\":1,\"y\":2},\"width\":80,\"height\":2.5,\"rotation\":15,\"layer\":\"A-NOTE\"}")]
         [InlineData("CreateLeader", "create_leader", "{\"points\":[{\"x\":0,\"y\":0},{\"x\":5,\"y\":5}],\"text\":\"Note\",\"layer\":\"A-ANNO\"}")]
         [InlineData("CreateTable", "create_table", "{\"insertion_point\":{\"x\":0,\"y\":0},\"rows\":2,\"columns\":2,\"cells\":[[\"A\",\"B\"],[\"C\",\"D\"]],\"layer\":\"A-TABLE\"}")]
@@ -43,6 +45,18 @@ namespace Bimwright.Dwg.Tests
             parameters.Remove(fieldName);
 
             AssertMissingRequiredField(commandName, parameters, schema, fieldName);
+        }
+
+        [Theory]
+        [InlineData("text_style", "1")]
+        [InlineData("width_factor", "\"0.8\"")]
+        public void CreateText_schema_rejects_wrong_appearance_token_types(string field, string json)
+        {
+            var parameters = ValidParameters("create_text");
+            parameters[field] = JToken.Parse(json);
+            var result = SchemaValidator.Validate("create_text", parameters, GetCommandSchema("CreateText"));
+            Assert.False(result.Ok);
+            Assert.Contains(field, result.Error);
         }
 
         private static CommandSchema GetCommandSchema(string name)

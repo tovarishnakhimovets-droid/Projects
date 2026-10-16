@@ -30,6 +30,7 @@ namespace Bimwright.Dwg.Plugin.View
                 (int)before["viewport"]["screen_width"], (int)before["viewport"]["screen_height"], pixelSize);
             var capturedAt = DateTimeOffset.UtcNow.ToString("o", CultureInfo.InvariantCulture);
 
+            using (DrawingRevision.For(doc).BeginGraphicsRead())
             using (var bitmap = doc.CapturePreviewImage((uint)width, (uint)height))
             {
                 if (bitmap == null || bitmap.Width <= 0 || bitmap.Height <= 0)
