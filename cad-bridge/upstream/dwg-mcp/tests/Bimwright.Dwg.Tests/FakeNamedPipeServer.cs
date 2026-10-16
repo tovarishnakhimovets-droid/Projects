@@ -19,14 +19,24 @@ namespace Bimwright.Dwg.Tests
         private readonly CancellationTokenSource _cts = new CancellationTokenSource();
         private readonly TaskCompletionSource<bool> _listening =
             new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly Task _serverTask;
         private NamedPipeServerStream _listeningPipe;
         public string PipeName { get; }
+        public Task Completion => _serverTask;
 
         public FakeNamedPipeServer(Func<string, string> responder)
         {
             _responder = responder;
             PipeName = "bimwright-dwg-test-" + Guid.NewGuid().ToString("N");
-            Task.Run(() => AcceptLoop(_cts.Token));
+            _serverTask = Task.Run(async () =>
+            {
+                try { await AcceptLoop(_cts.Token); }
+                catch (Exception ex)
+                {
+                    _listening.TrySetException(ex);
+                    throw;
+                }
+            });
             if (!_listening.Task.Wait(TimeSpan.FromSeconds(5)))
                 throw new TimeoutException("FakeNamedPipeServer did not start listening.");
         }
@@ -45,11 +55,6 @@ namespace Bimwright.Dwg.Tests
                 {
                     return;
                 }
-                catch
-                {
-                    return;
-                }
-
                 _listeningPipe = pipe;
                 if (!signaled)
                 {
@@ -57,41 +62,43 @@ namespace Bimwright.Dwg.Tests
                     _listening.TrySetResult(true);
                 }
 
+                StreamReader reader = null;
+                StreamWriter writer = null;
                 try
                 {
-                    await pipe.WaitForConnectionAsync(ct);
-                }
-                catch (OperationCanceledException)
-                {
-                    pipe.Dispose();
-                    return;
-                }
-                catch
-                {
-                    pipe.Dispose();
-                    return;
-                }
+                    try { await pipe.WaitForConnectionAsync(ct); }
+                    catch (OperationCanceledException) when (ct.IsCancellationRequested) { return; }
+                    catch (ObjectDisposedException) when (ct.IsCancellationRequested) { return; }
 
-                using (pipe)
-                using (var reader = new StreamReader(pipe, new UTF8Encoding(false), true, -1, leaveOpen: true))
-                using (var writer = new StreamWriter(pipe, new UTF8Encoding(false), -1, leaveOpen: true) { AutoFlush = true })
-                {
-                    string line;
-                    while ((line = await reader.ReadLineAsync()) != null)
+                    reader = new StreamReader(pipe, new UTF8Encoding(false), true, -1, leaveOpen: true);
+                    writer = new StreamWriter(pipe, new UTF8Encoding(false), -1, leaveOpen: true) { AutoFlush = true };
+                    while (!ct.IsCancellationRequested)
                     {
+                        string line;
+                        try { line = await reader.ReadLineAsync(ct); }
+                        catch (IOException) { break; }
+                        catch (ObjectDisposedException) { break; }
+                        catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }
+                        if (line == null) break;
+
+                        // Keep responder assertions outside transport catches: a
+                        // fixture failure must fail the test, not look like EOF.
                         var reply = _responder(line);
-                        await writer.WriteLineAsync(reply);
+                        try { await writer.WriteLineAsync(reply); }
+                        catch (IOException) { break; }
+                        catch (ObjectDisposedException) { break; }
                     }
                 }
-
-                _listeningPipe = null;
-
-                // Give Linux time to release the FIFO name before the next
-                // NamedPipeServerStream (max 1 instance) is created. Without
-                // this, the next PluginClient connect hits a dying instance
-                // ("Connection reset by peer") on Ubuntu CI.
-                try { await Task.Delay(50, ct); }
-                catch (OperationCanceledException) { return; }
+                finally
+                {
+                    // EOF marks a Windows pipe Broken. StreamWriter.Dispose
+                    // still flushes with leaveOpen=true, so it may throw here.
+                    // That disconnect must not terminate the accept loop.
+                    DisposeDisconnected(writer);
+                    DisposeDisconnected(reader);
+                    DisposeDisconnected(pipe);
+                    _listeningPipe = null;
+                }
             }
         }
 
@@ -124,8 +131,16 @@ namespace Bimwright.Dwg.Tests
         public void Dispose()
         {
             _cts.Cancel();
-            try { _listeningPipe?.Dispose(); } catch { }
-            _cts.Dispose();
+            DisposeDisconnected(_listeningPipe);
+            try { _serverTask.WaitAsync(TimeSpan.FromSeconds(5)).GetAwaiter().GetResult(); }
+            finally { _cts.Dispose(); }
+        }
+
+        private static void DisposeDisconnected(IDisposable stream)
+        {
+            try { stream?.Dispose(); }
+            catch (IOException) { }
+            catch (ObjectDisposedException) { }
         }
     }
 }

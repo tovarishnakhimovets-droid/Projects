@@ -1,3 +1,4 @@
+// Modified by the CAD team (2026-10-09): text/style tools; see cad-bridge/docs/TEXT_TOOLS.md.
 using System.ComponentModel;
 using System.Threading.Tasks;
 using ModelContextProtocol.Server;
@@ -9,9 +10,7 @@ namespace Bimwright.Dwg.Server.Tools
     [McpServerToolType]
     public class AnnotationTools
     {
-        [McpServerTool(Name = "dwg_create_text"), Description(
-            "Create single-line text in the current AutoCAD space. position is a JSON point object " +
-            "with numeric x, y, and optional z fields.")]
+        // Preserve existing C# callers; the only MCP registration lives in TextCreationTools.
         public static Task<string> CreateText(
             [Description("Text content to create.")] string text,
             [Description("JSON point object, e.g. {\"x\":0,\"y\":0,\"z\":0}.")] string position,
@@ -19,28 +18,9 @@ namespace Bimwright.Dwg.Server.Tools
             [Description("Optional text rotation in degrees.")] double? rotation = null,
             [Description("Optional target layer name.")] string layer = null,
             [Description("Optional ACI color index for the new entity. Valid range: 1-256.")] int? color_index = null)
-        {
-            if (!TryParseJsonObject(position, "position", out var positionObject, out var positionError))
-            {
-                return ToolInputError(positionError);
-            }
+            => TextCreationTools.CreateText(text, position, height, rotation, layer, color_index);
 
-            var request = new JObject
-            {
-                ["text"] = text,
-                ["position"] = positionObject
-            };
-            if (height.HasValue) request["height"] = height.Value;
-            if (rotation.HasValue) request["rotation"] = rotation.Value;
-            if (layer != null) request["layer"] = layer;
-            if (color_index.HasValue) request["color_index"] = color_index.Value;
-
-            return ToolGateway.LoggedCall("create_text", request, request);
-        }
-
-        [McpServerTool(Name = "dwg_create_mtext"), Description(
-            "Create multi-line text in the current AutoCAD space. location is a JSON point object " +
-            "with numeric x, y, and optional z fields.")]
+        // Compatibility wrapper; drawing and annotation register TextCreationTools only once.
         public static Task<string> CreateMText(
             [Description("MText content to create.")] string text,
             [Description("JSON point object, e.g. {\"x\":0,\"y\":0,\"z\":0}.")] string location,
@@ -49,25 +29,7 @@ namespace Bimwright.Dwg.Server.Tools
             [Description("Optional text rotation in degrees.")] double? rotation = null,
             [Description("Optional target layer name.")] string layer = null,
             [Description("Optional ACI color index for the new entity. Valid range: 1-256.")] int? color_index = null)
-        {
-            if (!TryParseJsonObject(location, "location", out var locationObject, out var locationError))
-            {
-                return ToolInputError(locationError);
-            }
-
-            var request = new JObject
-            {
-                ["text"] = text,
-                ["location"] = locationObject
-            };
-            if (width.HasValue) request["width"] = width.Value;
-            if (height.HasValue) request["height"] = height.Value;
-            if (rotation.HasValue) request["rotation"] = rotation.Value;
-            if (layer != null) request["layer"] = layer;
-            if (color_index.HasValue) request["color_index"] = color_index.Value;
-
-            return ToolGateway.LoggedCall("create_mtext", request, request);
-        }
+            => TextCreationTools.CreateMText(text, location, width, height, rotation, layer, color_index);
 
         [McpServerTool(Name = "dwg_create_leader"), Description(
             "Create a leader annotation. points is a JSON array of point objects with numeric x, y, " +

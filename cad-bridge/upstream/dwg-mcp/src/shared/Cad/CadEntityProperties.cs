@@ -56,10 +56,10 @@ namespace Bimwright.Dwg.Plugin.Cad
                     DescribePolyline(result, polyline);
                     break;
                 case DBText text:
-                    DescribeDbText(result, text);
+                    DescribeDbText(result, text, tx);
                     break;
                 case MText mText:
-                    DescribeMText(result, mText);
+                    DescribeMText(result, mText, tx);
                     break;
                 case MLeader mLeader:
                     DescribeMLeader(result, mLeader);
@@ -148,7 +148,7 @@ namespace Bimwright.Dwg.Plugin.Cad
             result["vertices"] = vertices.ToArray();
         }
 
-        private static void DescribeDbText(IDictionary<string, object> result, DBText text)
+        private static void DescribeDbText(IDictionary<string, object> result, DBText text, Transaction tx)
         {
             result["text"] = text.TextString;
             result["position"] = Point(text.Position);
@@ -156,9 +156,16 @@ namespace Bimwright.Dwg.Plugin.Cad
             result["rotation"] = text.Rotation;
             result["horizontal_mode"] = text.HorizontalMode.ToString();
             result["vertical_mode"] = text.VerticalMode.ToString();
+            result["width_factor"] = text.WidthFactor;
+            result["oblique"] = text.Oblique;
+            result["normal"] = Vector(text.Normal);
+            result["alignment_point"] = Point(text.AlignmentPoint);
+            result["justification"] = text.Justify.ToString();
+            result["is_default_alignment"] = text.IsDefaultAlignment;
+            CadTextStyleMetadata.AddToEntity(result, text.TextStyleId, tx);
         }
 
-        private static void DescribeMText(IDictionary<string, object> result, MText mText)
+        private static void DescribeMText(IDictionary<string, object> result, MText mText, Transaction tx)
         {
             result["text"] = mText.Contents;
             result["location"] = Point(mText.Location);
@@ -166,6 +173,10 @@ namespace Bimwright.Dwg.Plugin.Cad
             result["width"] = mText.Width;
             result["rotation"] = mText.Rotation;
             result["attachment"] = mText.Attachment.ToString();
+            result["normal"] = Vector(mText.Normal);
+            result["justification"] = mText.Attachment.ToString();
+            // Contents remains intact: inline MText formatting can override these style defaults.
+            CadTextStyleMetadata.AddToEntity(result, mText.TextStyleId, tx);
         }
 
         private static void DescribeMLeader(IDictionary<string, object> result, MLeader mLeader)

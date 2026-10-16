@@ -34,9 +34,11 @@ namespace Bimwright.Dwg.Tests
                 "dwg_create_aligned_dimension",
                 "dwg_create_arc",
                 "dwg_create_bake_issue_draft",
+                "dwg_create_block_variant",
                 "dwg_create_circle",
                 "dwg_create_diameter_dimension",
                 "dwg_create_ellipse",
+                "dwg_create_entities",
                 "dwg_create_hatch",
                 "dwg_create_layer",
                 "dwg_create_leader",
@@ -50,6 +52,7 @@ namespace Bimwright.Dwg.Tests
                 "dwg_create_table",
                 "dwg_create_text",
                 "dwg_dismiss_bake_suggestion",
+                "dwg_edit_polyline_vertices",
                 "dwg_erase_entities",
                 "dwg_erase_proxy_objects",
                 "dwg_explode_block",
@@ -62,6 +65,7 @@ namespace Bimwright.Dwg.Tests
                 "dwg_get_selected_texts",
                 "dwg_get_variables",
                 "dwg_insert_block",
+                "dwg_inspect_block",
                 "dwg_inspect_lisp",
                 "dwg_inspect_view_region",
                 "dwg_inventory_proxies",
@@ -70,6 +74,8 @@ namespace Bimwright.Dwg.Tests
                 "dwg_list_baked_tools",
                 "dwg_list_blocks",
                 "dwg_list_layers",
+                "dwg_list_text_styles",
+                "dwg_match_properties",
                 "dwg_move_entities",
                 "dwg_move_network_endpoint",
                 "dwg_node_network",
@@ -89,8 +95,10 @@ namespace Bimwright.Dwg.Tests
                 "dwg_set_layer_lineweight",
                 "dwg_set_lineweight",
                 "dwg_set_system_variable",
+                "dwg_set_text_style",
                 "dwg_switch_target",
                 "dwg_translate_and_rewrite",
+                "dwg_update_block_angles",
                 "dwg_update_texts",
                 "dwg_zoom_extents",
                 "dwg_zoom_to_entity",
@@ -207,10 +215,9 @@ namespace Bimwright.Dwg.Tests
             Assert.Equal(new[]
             {
                 "dwg_create_leader",
-                "dwg_create_mtext",
-                "dwg_create_table",
-                "dwg_create_text"
+                "dwg_create_table"
             }, GetSortedMcpToolNames(annotationTools));
+            Assert.Equal(new[] { "dwg_create_mtext", "dwg_create_text" }, GetSortedMcpToolNames(typeof(TextCreationTools)));
             Assert.Equal(new[]
             {
                 "dwg_create_aligned_dimension",
@@ -241,15 +248,19 @@ namespace Bimwright.Dwg.Tests
             Assert.Equal(new[]
             {
                 "BatchTools",
+                "BlockInspectionTools",
+                "BlockVariantTools",
                 "CodeTools",
                 "EntityStyleTools",
                 "LispTools",
                 "MetaTools",
                 "ModifyTools",
                 "NetworkTools",
+                "PolylineTools",
                 "ProxyTools",
                 "ProxyWriteTools",
                 "QueryTools",
+                "TextQueryTools",
                 "ViewTools"
             }, defaultTypeNames);
 
@@ -259,9 +270,11 @@ namespace Bimwright.Dwg.Tests
                 readOnly: true);
             Assert.Equal(new[]
             {
+                "BlockInspectionTools",
                 "MetaTools",
                 "ProxyTools",
                 "QueryTools",
+                "TextQueryTools",
                 "ViewTools"
             }, defaultReadOnlyTypeNames);
 
@@ -287,7 +300,7 @@ namespace Bimwright.Dwg.Tests
 
             var annotationWriteTypeNames = InvokeToolTypeResolver(method, new[] { "annotation" }, readOnly: false);
             var annotationReadOnlyTypeNames = InvokeToolTypeResolver(method, new[] { "annotation" }, readOnly: true);
-            Assert.Equal(new[] { "AnnotationTools" }, annotationWriteTypeNames);
+            Assert.Equal(new[] { "AnnotationTools", "TextCreationTools" }, annotationWriteTypeNames);
             Assert.Equal(Array.Empty<string>(), annotationReadOnlyTypeNames);
 
             var dimensionWriteTypeNames = InvokeToolTypeResolver(method, new[] { "dimension" }, readOnly: false);
@@ -320,7 +333,7 @@ namespace Bimwright.Dwg.Tests
 
             var drawingWriteTypeNames = InvokeToolTypeResolver(method, new[] { "drawing" }, readOnly: false);
             var drawingReadOnlyTypeNames = InvokeToolTypeResolver(method, new[] { "drawing" }, readOnly: true);
-            Assert.Equal(new[] { "DrawingTools", "DrawingWriteTools" }, drawingWriteTypeNames);
+            Assert.Equal(new[] { "DrawingTools", "DrawingWriteTools", "EntityBatchTools", "TextCreationTools" }, drawingWriteTypeNames);
             Assert.Equal(new[] { "DrawingTools" }, drawingReadOnlyTypeNames);
         }
 

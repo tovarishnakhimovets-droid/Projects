@@ -109,15 +109,15 @@ namespace Bimwright.Dwg.Tests
 
             for (var i = 0; i < 3; i++)
             {
-                McpResponse response = null;
-                for (var attempt = 0; attempt < 20; attempt++)
+                var request = client.SendAsync("ping", new { }, "req-" + i);
+                var finished = await Task.WhenAny(request, fake.Completion)
+                    .WaitAsync(TimeSpan.FromSeconds(5));
+                if (finished == fake.Completion)
                 {
-                    response = await client.SendAsync("ping", new { }, "req-" + i);
-                    if (response.Ok)
-                        break;
-                    await Task.Delay(30);
+                    await fake.Completion; // Surface a responder/assertion failure immediately.
+                    throw new InvalidOperationException("Named pipe fixture stopped before replying.");
                 }
-
+                var response = await request;
                 Assert.True(response.Ok, response.Error);
                 Assert.Equal("pong", (string)response.Result);
             }

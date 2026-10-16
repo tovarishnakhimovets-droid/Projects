@@ -11,8 +11,8 @@ namespace Bimwright.Dwg.Tests
         [Fact]
         public void Allowlist_ExposesExactlyPlan4Variables()
         {
-            var readables = new[] { "CLAYER", "INSUNITS", "LUNITS", "DIMSCALE", "TEXTSIZE", "OSMODE", "ORTHOMODE" };
-            var writables = new[] { "CLAYER", "DIMSCALE", "TEXTSIZE", "OSMODE", "ORTHOMODE" };
+            var readables = new[] { "CLAYER", "INSUNITS", "LUNITS", "DIMSCALE", "TEXTSIZE", "OSMODE", "ORTHOMODE", "LWDISPLAY" };
+            var writables = new[] { "CLAYER", "DIMSCALE", "TEXTSIZE", "OSMODE", "ORTHOMODE", "LWDISPLAY" };
             var unreadables = new[] { "FILEDIA", "SAVETIME", "BOGUS" };
 
             foreach (var r in readables)
@@ -102,6 +102,32 @@ namespace Bimwright.Dwg.Tests
             Assert.False(success);
             Assert.Null(coerced);
             Assert.Contains("cannot be coerced", error);
+        }
+
+        [Theory]
+        [InlineData(true, true)]
+        [InlineData(false, false)]
+        [InlineData(1, true)]
+        [InlineData(0, false)]
+        [InlineData(1.0d, true)]
+        [InlineData("0", false)]
+        public void Lineweight_display_accepts_only_switch_values(object raw, bool expected)
+        {
+            Assert.True(SystemVariableCatalog.TryCoerceValue("LWDISPLAY", raw, out var value, out var error), error);
+            Assert.Equal(expected, Assert.IsType<bool>(value));
+        }
+
+        [Theory]
+        [InlineData(0.5d)]
+        [InlineData(2)]
+        [InlineData(-1)]
+        [InlineData("ON")]
+        [InlineData(double.NaN)]
+        public void Lineweight_display_does_not_round_or_accept_arbitrary_truthy_values(object raw)
+        {
+            Assert.False(SystemVariableCatalog.TryCoerceValue("LWDISPLAY", raw, out var value, out var error));
+            Assert.Null(value);
+            Assert.Contains("exactly 0 or 1", error);
         }
     }
 }

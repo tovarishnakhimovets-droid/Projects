@@ -94,6 +94,29 @@ namespace Bimwright.Dwg.Tests
             }
         }
 
+        [Theory]
+        [InlineData(4.9e-11, 0, 221486)]
+        [InlineData(0.0001, 0, 1e10)]
+        [InlineData(0, 0, 1e-300)]
+        public void Top_view_direction_support_depends_on_orientation_not_native_magnitude(double x, double y, double z)
+        {
+            var context = Context();
+            context["camera"]["direction_wcs"] = new JArray(x, y, z);
+            Assert.Null(ViewReadingContract.UnsupportedReason(context));
+        }
+
+        [Theory]
+        [InlineData(0, 0, 0)]
+        [InlineData(1, 0, 1e-10)]
+        [InlineData(0, 0, -1e10)]
+        [InlineData(double.NaN, 0, 1)]
+        public void Invalid_or_non_top_view_directions_remain_unsupported(double x, double y, double z)
+        {
+            var context = Context();
+            context["camera"]["direction_wcs"] = new JArray(x, y, z);
+            Assert.NotNull(ViewReadingContract.UnsupportedReason(context));
+        }
+
         [Fact]
         public void Native_image_aspect_mismatch_disables_mapping()
         {

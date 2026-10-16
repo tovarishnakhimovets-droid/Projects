@@ -45,8 +45,17 @@
     <Compile Include="..\shared\Security\BakeRedactor.cs" LinkBase="Shared\Security" />
     <Compile Include="..\shared\Security\LispExecutionPolicy.cs" LinkBase="Shared\Security" />
     <Compile Include="..\shared\Cad\LineweightSpec.cs" LinkBase="Shared\Cad" />
+    <Compile Include="..\shared\Cad\PropertyStyleInput.cs" LinkBase="Shared\Cad" />
+    <Compile Include="..\shared\Annotation\AnnotationRequestValidation.cs" LinkBase="Shared\Annotation" />
+    <Compile Include="..\shared\EntityBatch\EntityBatchInput.cs" LinkBase="Shared\EntityBatch" />
+    <Compile Include="..\shared\Geometry\PolylineVertexEditInput.cs" LinkBase="Shared\Geometry" />
+    <Compile Include="..\shared\Cad\ListTextStylesInput.cs" LinkBase="Shared\Cad" />
     <Compile Include="..\shared\Cad\CreateHatchInput.cs" LinkBase="Shared\Cad" />
     <Compile Include="..\shared\Drawing\DrawingIdentityPolicy.cs" LinkBase="Shared\Drawing" />
+    <Compile Include="..\shared\Blocks\BlockInspectionInput.cs" LinkBase="Shared\Blocks" />
+    <Compile Include="..\shared\Blocks\BlockVariantInput.cs" LinkBase="Shared\Blocks" />
+    <Compile Include="..\shared\Blocks\BlockAngleInput.cs" LinkBase="Shared\Blocks" />
+    <Compile Include="..\shared\Blocks\NumericAngleTextPolicy.cs" LinkBase="Shared\Blocks" />
     <Compile Include="..\shared\Proxy\ProxyContract.cs" LinkBase="Shared\Proxy" />
     <Compile Include="..\shared\Network\NetworkInput.cs" LinkBase="Shared\Network" />
     <Compile Include="..\shared\Network\NetworkGeometry.cs" LinkBase="Shared\Network" />
