@@ -1,4 +1,6 @@
+// Modified by the CAD team (2026-10-09): text/style tools; see cad-bridge/docs/TEXT_TOOLS.md.
 using System.Collections.Generic;
+using Autodesk.AutoCAD.Colors;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
 using Bimwright.Dwg.Plugin.Cad;
@@ -13,45 +15,37 @@ namespace Bimwright.Dwg.Plugin.Annotation
         private const double DefaultTableRowHeight = 8d;
         private const double DefaultTableColumnWidth = 35d;
 
-        internal static bool TryCreateText(JObject obj, out DBText entity, out string error)
+        internal static bool TryCreateText(JObject obj, out DBText entity, out string error,
+            Database database = null, Transaction transaction = null)
         {
             entity = null;
             error = null;
 
-            var text = obj["text"]?.Value<string>();
-            if (!AnnotationRequestValidation.TryValidateTextContent(text, "text", out error))
-            {
-                return false;
-            }
-
-            if (!CadWire.TryParsePoint(obj["position"], out var position, out var pointError))
-            {
-                error = "position " + pointError;
-                return false;
-            }
-
-            if (!TryReadOptionalPositiveDouble(obj, "height", DefaultTextHeight, out var height, out error) ||
-                !TryReadOptionalFiniteDouble(obj, "rotation", 0d, out var rotation, out error))
-            {
-                return false;
-            }
+            if (!AnnotationRequestValidation.TryReadDbText(obj, out var input, out error)) return false;
 
             DBText created = null;
             var ownsEntity = false;
             try
             {
+                if (!TryResolveTextStyle(input.TextStyle, database, transaction, out var textStyleId, out error))
+                    return false;
                 created = new DBText();
                 ownsEntity = true;
-                created.SetDatabaseDefaults();
-                created.TextString = text;
-                created.Position = ToPoint3d(position);
-                created.Height = height;
-                created.Rotation = DegreesToRadians(rotation);
+                if (database == null) created.SetDatabaseDefaults();
+                else created.SetDatabaseDefaults(database);
+                if (!textStyleId.IsNull) created.TextStyleId = textStyleId;
+                created.TextString = input.Text;
+                created.Position = new Point3d(input.X, input.Y, input.Z);
+                created.Height = input.Height;
+                created.Rotation = DegreesToRadians(input.RotationDegrees % 360d);
+                if (input.WidthFactor.HasValue) created.WidthFactor = input.WidthFactor.Value;
+                created.Color = Color.FromColorIndex(input.ColorIndex == 256 ? ColorMethod.ByLayer : ColorMethod.ByAci,
+                    (short)input.ColorIndex);
                 return TransferToCaller(created, out entity, ref ownsEntity);
             }
             catch (System.Exception ex)
             {
-                error = "failed to create text entity: " + ex.Message;
+                error = "failed to create text entity: " + ErrorSanitizer.Sanitize(ex.Message);
                 return false;
             }
             finally
@@ -60,57 +54,74 @@ namespace Bimwright.Dwg.Plugin.Annotation
             }
         }
 
-        internal static bool TryCreateMText(JObject obj, out MText entity, out string error)
+        internal static bool TryCreateMText(JObject obj, out MText entity, out string error,
+            Database database = null, Transaction transaction = null)
         {
             entity = null;
             error = null;
 
-            var text = obj["text"]?.Value<string>();
-            if (!AnnotationRequestValidation.TryValidateTextContent(text, "text", out error))
-            {
-                return false;
-            }
-
-            if (!CadWire.TryParsePoint(obj["location"], out var location, out var pointError))
-            {
-                error = "location " + pointError;
-                return false;
-            }
-
-            if (!TryReadOptionalPositiveDouble(obj, "height", DefaultTextHeight, out var height, out error) ||
-                !TryReadOptionalPositiveDouble(obj, "width", 0d, out var width, out error) ||
-                !TryReadOptionalFiniteDouble(obj, "rotation", 0d, out var rotation, out error))
-            {
-                return false;
-            }
+            if (!AnnotationRequestValidation.TryReadMText(obj, out var input, out error)) return false;
+            var appearance = input.Appearance;
 
             MText created = null;
             var ownsEntity = false;
             try
             {
+                if (!TryResolveTextStyle(appearance.TextStyle, database, transaction, out var textStyleId, out error))
+                    return false;
                 created = new MText();
                 ownsEntity = true;
-                created.SetDatabaseDefaults();
-                created.Contents = text;
-                created.Location = ToPoint3d(location);
-                created.TextHeight = height;
-                created.Rotation = DegreesToRadians(rotation);
-                if (obj["width"] != null && obj["width"].Type != JTokenType.Null)
-                {
-                    created.Width = width;
-                }
+                if (database == null) created.SetDatabaseDefaults();
+                else created.SetDatabaseDefaults(database);
+                if (!textStyleId.IsNull) created.TextStyleId = textStyleId;
+                created.Location = new Point3d(appearance.X, appearance.Y, appearance.Z);
+                created.TextHeight = appearance.Height;
+                created.Rotation = DegreesToRadians(appearance.RotationDegrees % 360d);
+                created.Width = input.Width;
+                created.Color = Color.FromColorIndex(appearance.ColorIndex == 256 ? ColorMethod.ByLayer : ColorMethod.ByAci,
+                    (short)appearance.ColorIndex);
+                // Contents last avoids repeated native layout work while setting appearance.
+                created.Contents = appearance.Text;
 
                 return TransferToCaller(created, out entity, ref ownsEntity);
             }
             catch (System.Exception ex)
             {
-                error = "failed to create mtext entity: " + ex.Message;
+                error = "failed to create mtext entity: " + ErrorSanitizer.Sanitize(ex.Message);
                 return false;
             }
             finally
             {
                 DisposeIfOwned(created, ownsEntity);
             }
+        }
+
+        private static bool TryResolveTextStyle(string name, Database database, Transaction transaction,
+            out ObjectId id, out string error)
+        {
+            id = ObjectId.Null;
+            error = null;
+            if (name == null) return true;
+            if (database == null || transaction == null)
+            {
+                error = "text_style requires the active database transaction";
+                return false;
+            }
+            var styles = (TextStyleTable)transaction.GetObject(database.TextStyleTableId, OpenMode.ForRead);
+            if (!styles.Has(name))
+            {
+                error = "text_style does not exist in the active drawing";
+                return false;
+            }
+            id = styles[name];
+            var style = (TextStyleTableRecord)transaction.GetObject(id, OpenMode.ForRead);
+            if (style.IsErased || style.IsDependent || style.IsShapeFile || style.IsVertical ||
+                style.Annotative == AnnotativeStates.True)
+            {
+                error = "text_style must be an existing local horizontal non-annotative text style";
+                return false;
+            }
+            return true;
         }
 
         internal static bool TryCreateLeader(JObject obj, out MLeader entity, out string error)

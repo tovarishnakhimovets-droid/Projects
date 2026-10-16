@@ -153,11 +153,23 @@ namespace Bimwright.Dwg.Plugin
     {
         public static readonly CommandSchema GetDrawingInfo = CommandSchema.Empty;
 
+        public static readonly CommandSchema InspectBlock = CommandSchema.Object(
+            SchemaProperty.RequiredNonEmptyString("handle"),
+            SchemaProperty.Optional("expected_document", JTokenType.String),
+            SchemaProperty.Optional("expected_fingerprint", JTokenType.String),
+            SchemaProperty.Optional("include_definition", JTokenType.Boolean),
+            SchemaProperty.Optional("max_entities", JTokenType.Integer),
+            SchemaProperty.Optional("max_metadata_objects", JTokenType.Integer));
+
         public static readonly CommandSchema GetEntityProperties = CommandSchema.Object(
             SchemaProperty.Required("handles", JTokenType.Array),
             SchemaProperty.Optional("include_geometry", JTokenType.Boolean));
 
         public static readonly CommandSchema ListLayers = CommandSchema.Empty;
+
+        // Text-style queries (shared MCP/native validation is in ListTextStylesInput).
+        public static readonly CommandSchema ListTextStyles = CommandSchema.Object(
+            SchemaProperty.Optional("limit", JTokenType.Integer));
 
         public static readonly CommandSchema QueryEntities = CommandSchema.Object(
             SchemaProperty.Optional("entity_type", JTokenType.String),
@@ -232,11 +244,26 @@ namespace Bimwright.Dwg.Plugin
             SchemaProperty.Optional("layer", JTokenType.String),
             SchemaProperty.Optional("color_index", JTokenType.Integer));
 
+        public static readonly CommandSchema CreateEntities = CommandSchema.Object(
+            SchemaProperty.RequiredNonEmptyString("expected_document"),
+            SchemaProperty.RequiredNonEmptyString("expected_fingerprint"),
+            SchemaProperty.Required("entities", JTokenType.Array),
+            SchemaProperty.Optional("dry_run", JTokenType.Boolean));
+
+        public static readonly CommandSchema EditPolylineVertices = CommandSchema.Object(
+            SchemaProperty.RequiredNonEmptyString("expected_document"),
+            SchemaProperty.RequiredNonEmptyString("expected_fingerprint"),
+            SchemaProperty.Required("changes", JTokenType.Array),
+            SchemaProperty.Optional("min_segment_length", JTokenType.Float, JTokenType.Integer),
+            SchemaProperty.Optional("dry_run", JTokenType.Boolean));
+
         public static readonly CommandSchema CreateText = CommandSchema.Object(
             SchemaProperty.Required("text", JTokenType.String),
             SchemaProperty.Required("position", JTokenType.Object),
             SchemaProperty.Optional("height", JTokenType.Float, JTokenType.Integer),
             SchemaProperty.Optional("rotation", JTokenType.Float, JTokenType.Integer),
+            SchemaProperty.Optional("text_style", JTokenType.String),
+            SchemaProperty.Optional("width_factor", JTokenType.Float, JTokenType.Integer),
             SchemaProperty.Optional("layer", JTokenType.String),
             SchemaProperty.Optional("color_index", JTokenType.Integer));
 
@@ -246,6 +273,7 @@ namespace Bimwright.Dwg.Plugin
             SchemaProperty.Optional("width", JTokenType.Float, JTokenType.Integer),
             SchemaProperty.Optional("height", JTokenType.Float, JTokenType.Integer),
             SchemaProperty.Optional("rotation", JTokenType.Float, JTokenType.Integer),
+            SchemaProperty.Optional("text_style", JTokenType.String),
             SchemaProperty.Optional("layer", JTokenType.String),
             SchemaProperty.Optional("color_index", JTokenType.Integer));
 
@@ -271,6 +299,15 @@ namespace Bimwright.Dwg.Plugin
         public static readonly CommandSchema ChangeColor = CommandSchema.Object(
             SchemaProperty.Required("handles", JTokenType.Array),
             SchemaProperty.Required("color_index", JTokenType.Integer));
+
+        public static readonly CommandSchema SetTextStyle = CommandSchema.Object(
+            SchemaProperty.Required("handles", JTokenType.Array),
+            SchemaProperty.RequiredNonEmptyString("text_style"));
+
+        public static readonly CommandSchema MatchProperties = CommandSchema.Object(
+            SchemaProperty.RequiredNonEmptyString("source_handle"),
+            SchemaProperty.Required("target_handles", JTokenType.Array),
+            SchemaProperty.Required("properties", JTokenType.Array));
 
         public static readonly CommandSchema SetLineweight = CommandSchema.Object(
             SchemaProperty.Required("handles", JTokenType.Array),
@@ -489,5 +526,18 @@ namespace Bimwright.Dwg.Plugin
         public static readonly CommandSchema PurgeDrawing = CommandSchema.Object(
             SchemaProperty.Optional("dry_run", JTokenType.Boolean),
             SchemaProperty.Optional("confirm", JTokenType.Boolean));
+
+        public static readonly CommandSchema CreateBlockVariant = CommandSchema.Object(
+            SchemaProperty.RequiredNonEmptyString("expected_document"), SchemaProperty.RequiredNonEmptyString("expected_fingerprint"),
+            SchemaProperty.RequiredNonEmptyString("new_name"), SchemaProperty.Required("insertion_point", JTokenType.Object),
+            SchemaProperty.Required("expected_reference", JTokenType.Object), SchemaProperty.Required("polyline_edits", JTokenType.Array),
+            SchemaProperty.Required("attribute_edits", JTokenType.Array), SchemaProperty.Required("mtext_edits", JTokenType.Array),
+            SchemaProperty.Required("attribute_values", JTokenType.Object), SchemaProperty.Optional("dry_run", JTokenType.Boolean),
+            SchemaProperty.Optional("geometry_tolerance", JTokenType.Float, JTokenType.Integer));
+        public static readonly CommandSchema UpdateBlockAngles = CommandSchema.Object(
+            SchemaProperty.RequiredNonEmptyString("expected_document"), SchemaProperty.RequiredNonEmptyString("expected_fingerprint"),
+            SchemaProperty.RequiredNonEmptyString("handle"), SchemaProperty.RequiredNonEmptyString("expected_name"),
+            SchemaProperty.Required("expected_angles", JTokenType.Object), SchemaProperty.Required("new_angles", JTokenType.Object),
+            SchemaProperty.Optional("binding", JTokenType.Object), SchemaProperty.Optional("expected_binding", JTokenType.Object), SchemaProperty.Optional("dry_run", JTokenType.Boolean));
     }
 }

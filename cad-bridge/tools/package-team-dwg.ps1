@@ -18,6 +18,13 @@ foreach ($file in @('INSTALL-RU.md', 'setup-codex.ps1')) {
 }
 $canonicalInstructions = Join-Path $root 'AGENTS.md'
 if (-not (Test-Path -LiteralPath $canonicalInstructions -PathType Leaf)) { throw 'Missing canonical bridge AGENTS.md.' }
+$runtimeDocNames = @('TEAM_SETUP.md', 'IMPORT_MANIFEST.json', 'CAD_WORKFLOW.md',
+    'STYLE_TOOLS.md', 'TEXT_TOOLS.md', 'BLOCK_INSPECTION.md', 'BLOCK_VARIANTS.md', 'EOM_TOOLS.md')
+$runtimeDocPaths = @($runtimeDocNames | ForEach-Object {
+    $docPath = Join-Path $root "docs\$_"
+    if (-not (Test-Path -LiteralPath $docPath -PathType Leaf)) { throw "Missing runtime documentation: $_" }
+    $docPath
+})
 $stage = Join-Path $OutputDir 'stage'
 if (-not $FinalizeOnly) {
     & (Join-Path $repo 'scripts\package-client-setup.ps1') -Config Release -RepoRoot $repo -Version $Version -OutputDir $OutputDir -Years $Years -UseAutoCad2026NuGetRefs -AllowDirty
@@ -27,7 +34,8 @@ Copy-Item -LiteralPath (Join-Path $repo 'LICENSE') -Destination (Join-Path $stag
 $runtimeDocs = Join-Path $stage 'server\bridge-docs'
 New-Item -ItemType Directory -Path $runtimeDocs -Force | Out-Null
 Copy-Item -LiteralPath $canonicalInstructions -Destination (Join-Path $runtimeDocs 'AGENTS.md') -Force
-Copy-Item -LiteralPath (Join-Path $extras 'INSTALL-RU.md'), (Join-Path $root 'docs\TEAM_SETUP.md'), (Join-Path $root 'docs\IMPORT_MANIFEST.json') -Destination $runtimeDocs -Force
+Copy-Item -LiteralPath (Join-Path $extras 'INSTALL-RU.md') -Destination $runtimeDocs -Force
+Copy-Item -LiteralPath $runtimeDocPaths -Destination $runtimeDocs -Force
 $changes = Join-Path $runtimeDocs 'changes'
 New-Item -ItemType Directory -Path $changes -Force | Out-Null
 Get-ChildItem -LiteralPath (Join-Path $root 'patches') -Filter 'dwg-mcp-*.patch' -File | Copy-Item -Destination $changes

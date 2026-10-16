@@ -15,7 +15,7 @@ namespace Bimwright.Dwg.Plugin.Handlers
         public CommandResult Execute(Document doc, JToken parameters)
         {
             var variables = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
-            var readables = new[] { "CLAYER", "INSUNITS", "LUNITS", "DIMSCALE", "TEXTSIZE", "OSMODE", "ORTHOMODE" };
+            var readables = new[] { "CLAYER", "INSUNITS", "LUNITS", "DIMSCALE", "TEXTSIZE", "OSMODE", "ORTHOMODE", "LWDISPLAY" };
 
             try
             {
@@ -79,7 +79,8 @@ namespace Bimwright.Dwg.Plugin.Handlers
 
             try
             {
-                Application.SetSystemVariable(name, coerced);
+                if (name == "LWDISPLAY") doc.Database.LineWeightDisplay = (bool)coerced;
+                else Application.SetSystemVariable(name, coerced);
                 return CommandResult.Success(new
                 {
                     name,

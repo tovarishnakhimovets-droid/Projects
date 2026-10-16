@@ -58,8 +58,9 @@ namespace Bimwright.Dwg.Server
 AutoCAD routing: versions are 4-digit years 2022..2027. If multiple AutoCAD instances run, use dwg_list_available_targets then dwg_switch_target, or start the server with --target 2022|2023|2024|2025|2026|2027.
 
 Tools use prefix dwg_:
-- query: dwg_get_drawing_info, dwg_list_layers, and dwg_get_entity_properties read the current active document; dwg_get_selected_texts reads current AutoCAD pickfirst text selection and returns clustered text groups; dwg_inspect_lisp statically scans .lsp files or inline AutoLISP for known suspicious patterns (verdict clean/caution/dangerous). No verdict certifies safety or authorizes execution.
-- modify: dwg_create_layer, dwg_create_line, dwg_create_circle, dwg_change_layer, dwg_update_texts, dwg_translate_and_rewrite, dwg_apply_unicode_style, dwg_collapse_and_rewrite write drawing/text/style changes.
+- query: dwg_get_drawing_info, dwg_list_layers, and dwg_get_entity_properties read the current active document; dwg_get_selected_texts reads current AutoCAD pickfirst text selection and returns clustered text groups; dwg_list_text_styles reads existing style/font metadata; dwg_inspect_lisp statically scans .lsp files or inline AutoLISP for known suspicious patterns (verdict clean/caution/dangerous). No verdict certifies safety or authorizes execution.
+- modify: dwg_create_layer, dwg_create_line, dwg_create_circle, dwg_change_layer, dwg_update_texts, dwg_translate_and_rewrite, dwg_apply_unicode_style, dwg_collapse_and_rewrite write drawing/text/style changes. dwg_set_text_style assigns an existing style; dwg_match_properties copies an explicit property list. dwg_edit_polyline_vertices edits guarded existing indices in place without erasing the Polyline.
+- drawing: dwg_create_text and dwg_create_mtext create editable text using an existing style; both are also in annotation without duplicate registration. dwg_create_entities creates one bounded heterogeneous plan with local IDs, full document identity, all-target preflight, dry_run and one transaction. It is separate from legacy sequential dwg_batch_execute; native single-Undo behavior still needs verification. LWDISPLAY can be read and set using boolean or 0/1 values.
 - meta: dwg_batch_execute, dwg_list_available_targets, dwg_get_current_target, dwg_switch_target, dwg_send_code, dwg_run_lisp.
 - view: Start visual reading with dwg_capture_view_image (inline image plus JSON). If region_navigation.supported, choose a normalized top-left-origin rectangle on that image and call dwg_inspect_view_region with its capture_id. Inspect the new image before deciding the next region. Keep ancestor capture IDs and use dwg_restore_view to return to an overview. Use each newly returned ID for further navigation. Do not interpret a failed image_delivery as a failed zoom: take a smaller fresh capture. Region navigation is limited to one top-down, unrotated, orthographic model-space viewport. Verify inferred labels/dimensions against CAD text and entity data. Do not claim unseen regions have been reviewed.
 - optional toolbaker, when enabled: dwg_list_baked_tools, dwg_run_baked_tool, dwg_list_bake_suggestions, dwg_accept_bake_suggestion, dwg_dismiss_bake_suggestion, dwg_create_bake_issue_draft.
@@ -89,6 +90,8 @@ Call dwg_get_selected_texts before text writeback. Read-only mode also permits v
             if (enabled.Contains("query"))
             {
                 toolTypes.Add(typeof(QueryTools));
+                toolTypes.Add(typeof(TextQueryTools));
+                toolTypes.Add(typeof(BlockInspectionTools));
                 toolTypes.Add(typeof(ProxyTools));
             }
             if (enabled.Contains("modify") && !readOnly)
@@ -97,6 +100,8 @@ Call dwg_get_selected_texts before text writeback. Read-only mode also permits v
                 toolTypes.Add(typeof(EntityStyleTools));
                 toolTypes.Add(typeof(ProxyWriteTools));
                 toolTypes.Add(typeof(NetworkTools));
+                toolTypes.Add(typeof(PolylineTools));
+                toolTypes.Add(typeof(BlockVariantTools));
             }
             if (enabled.Contains("meta"))
             {
@@ -112,6 +117,11 @@ Call dwg_get_selected_texts before text writeback. Read-only mode also permits v
             // legacy "code" toolset name is still honored as an explicit opt-in alias.
             if ((enabled.Contains("meta") || enabled.Contains("code")) && !readOnly) toolTypes.Add(typeof(CodeTools));
             if (enabled.Contains("annotation") && !readOnly) toolTypes.Add(typeof(AnnotationTools));
+            if ((enabled.Contains("annotation") || enabled.Contains("drawing")) && !readOnly)
+            {
+                toolTypes.Add(typeof(TextCreationTools));
+                if (enabled.Contains("drawing")) toolTypes.Add(typeof(EntityBatchTools));
+            }
             if (enabled.Contains("block"))
             {
                 toolTypes.Add(typeof(BlockTools));
@@ -138,6 +148,12 @@ Call dwg_get_selected_texts before text writeback. Read-only mode also permits v
         private static IMcpServerBuilder RegisterToolType(IMcpServerBuilder mcp, Type toolType)
         {
             if (toolType == typeof(QueryTools)) return mcp.WithTools<QueryTools>();
+            if (toolType == typeof(TextQueryTools)) return mcp.WithTools<TextQueryTools>();
+            if (toolType == typeof(BlockInspectionTools)) return mcp.WithTools<BlockInspectionTools>();
+            if (toolType == typeof(BlockVariantTools)) return mcp.WithTools<BlockVariantTools>();
+            if (toolType == typeof(TextCreationTools)) return mcp.WithTools<TextCreationTools>();
+            if (toolType == typeof(EntityBatchTools)) return mcp.WithTools<EntityBatchTools>();
+            if (toolType == typeof(PolylineTools)) return mcp.WithTools<PolylineTools>();
             if (toolType == typeof(ModifyTools)) return mcp.WithTools<ModifyTools>();
             if (toolType == typeof(EntityStyleTools)) return mcp.WithTools<EntityStyleTools>();
             if (toolType == typeof(ProxyTools)) return mcp.WithTools<ProxyTools>();

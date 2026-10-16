@@ -2,8 +2,9 @@
 
 These are the canonical bridge rules. Source lives in the Projects repository,
 `cad-bridge/`; implementation is `upstream/dwg-mcp` (v2.0.1, already patched).
-On this computer the source root is `D:\CAD-Automation\team\Projects\cad-bridge`;
-other computers use their configured local Projects/cad-bridge checkout.
+Use the local Projects/cad-bridge checkout selected by the user; this integration
+uses `D:\CAD-Automation\Projects\cad-bridge`. Other computers use their own
+configured local checkout.
 There is no nested Git repository. Before bridge edits read that checkout's
 docs/CAD_WORKFLOW.md and relevant WORK_STATUS.md section; inspect current Git
 changes from the enclosing Projects repository and preserve others' work.
@@ -43,7 +44,8 @@ Explain newly introduced command flags next to the command in plain language.
   AutoCAD year does not narrow this contract. Build both plugins for changes to
   shared code; record which native/live checks remain unavailable on that computer.
 - Profile query,modify,drawing,view: installed team.2/style-tools has 42 tools;
-  the unreleased source candidate has 46. Check the connected server's tools/list
+  the unreleased source candidate has 56 after text tools, block inspection/variants,
+  atomic entity creation and in-place vertex editing. Check the connected server's tools/list
   before using candidate capabilities. AutoLISP is blocked by upstream: never
   bypass that refusal through C#. No legacy COM fallback here.
 
@@ -69,6 +71,23 @@ No arbitrary hatch patterns or islands. Inspect ok and per-item results. Normal
 MCP text may contain a failure; batches may partially succeed and do not provide
 grouped Undo. Never repeat an uncertain timed-out mutation automatically.
 Never save without a request or run purge/audit as a connection check.
+
+For text work on the updated candidate, read dwg_list_text_styles and the needed
+entity properties, then prefer dwg_create_text/dwg_create_mtext with an existing text_style,
+dwg_set_text_style, or dwg_match_properties with an explicit property list.
+Style assignment and matching preflight all targets and use one transaction;
+other existing batches retain their documented partial-success behavior.
+Preserve the justification reference anchor. Do not confuse style names such
+as GOST TYPE A with font metadata such as ISOCPEUR. See docs/TEXT_TOOLS.md.
+The installed server must expose these tools before they are used.
+
+For a whole schematic use the candidate's dwg_create_entities: explicit existing
+layers/styles and bounded typed objects with local IDs, expected document/fingerprint,
+all-target preflight and one transaction. It does not run legacy commands or save.
+Native single-Undo still requires a user-enabled host check. For existing lightweight
+Polyline vertices use dwg_edit_polyline_vertices with complete fresh snapshots;
+it preserves handles, bends/width metadata and ownership. See docs/EOM_TOOLS.md.
+LWDISPLAY is an allowlisted boolean/0/1 variable; it does not alter stored weights.
 
 Routine drawing tasks require no scratch DWGs, regression runs or extra logs.
 For missing general capabilities inspect existing tools/upstream and official

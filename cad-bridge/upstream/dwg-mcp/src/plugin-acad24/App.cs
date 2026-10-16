@@ -42,6 +42,7 @@ namespace Bimwright.Dwg.Plugin
             try
             {
                 StartServerInternal();
+                Blocks.BlockAngleBindingService.Initialize();
                 WriteLine($"Bimwright DWG loaded and listening on {DescribeTransport(_server)}.");
             }
             catch (System.Exception ex)
@@ -62,6 +63,7 @@ namespace Bimwright.Dwg.Plugin
             try { CloseSettings(); } catch { }
             try { ToastNotifier?.Shutdown(); } catch { }
             try { DocumentInvoker.Shutdown(); } catch { }
+            try { Blocks.BlockAngleBindingService.Shutdown(); } catch { }
             try { View.DrawingRevision.Shutdown(); } catch { }
         }
 

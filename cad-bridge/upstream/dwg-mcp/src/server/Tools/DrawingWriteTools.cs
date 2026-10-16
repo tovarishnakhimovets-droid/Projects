@@ -11,7 +11,8 @@ namespace Bimwright.Dwg.Server.Tools
     public class DrawingWriteTools
     {
         [McpServerTool(Name = "dwg_set_system_variable", ReadOnly = false), Description(
-            "Set the value of a drawing system variable. Rejects variable names not in the write allowlist.")]
+            "Set the value of a drawing system variable. Rejects variable names not in the write allowlist. " +
+            "LWDISPLAY accepts a boolean or exactly 0/1 and controls visible lineweights; does not save.")]
         public static Task<string> SetSystemVariable(
             [Description("Name of the system variable to set.")] string name,
             [Description("New value. Types are coerced automatically depending on the variable.")] JsonElement value)

@@ -21,9 +21,7 @@ namespace Bimwright.Dwg.Plugin.View
                 camera["back_clip_enabled"]?.Value<bool>() != false)
                 return "Region navigation requires an orthographic view without clipping.";
             var direction = camera["direction_wcs"] as JArray;
-            if (direction == null || direction.Count != 3 ||
-                !Near((double)direction[0], 0) || !Near((double)direction[1], 0) ||
-                !Finite((double)direction[2]) || (double)direction[2] <= 0 ||
+            if (!IsTopDirection(direction) ||
                 !Near((double?)camera["twist_radians"] ?? double.NaN, 0))
                 return "Region navigation requires a top-down view with zero view twist.";
             double width = (double?)camera["width"] ?? 0, height = (double?)camera["height"] ?? 0;
@@ -111,6 +109,19 @@ namespace Bimwright.Dwg.Plugin.View
             if (!Finite(value) || value < 0 || value > 1)
                 throw new ArgumentException("region coordinates must be finite values between 0 and 1.");
             return value;
+        }
+
+        private static bool IsTopDirection(JArray direction)
+        {
+            if (direction == null || direction.Count != 3) return false;
+            try
+            {
+                // ViewDirection is a target-to-camera vector, not necessarily a
+                // unit normal; compare orientation independently of its magnitude.
+                var normal = ViewZoomMath.Normalize((double)direction[0], (double)direction[1], (double)direction[2]);
+                return Near(normal.X, 0) && Near(normal.Y, 0) && normal.Z > 0;
+            }
+            catch (ArgumentException) { return false; }
         }
 
         private static bool Finite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
