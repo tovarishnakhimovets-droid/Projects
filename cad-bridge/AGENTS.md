@@ -2,9 +2,8 @@
 
 These are the canonical bridge rules. Source lives in the Projects repository,
 `cad-bridge/`; implementation is `upstream/dwg-mcp` (v2.0.1, already patched).
-Use the local Projects/cad-bridge checkout selected by the user; this integration
-uses `D:\CAD-Automation\Projects\cad-bridge`. Other computers use their own
-configured local checkout.
+Use the local Projects/cad-bridge checkout selected by the user. Resolve paths
+relative to that checkout; its absolute location differs between computers.
 There is no nested Git repository. Before bridge edits read that checkout's
 docs/CAD_WORKFLOW.md and relevant WORK_STATUS.md section; inspect current Git
 changes from the enclosing Projects repository and preserve others' work.
@@ -44,10 +43,13 @@ Explain newly introduced command flags next to the command in plain language.
   AutoCAD year does not narrow this contract. Build both plugins for changes to
   shared code; record which native/live checks remain unavailable on that computer.
 - Profile query,modify,drawing,view: installed team.2/style-tools has 42 tools;
-  the unreleased source candidate has 56 after text tools, block inspection/variants,
-  atomic entity creation and in-place vertex editing. Check the connected server's tools/list
-  before using candidate capabilities. AutoLISP is blocked by upstream: never
-  bypass that refusal through C#. No legacy COM fallback here.
+  the unreleased source candidate adds text tools, block inspection/variants,
+  atomic entity creation, in-place vertex editing and session-approved AutoLISP
+  file execution with tracked job status: 58 tools (20 in read-only mode), checked
+  through actual MCP stdio on 2026-10-16. Verify the connected server's tools/list;
+  source changes do not update an installed build.
+  Installed builds still refuse AutoLISP. Never bypass a runtime refusal through
+  C# or legacy COM.
 
 Before drawing edits use dwg_get_drawing_info. The source candidate returns the
 active titled DWG's document_path/fingerprint and distinguishes an unsaved document
@@ -61,8 +63,19 @@ query without substituting unrelated objects. Coordinates are drawing units.
 
 Unique drawing scripts remain in `D:\CAD-Automation\scripts` and
 `D:\CAD-Automation\lisp`. Trusted C# scripts must guard the active document,
-finish synchronously and use a transaction. Never use C# to bypass the upstream
-AutoLISP refusal. Do not load an existing sandbox.lsp as a connection smoke test.
+finish synchronously and use a transaction. Do not load an existing sandbox.lsp
+as a connection smoke test.
+
+Candidate AutoLISP: the user approves an exact local .lsp path/SHA256/function
+through AutoCAD MCPTRUSTLISP. Scanner findings or request flags do not grant trust.
+dwg_run_lisp evaluates captured standalone source and returns a queued job, not
+success; use dwg_get_lisp_status until the actual terminal result. It requires a
+fresh named DWG path/fingerprint and a free command line. Interactive prompts are
+answered in AutoCAD; other CAD operations are blocked while the job is active.
+Changed file bytes require approval again. MCPDISABLELISP/MCPSTOP clear approvals;
+running code must be cancelled manually. This is full-trust code, not a sandbox
+or a rollback guarantee. No inline, batch or ToolBaker LISP execution. Saves still
+require a request. Limits and procedure are in docs/CAD_WORKFLOW.md.
 
 Use typed tools, including dwg_set_lineweight (explicit mm/by_layer/by_block),
 dwg_set_layer_lineweight (exact supported mm), dwg_create_hatch (one Circle or

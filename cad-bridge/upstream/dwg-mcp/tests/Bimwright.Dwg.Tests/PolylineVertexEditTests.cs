@@ -113,9 +113,17 @@ namespace Bimwright.Dwg.Tests
             var wire = Request();
             wire["changes"][0]["expected_normal"] = new JArray(0d, 0d, -1d);
             Assert.False(PolylineVertexEditRequest.TryParse(wire, out _, out _));
-            wire = Request();
-            wire["changes"][0]["edits"][0]["position"][2] = Math.BitIncrement(7d);
-            Assert.False(PolylineVertexEditRequest.TryParse(wire, out _, out _));
+            foreach (double elevation in new[] { Math.BitDecrement(7d), Math.BitIncrement(7d) })
+            {
+                wire = Request();
+                // Replacing a JValue can ignore adjacent doubles as approximately equal.
+                // A new array retains the exact input needed to exercise the planar guard.
+                wire["changes"][0]["edits"][0]["position"] = new JArray(15d, 1d, elevation);
+                Assert.Equal(elevation, wire["changes"][0]["edits"][0]["position"][2].Value<double>());
+                Assert.NotEqual(7d, elevation);
+                Assert.False(PolylineVertexEditRequest.TryParse(wire, out _, out var error));
+                Assert.Contains("exact existing elevation", error);
+            }
         }
 
         [Fact]

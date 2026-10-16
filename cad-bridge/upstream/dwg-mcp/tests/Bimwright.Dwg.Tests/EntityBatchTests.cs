@@ -10,6 +10,7 @@ using Bimwright.Dwg.Server.Tools;
 using ModelContextProtocol.Server;
 using Newtonsoft.Json.Linq;
 using Xunit;
+using static Bimwright.Dwg.Tests.McpSchemaAssertions;
 
 namespace Bimwright.Dwg.Tests
 {
@@ -195,7 +196,13 @@ namespace Bimwright.Dwg.Tests
             var item = entities.GetProperty("items");
             Assert.Equal("object", item.GetProperty("type").GetString());
             Assert.Contains("id", item.GetProperty("required").EnumerateArray().Select(p => p.GetString()));
-            Assert.Equal("object", item.GetProperty("properties").GetProperty("position").GetProperty("type").GetString());
+            var position = item.GetProperty("properties").GetProperty("position");
+            AssertSchemaType(position, "object", allowNull: true);
+            foreach (var coordinate in new[] { "x", "y", "z" })
+                AssertSchemaType(position.GetProperty("properties").GetProperty(coordinate), "number");
+            var requiredCoordinates = position.GetProperty("required").EnumerateArray().Select(p => p.GetString());
+            Assert.Contains("x", requiredCoordinates);
+            Assert.Contains("y", requiredCoordinates);
         }
 
         [Fact]

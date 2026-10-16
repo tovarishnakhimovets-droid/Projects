@@ -59,7 +59,7 @@ namespace Bimwright.Dwg.Server
 
         private static readonly Rule[] Rules =
         {
-            // --- high: known dangerous patterns (all execution is independently blocked) ---
+            // --- high: known dangerous patterns (execution requires independent session approval) ---
             Fn("startapp", "high", "process-exec", "Launches an external process (startapp)."),
             Fn("shell", "high", "process-exec", "Launches an OS shell (VisualLISP shell)."),
             // SHELL is also an AutoCAD command: bare command-line input or a

@@ -88,10 +88,10 @@ namespace Bimwright.Dwg.Plugin
                 }
 
                 // Reject the entire batch before any earlier item can mutate the
-                // drawing. Direct run_lisp is also blocked; do not suggest a bypass.
+                // drawing. LISP jobs own their asynchronous completion lifecycle.
                 if (string.Equals(cmd, "run_lisp", StringComparison.Ordinal))
                 {
-                    return CommandResult.Fail("run_lisp is not allowed inside batch_execute. LISP execution is blocked in this build; use dwg_inspect_lisp for analysis only.");
+                    return CommandResult.Fail("run_lisp is not allowed inside batch_execute; run approved LISP as a separate tracked job");
                 }
             }
 

@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 using Xunit;
+using static Bimwright.Dwg.Tests.McpSchemaAssertions;
 
 namespace Bimwright.Dwg.Tests
 {
@@ -16,11 +17,11 @@ namespace Bimwright.Dwg.Tests
         // Exercise the built entry point and real SDK registration/stdio handshake.
         // Only initialize and tools/list are sent: these tests never call a CAD tool.
         [Theory]
-        [InlineData("query,modify,drawing,view", false, 56)]
-        [InlineData("query,modify,drawing,view,annotation", false, 58)]
-        [InlineData("query,modify,drawing,view", true, 19)]
-        [InlineData("query", false, 12)]
-        [InlineData("modify", false, 31)]
+        [InlineData("query,modify,drawing,view", false, 58)]
+        [InlineData("query,modify,drawing,view,annotation", false, 60)]
+        [InlineData("query,modify,drawing,view", true, 20)]
+        [InlineData("query", false, 13)]
+        [InlineData("modify", false, 32)]
         [InlineData("drawing", false, 7)]
         [InlineData("annotation", false, 4)]
         [InlineData("drawing,annotation", false, 9)]
@@ -69,6 +70,16 @@ namespace Bimwright.Dwg.Tests
             Assert.DoesNotContain("dwg_list_baked_tools", names);
 
             var enabled = profile.Split(',').ToHashSet(StringComparer.Ordinal);
+            bool hasLisp = !readOnly && (enabled.Contains("modify") || enabled.Contains("meta") || enabled.Contains("code"));
+            Assert.Equal(hasLisp, names.Contains("dwg_run_lisp", StringComparer.Ordinal));
+            Assert.Equal(enabled.Contains("query"), names.Contains("dwg_get_lisp_status", StringComparer.Ordinal));
+            if (hasLisp)
+            {
+                var lisp = Assert.Single(tools, tool => tool.ProtocolTool.Name == "dwg_run_lisp").ProtocolTool;
+                Assert.False(lisp.Annotations.ReadOnlyHint);
+                Assert.False(lisp.Annotations.IdempotentHint);
+                AssertRequired(lisp.InputSchema, "file", "command", "expected_sha256", "expected_document", "expected_fingerprint");
+            }
             bool hasTextCreation = !readOnly && (enabled.Contains("drawing") || enabled.Contains("annotation"));
             Assert.Equal(hasTextCreation ? 1 : 0, names.Count(name => name == "dwg_create_mtext"));
             Assert.Equal(hasTextCreation ? 1 : 0, names.Count(name => name == "dwg_create_text"));
@@ -93,12 +104,12 @@ namespace Bimwright.Dwg.Tests
                 var change = TypedArrayItem(edit.InputSchema, edit.InputSchema, "changes");
                 AssertRequired(change, "handle", "expected_layer", "expected_owner_handle", "expected_vertices",
                     "expected_normal", "expected_elevation", "expected_thickness", "expected_constant_width", "expected_is_closed", "edits");
-                var vertex = TypedArrayItem(edit.InputSchema, change, "expected_vertices");
+                var vertex = TypedArrayItem(edit.InputSchema, change, "expected_vertices", allowNull: true);
                 AssertRequired(vertex, "index", "x", "y", "z", "bulge", "start_width", "end_width");
-                var positionEdit = TypedArrayItem(edit.InputSchema, change, "edits");
+                var positionEdit = TypedArrayItem(edit.InputSchema, change, "edits", allowNull: true);
                 AssertRequired(positionEdit, "index", "position");
                 var position = positionEdit.GetProperty("properties").GetProperty("position");
-                Assert.Equal("array", position.GetProperty("type").GetString());
+                AssertSchemaType(position, "array", allowNull: true);
                 Assert.Equal("number", position.GetProperty("items").GetProperty("type").GetString());
             }
             else Assert.DoesNotContain("dwg_edit_polyline_vertices", names);
@@ -112,14 +123,14 @@ namespace Bimwright.Dwg.Tests
             if (readOnly)
                 foreach (string mutation in new[] { "dwg_create_entities", "dwg_edit_polyline_vertices",
                     "dwg_create_text", "dwg_create_mtext", "dwg_set_text_style", "dwg_match_properties",
-                    "dwg_create_block_variant", "dwg_update_block_angles", "dwg_set_system_variable" })
+                    "dwg_create_block_variant", "dwg_update_block_angles", "dwg_set_system_variable", "dwg_run_lisp" })
                     Assert.DoesNotContain(mutation, names);
         }
 
-        private static JsonElement TypedArrayItem(JsonElement root, JsonElement parent, string field)
+        private static JsonElement TypedArrayItem(JsonElement root, JsonElement parent, string field, bool allowNull = false)
         {
             var array = parent.GetProperty("properties").GetProperty(field);
-            Assert.Equal("array", array.GetProperty("type").GetString());
+            AssertSchemaType(array, "array", allowNull);
             var item = array.GetProperty("items");
             if (item.TryGetProperty("$ref", out var reference))
             {
@@ -129,7 +140,7 @@ namespace Bimwright.Dwg.Tests
                 foreach (string part in path.Substring(2).Split('/'))
                     item = item.GetProperty(part.Replace("~1", "/").Replace("~0", "~"));
             }
-            Assert.Equal("object", item.GetProperty("type").GetString());
+            AssertSchemaType(item, "object", allowNull);
             Assert.True(item.TryGetProperty("properties", out _), "Array items must expose typed fields.");
             return item;
         }

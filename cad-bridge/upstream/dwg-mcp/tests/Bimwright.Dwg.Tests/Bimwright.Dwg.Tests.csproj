@@ -54,6 +54,7 @@
     <Compile Include="..\..\src\shared\Views\Toast\ToolNameFormatter.cs" LinkBase="Shared\Views\Toast" />
     <Compile Include="..\..\src\shared\Views\Toast\McpToastViewModel.cs" LinkBase="Shared\Views\Toast" />
     <Compile Include="..\..\src\shared\Security\PathAllowlist.cs" LinkBase="Shared\Security" />
+    <Compile Include="..\..\src\shared\Security\LispJobStore.cs" LinkBase="Shared\Security" />
     <Compile Include="..\..\src\shared\Localization\L.cs" LinkBase="Shared\Localization" />
     <Compile Include="..\..\src\shared\Config\PluginSettings.cs" LinkBase="Shared\Config" />
     <Compile Include="..\..\src\shared\ToolCatalog\ToolCatalogStore.cs" LinkBase="Shared\ToolCatalog" />

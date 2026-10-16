@@ -104,6 +104,8 @@ namespace Bimwright.Dwg.Plugin.Blocks
         }
         private static void RunPass(Document doc,RefreshContext context,bool commandEnded)
         {
+            // Keep pending notifications; refresh after the queued/running LISP ends.
+            if(LispJobStore.Session.IsBusy)return;
             if(busy||doc!=Application.DocumentManager.MdiActiveDocument||doc.IsReadOnly||
                (!commandEnded&&!doc.Editor.IsQuiescent))return;
             if(!context.Queue.TryBeginPass(Clock.ElapsedMilliseconds,out var ticket))return;

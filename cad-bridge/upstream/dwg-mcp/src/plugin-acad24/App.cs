@@ -63,6 +63,7 @@ namespace Bimwright.Dwg.Plugin
             try { CloseSettings(); } catch { }
             try { ToastNotifier?.Shutdown(); } catch { }
             try { DocumentInvoker.Shutdown(); } catch { }
+            try { LispCommands.Shutdown(); } catch { }
             try { Blocks.BlockAngleBindingService.Shutdown(); } catch { }
             try { View.DrawingRevision.Shutdown(); } catch { }
         }
@@ -130,6 +131,7 @@ namespace Bimwright.Dwg.Plugin
 
         internal static void StopListener(bool closeSettings)
         {
+            LispJobStore.Session.Revoke();
             if (_server != null && _server.IsRunning)
             {
                 _server.Stop();
@@ -196,6 +198,7 @@ namespace Bimwright.Dwg.Plugin
         {
             ToolCatalogStore.Clear();
             DocumentInvoker.Initialize();
+            LispCommands.Initialize();
             InitializeToast();
             CommandDispatcher.SetSendCodeEnabled(true);
 #if ACAD2025_OR_GREATER
