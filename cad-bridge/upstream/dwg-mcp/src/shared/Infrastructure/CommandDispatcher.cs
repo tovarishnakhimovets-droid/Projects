@@ -72,6 +72,7 @@ namespace Bimwright.Dwg.Plugin
                 { "update_texts",            new UpdateTextsHandler() },
                 { "send_code",               new SendCodeHandler() },
                 { "run_lisp",                new RunLispHandler() },
+                { "get_lisp_status",         new GetLispStatusHandler() },
                 { "apply_unicode_style",     new ApplyUnicodeStyleHandler() },
                 { "collapse_and_rewrite",    new CollapseAndRewriteHandler() },
                 { "translate_and_rewrite",   new TranslateAndRewriteHandler() },
@@ -125,7 +126,9 @@ namespace Bimwright.Dwg.Plugin
                     return SerializeResponse(id, cmd, preflight);
                 }
 
-                var result = DocumentInvoker.Invoke(doc => ExecuteCommand(doc, cmd, parameters));
+                var result = cmd == "get_lisp_status"
+                    ? ExecuteCommand(null, cmd, parameters)
+                    : DocumentInvoker.Invoke(doc => ExecuteCommand(doc, cmd, parameters));
 
                 string resultJson = null;
                 if (result.Ok)
@@ -139,7 +142,9 @@ namespace Bimwright.Dwg.Plugin
                     catch { }
                 }
 
-                NotifyCompleted(cmd, resultJson, result.Ok, result.Error, preflightHandler?.Description);
+                // Queue acceptance is not execution completion.
+                if (!(cmd == "run_lisp" && result.Ok))
+                    NotifyCompleted(cmd, resultJson, result.Ok, result.Error, preflightHandler?.Description);
                 return SerializeResponse(id, cmd, result);
             }
             catch (Exception ex)
@@ -185,10 +190,10 @@ namespace Bimwright.Dwg.Plugin
         private CommandResult ValidateCommand(string cmd, JToken parameters, out IAcadCommand handler)
         {
             handler = null;
-            // Reject before DocumentInvoker/LockDocument, including direct wire
-            // callers and older servers. MCPENABLECODE cannot authorize LISP.
-            if (string.Equals(cmd, "run_lisp", StringComparison.Ordinal))
-                return CommandResult.Fail(LispExecutionPolicy.Refusal);
+            // A queued/running LISP owns the drawing. Status is managed-only,
+            // readable even while the user is answering an AutoCAD prompt.
+            if (cmd != "get_lisp_status" && LispJobStore.Session.IsBusy)
+                return CommandResult.Fail("a LISP job is queued/running; inspect dwg_get_lisp_status and finish/cancel it before another CAD operation");
 
             if (string.Equals(cmd, "send_code", StringComparison.Ordinal) && !SendCodeEnabled)
                 return CommandResult.Fail("code execution is disabled for this AutoCAD session. Run MCPENABLECODE in AutoCAD to re-enable.");

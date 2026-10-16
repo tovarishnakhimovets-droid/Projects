@@ -84,7 +84,7 @@ namespace Bimwright.Dwg.Tests
             }));
             Assert.False(result.Ok);
             var error = result.Error;
-            Assert.Contains("LISP execution is blocked", error);
+            Assert.Contains("required", error);
             Assert.DoesNotContain("sample-value", error);
             Assert.DoesNotContain("sample-token", error);
             Assert.DoesNotContain("C:\\private", error);

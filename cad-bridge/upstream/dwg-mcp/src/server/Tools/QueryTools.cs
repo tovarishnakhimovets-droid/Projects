@@ -136,7 +136,7 @@ namespace Bimwright.Dwg.Server.Tools
             "opaque, summary, findings[]}. Compiled .fas/.vlx cannot be inspected and always " +
             "verdict 'dangerous'. This is not a sandbox or an antivirus guarantee: clean means no known " +
             "pattern matched, not safe. execution_authorized and safety_assured are always false. " +
-            "dwg_run_lisp is blocked in this build; do not bypass that refusal through other execution tools.")]
+            "Execution requires independent session approval with MCPTRUSTLISP; do not bypass a refused run through other tools.")]
         public static Task<string> InspectLisp(
             [Description("Absolute path to a .lsp/.fas/.vlx file to inspect")] string file = null,
             [Description("Inline AutoLISP source to inspect")] string code = null)
@@ -167,6 +167,13 @@ namespace Bimwright.Dwg.Server.Tools
 
             return Task.FromResult(LispSecurityScanner.ToJson(merged, string.Join("; ", scanned)).ToString(Newtonsoft.Json.Formatting.None));
         }
+
+        [McpServerTool(Name = "dwg_get_lisp_status", ReadOnly = true, Idempotent = true), Description(
+            "Read session-approved LISP file/function hashes and tracked job states, even while AutoCAD waits for user input. " +
+            "With job_id return one job; omit to list approvals and up to 16 recent jobs. queued/running is not completion. " +
+            "failed jobs may have partial drawing changes. Do not rerun an uncertain mutation automatically.")]
+        public static Task<string> GetLispStatus([Description("Job ID from dwg_run_lisp, or omit for session state.")] string job_id = null)
+            => ToolGateway.LoggedCall("get_lisp_status", new { job_id }, new { job_id });
 
         private static JObject BuildEntityQueryRequest(
             string entityType,

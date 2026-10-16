@@ -43,9 +43,10 @@ Explain newly introduced command flags next to the command in plain language.
   AutoCAD year does not narrow this contract. Build both plugins for changes to
   shared code; record which native/live checks remain unavailable on that computer.
 - Profile query,modify,drawing,view: installed team.2/style-tools has 42 tools;
-  the unreleased source candidate has 46. Check the connected server's tools/list
-  before using candidate capabilities. AutoLISP is blocked by upstream: never
-  bypass that refusal through C#. No legacy COM fallback here.
+  the unreleased source candidate has 48. Check the connected server's tools/list
+  before using candidate capabilities. Installed builds still refuse AutoLISP;
+  the candidate adds session-approved file execution and tracked job status.
+  Never bypass a runtime refusal through C# or legacy COM.
 
 Before drawing edits use dwg_get_drawing_info. The source candidate returns the
 active titled DWG's document_path/fingerprint and distinguishes an unsaved document
@@ -59,8 +60,19 @@ query without substituting unrelated objects. Coordinates are drawing units.
 
 Unique drawing scripts remain in `D:\CAD-Automation\scripts` and
 `D:\CAD-Automation\lisp`. Trusted C# scripts must guard the active document,
-finish synchronously and use a transaction. Never use C# to bypass the upstream
-AutoLISP refusal. Do not load an existing sandbox.lsp as a connection smoke test.
+finish synchronously and use a transaction. Do not load an existing sandbox.lsp
+as a connection smoke test.
+
+Candidate AutoLISP: the user approves an exact local .lsp path/SHA256/function
+through AutoCAD MCPTRUSTLISP. Scanner findings or request flags do not grant trust.
+dwg_run_lisp evaluates captured standalone source and returns a queued job, not
+success; use dwg_get_lisp_status until the actual terminal result. It requires a
+fresh named DWG path/fingerprint and a free command line. Interactive prompts are
+answered in AutoCAD; other CAD operations are blocked while the job is active.
+Changed file bytes require approval again. MCPDISABLELISP/MCPSTOP clear approvals;
+running code must be cancelled manually. This is full-trust code, not a sandbox
+or a rollback guarantee. No inline, batch or ToolBaker LISP execution. Saves still
+require a request. Limits and procedure are in docs/CAD_WORKFLOW.md.
 
 Use typed tools, including dwg_set_lineweight (explicit mm/by_layer/by_block),
 dwg_set_layer_lineweight (exact supported mm), dwg_create_hatch (one Circle or

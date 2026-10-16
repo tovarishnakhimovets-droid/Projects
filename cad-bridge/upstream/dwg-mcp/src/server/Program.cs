@@ -59,12 +59,12 @@ AutoCAD routing: versions are 4-digit years 2022..2027. If multiple AutoCAD inst
 
 Tools use prefix dwg_:
 - query: dwg_get_drawing_info, dwg_list_layers, and dwg_get_entity_properties read the current active document; dwg_get_selected_texts reads current AutoCAD pickfirst text selection and returns clustered text groups; dwg_inspect_lisp statically scans .lsp files or inline AutoLISP for known suspicious patterns (verdict clean/caution/dangerous). No verdict certifies safety or authorizes execution.
-- modify: dwg_create_layer, dwg_create_line, dwg_create_circle, dwg_change_layer, dwg_update_texts, dwg_translate_and_rewrite, dwg_apply_unicode_style, dwg_collapse_and_rewrite write drawing/text/style changes.
+- modify: dwg_create_layer, dwg_create_line, dwg_create_circle, dwg_change_layer, dwg_update_texts, dwg_translate_and_rewrite, dwg_apply_unicode_style, dwg_collapse_and_rewrite write drawing/text/style changes; dwg_run_lisp queues a session-approved standalone file/function.
 - meta: dwg_batch_execute, dwg_list_available_targets, dwg_get_current_target, dwg_switch_target, dwg_send_code, dwg_run_lisp.
 - view: Start visual reading with dwg_capture_view_image (inline image plus JSON). If region_navigation.supported, choose a normalized top-left-origin rectangle on that image and call dwg_inspect_view_region with its capture_id. Inspect the new image before deciding the next region. Keep ancestor capture IDs and use dwg_restore_view to return to an overview. Use each newly returned ID for further navigation. Do not interpret a failed image_delivery as a failed zoom: take a smaller fresh capture. Region navigation is limited to one top-down, unrotated, orthographic model-space viewport. Verify inferred labels/dimensions against CAD text and entity data. Do not claim unseen regions have been reviewed.
 - optional toolbaker, when enabled: dwg_list_baked_tools, dwg_run_baked_tool, dwg_list_bake_suggestions, dwg_accept_bake_suggestion, dwg_dismiss_bake_suggestion, dwg_create_bake_issue_draft.
 - dwg_send_code is on by default; the AutoCAD MCPDISABLECODE command disables it for the session (MCPENABLECODE re-enables).
-- dwg_run_lisp is a compatibility refusal: all execution is blocked at server and plugin until an enforceable isolation/trust policy exists. MCPENABLECODE does not unblock LISP. Do not bypass refusal through send_code, batch, ToolBaker, or reformatted payloads. send_code remains full-trust C#, not a sandbox or machine-wide malware protection.
+- dwg_run_lisp runs only exact standalone file/function versions approved through AutoCAD MCPTRUSTLISP; queued is not completed. Query tool dwg_get_lisp_status reports actual job state even while the user answers AutoCAD prompts. No inline, batch or ToolBaker LISP, no bypass through send_code. Approved scripts and C# run with full process trust, not in a sandbox.
 
 General CAD tools operate on the current AutoCAD active document. Entity arguments use AutoCAD hex handles returned by selection, creation, or property tools.
 Call dwg_get_selected_texts before text writeback. Read-only mode also permits view navigation and image file output, but no drawing edits.";
@@ -111,6 +111,7 @@ Call dwg_get_selected_texts before text writeback. Read-only mode also permits v
             // dwg_send_code ships on the default surface via meta (rvt-mcp parity); the
             // legacy "code" toolset name is still honored as an explicit opt-in alias.
             if ((enabled.Contains("meta") || enabled.Contains("code")) && !readOnly) toolTypes.Add(typeof(CodeTools));
+            if ((enabled.Contains("modify") || enabled.Contains("meta") || enabled.Contains("code")) && !readOnly) toolTypes.Add(typeof(LispTools));
             if (enabled.Contains("annotation") && !readOnly) toolTypes.Add(typeof(AnnotationTools));
             if (enabled.Contains("block"))
             {
@@ -143,6 +144,7 @@ Call dwg_get_selected_texts before text writeback. Read-only mode also permits v
             if (toolType == typeof(ProxyTools)) return mcp.WithTools<ProxyTools>();
             if (toolType == typeof(ProxyWriteTools)) return mcp.WithTools<ProxyWriteTools>();
             if (toolType == typeof(NetworkTools)) return mcp.WithTools<NetworkTools>();
+            if (toolType == typeof(LispTools)) return mcp.WithTools<LispTools>();
             if (toolType == typeof(MetaTools)) return mcp.WithTools<MetaTools>();
             if (toolType == typeof(BatchTools)) return mcp.WithTools<BatchTools>();
             if (toolType == typeof(ToolBakerTools)) return mcp.WithTools<ToolBakerTools>();

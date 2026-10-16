@@ -374,9 +374,16 @@ namespace Bimwright.Dwg.Plugin
             SchemaProperty.Required("code", JTokenType.String));
 
         public static readonly CommandSchema RunLisp = CommandSchema.Object(
-            SchemaProperty.Optional("file", JTokenType.String),
-            SchemaProperty.Optional("code", JTokenType.String),
-            SchemaProperty.Optional("command", JTokenType.String));
+            SchemaProperty.RequiredNonEmptyString("file"),
+            SchemaProperty.RequiredNonEmptyString("command"),
+            SchemaProperty.RequiredNonEmptyString("expected_sha256"),
+            SchemaProperty.RequiredNonEmptyString("expected_document"),
+            SchemaProperty.RequiredNonEmptyString("expected_fingerprint"),
+            SchemaProperty.Optional("arguments_json", JTokenType.String),
+            SchemaProperty.Optional("code", JTokenType.String));
+
+        public static readonly CommandSchema GetLispStatus = CommandSchema.Object(
+            SchemaProperty.Optional("job_id", JTokenType.String));
 
         public static readonly CommandSchema ApplyUnicodeStyle = CommandSchema.Object(
             SchemaProperty.Optional("handles", JTokenType.Array));

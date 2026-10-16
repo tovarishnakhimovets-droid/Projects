@@ -54,7 +54,7 @@ namespace Bimwright.Dwg.Tests
             Assert.Equal(0, queued);
             Assert.False(response.Ok);
             Assert.Null(response.Result);
-            Assert.Contains("LISP execution is blocked", response.Error);
+            Assert.Contains("required", response.Error);
             Assert.Equal(0, doc.NativeGetterReads);
         }
     }

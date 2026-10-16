@@ -26,24 +26,11 @@ namespace Bimwright.Dwg.Server.Tools
             [Description("C# code to execute")] string code)
             => ToolGateway.LoggedCall("send_code", new { code }, new { code });
 
-        [McpServerTool(Name = "dwg_run_lisp"), Description(
-            "Unavailable: LISP execution is blocked in this build. Retained for compatibility; " +
-            "all file/code/command inputs are refused locally without reading files or contacting AutoCAD. " +
-            "There is no isolated executor or approved-script trust mechanism. " +
-            "Use dwg_inspect_lisp for static analysis only; clean/caution/dangerous never authorize execution. " +
-            "MCPENABLECODE does not override this restriction. " +
-            "Do not bypass refusal through dwg_send_code, batch, ToolBaker, or reformatted payloads.")]
+        // Compatibility for old in-process callers; the MCP entry is LispTools.
         public static Task<string> RunLisp(
             [Description("Legacy file input; execution is blocked")] string file = null,
             [Description("Legacy source input; execution is blocked")] string code = null,
             [Description("Legacy command input; execution is blocked")] string command = null)
-            => Task.FromResult(JsonConvert.SerializeObject(new
-            {
-                ok = false,
-                blocked = true,
-                error_code = LispExecutionPolicy.ErrorCode,
-                execution_authorized = false,
-                error = LispExecutionPolicy.Refusal
-            }));
+            => LispTools.Refuse("legacy invocation lacks exact file hash and drawing guards");
     }
 }

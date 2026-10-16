@@ -58,6 +58,7 @@ namespace Bimwright.Dwg.Tests
                 "dwg_get_current_target",
                 "dwg_get_drawing_info",
                 "dwg_get_entity_properties",
+                "dwg_get_lisp_status",
                 "dwg_get_selected_texts",
                 "dwg_get_variables",
                 "dwg_insert_block",
@@ -242,6 +243,7 @@ namespace Bimwright.Dwg.Tests
                 "BatchTools",
                 "CodeTools",
                 "EntityStyleTools",
+                "LispTools",
                 "MetaTools",
                 "ModifyTools",
                 "NetworkTools",
@@ -265,13 +267,13 @@ namespace Bimwright.Dwg.Tests
 
             var codeWriteTypeNames = InvokeToolTypeResolver(method, new[] { "code" }, readOnly: false);
             var codeReadOnlyTypeNames = InvokeToolTypeResolver(method, new[] { "code" }, readOnly: true);
-            Assert.Equal(new[] { "CodeTools" }, codeWriteTypeNames);
+            Assert.Equal(new[] { "CodeTools", "LispTools" }, codeWriteTypeNames);
             Assert.Equal(Array.Empty<string>(), codeReadOnlyTypeNames);
 
             // meta alone carries dwg_send_code (rvt-mcp parity); read-only strips it.
             var metaWriteTypeNames = InvokeToolTypeResolver(method, new[] { "meta" }, readOnly: false);
             var metaReadOnlyTypeNames = InvokeToolTypeResolver(method, new[] { "meta" }, readOnly: true);
-            Assert.Equal(new[] { "BatchTools", "CodeTools", "MetaTools" }, metaWriteTypeNames);
+            Assert.Equal(new[] { "BatchTools", "CodeTools", "LispTools", "MetaTools" }, metaWriteTypeNames);
             Assert.Equal(new[] { "MetaTools" }, metaReadOnlyTypeNames);
 
             var toolBakerWriteTypeNames = InvokeToolTypeResolver(method, new[] { "toolbaker" }, readOnly: false);

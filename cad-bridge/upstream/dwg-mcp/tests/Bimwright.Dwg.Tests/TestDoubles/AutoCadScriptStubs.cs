@@ -17,6 +17,8 @@ namespace Autodesk.AutoCAD.ApplicationServices
         public int NativeGetterReads;
         public int MutationCount;
         public Action<string> OnSendString;
+        public bool IsReadOnly;
+        public string LispGuardError;
 
         public string NativeProperty
         {
@@ -32,5 +34,23 @@ namespace Autodesk.AutoCAD.ApplicationServices
     }
 }
 namespace Autodesk.AutoCAD.DatabaseServices { public partial class Database { } }
-namespace Autodesk.AutoCAD.EditorInput { public class Editor { } }
+namespace Autodesk.AutoCAD.EditorInput { public class Editor { public bool IsQuiescent = true; } }
 namespace Autodesk.AutoCAD.Geometry { public struct Point3d { } }
+
+namespace Bimwright.Dwg.Plugin.Drawing
+{
+    // Explicit seam for the native identity guard; actual policy has separate tests.
+    internal static class DocumentGuard
+    {
+        internal static string Validate(Autodesk.AutoCAD.ApplicationServices.Document doc, string path, string fingerprint)
+            => doc == null ? "no active document" : doc.LispGuardError;
+    }
+}
+
+namespace Bimwright.Dwg.Plugin
+{
+    internal static class LispCommands
+    {
+        internal static void Watch(Autodesk.AutoCAD.ApplicationServices.Document document) { }
+    }
+}
