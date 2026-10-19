@@ -9,6 +9,12 @@ namespace Bimwright.Dwg.Plugin
     /// </summary>
     internal static class PluginLog
     {
+        internal static void Error(string phase, Exception error)
+        {
+            // Keep the managed stack: the AutoCAD fatal dialog only shows E0434352.
+            Debug(phase + ": " + error);
+        }
+
         internal static void Debug(string message)
         {
             try

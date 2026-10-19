@@ -5,6 +5,7 @@
     <IsPackable>false</IsPackable>
     <LangVersion>latest</LangVersion>
     <RootNamespace>Bimwright.Dwg.Tests</RootNamespace>
+    <DefineConstants>$(DefineConstants);ACAD2027;ACAD2025_OR_GREATER</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
@@ -29,6 +30,10 @@
     <Compile Include="..\..\src\shared\Infrastructure\ClusterStateStore.cs" LinkBase="Shared\Infrastructure" />
     <Compile Include="..\..\src\shared\Infrastructure\DwgApiExecutor.cs" LinkBase="Shared\Infrastructure" />
     <Compile Include="..\..\src\shared\Infrastructure\MainThreadExecutor.cs" LinkBase="Shared\Infrastructure" />
+    <Compile Include="..\..\src\plugin-acad24\App.cs" LinkBase="Shared\Startup" />
+    <Compile Include="..\..\src\shared\Infrastructure\DocumentInvoker.cs" LinkBase="Shared\Infrastructure" />
+    <Compile Include="..\..\src\shared\Infrastructure\PluginTarget.cs" LinkBase="Shared\Infrastructure" />
+    <Compile Include="..\..\src\shared\Transport\ITransportServer.cs" LinkBase="Shared\Transport" />
     <Compile Include="..\..\src\shared\Infrastructure\SchemaValidator.cs" LinkBase="Shared\Infrastructure" />
     <Compile Include="..\..\src\shared\Infrastructure\ResponseSizeGuard.cs" LinkBase="Shared\Infrastructure" />
     <Compile Include="..\..\src\shared\Infrastructure\BatchExecutor.cs" LinkBase="Shared\Infrastructure" />
@@ -46,6 +51,7 @@
     <Compile Include="..\..\src\shared\View\ViewReadingWorkflow.cs" LinkBase="Shared\View" />
     <Compile Include="..\..\src\shared\View\DrawingRevision.cs" LinkBase="Shared\View" />
     <Compile Include="..\..\src\shared\Blocks\DeferredAngleRefreshState.cs" LinkBase="Shared\Blocks" />
+    <Compile Include="..\..\src\shared\Blocks\BlockAngleBindingService.Lifecycle.cs" LinkBase="Shared\Blocks" />
     <Compile Include="..\..\src\shared\Drawing\SystemVariableCatalog.cs" LinkBase="Shared\Drawing" />
     <Compile Include="..\..\src\shared\Drawing\DrawingSavePolicy.cs" LinkBase="Shared\Drawing" />
     <!-- Toast content pipeline is host-free (no WPF/AutoCAD types) and unit-testable. -->

@@ -15,6 +15,7 @@ namespace Bimwright.Dwg.Plugin
         private static bool _toastEnabled;
         private static bool _wasClientPresent;
         private static bool _idleHooked;
+        private static bool _startupPending;
         private static System.DateTime _lastClientActivityUtc = System.DateTime.MinValue;
 
         // The dwg wire is connect-per-request: every tool call opens a fresh
@@ -41,27 +42,65 @@ namespace Bimwright.Dwg.Plugin
         {
             try
             {
-                StartServerInternal();
-                Blocks.BlockAngleBindingService.Initialize();
-                WriteLine($"Bimwright DWG loaded and listening on {DescribeTransport(_server)}.");
+                // Autoload runs before the Start tab/document lifecycle is ready.
+                // Initialize services on a host Idle, not a background timer/thread.
+                if (_startupPending || ListenerRunning) return;
+                _startupPending = true;
+                Application.Idle += OnStartupIdle;
+                PluginLog.Debug("Plugin loaded; waiting for an idle document: " + typeof(App).Assembly.Location);
             }
             catch (System.Exception ex)
             {
+                CancelStartup();
+                PluginLog.Error("plugin initialization", ex);
                 WriteLine($"Bimwright DWG loaded; auto-start failed ({ex.Message}). Run MCPSTART to retry.");
             }
         }
 
-        public void Terminate()
+        private static void OnStartupIdle(object sender, System.EventArgs args)
         {
+            if (!_startupPending) return;
+            try
+            {
+                var doc = Application.DocumentManager?.MdiActiveDocument;
+                if (doc == null) return;
+                var database = doc.Database;
+                if (database == null || database.IsDisposed || !doc.Editor.IsQuiescent) return;
+                CancelStartup();
+                McpStart();
+            }
+            catch (System.Exception ex)
+            {
+                CancelStartup();
+                PluginLog.Error("plugin deferred startup", ex);
+                WriteLine("Bimwright DWG auto-start failed. Run MCPSTART to retry; details are in debug.log.");
+            }
+        }
+
+        private static void CancelStartup()
+        {
+            if (!_startupPending) return;
+            _startupPending = false;
+            try { Application.Idle -= OnStartupIdle; }
+            catch (System.Exception ex) { PluginLog.Error("startup idle unsubscribe", ex); }
+        }
+
+        public void Terminate() => ShutdownServices();
+
+        private static void ShutdownServices()
+        {
+            CancelStartup();
             if (_idleHooked)
             {
                 try { Application.Idle -= OnIdleToast; } catch { }
                 _idleHooked = false;
             }
             try { _server?.Stop(); } catch { }
+            _server = null;
             try { ToolCatalogStore.Clear(); } catch { }
             try { CloseSettings(); } catch { }
             try { ToastNotifier?.Shutdown(); } catch { }
+            ToastNotifier = null;
             try { DocumentInvoker.Shutdown(); } catch { }
             try { LispCommands.Shutdown(); } catch { }
             try { Blocks.BlockAngleBindingService.Shutdown(); } catch { }
@@ -71,6 +110,7 @@ namespace Bimwright.Dwg.Plugin
         [CommandMethod("MCPSTART", CommandFlags.Session)]
         public static void McpStart()
         {
+            CancelStartup();
             if (_server != null && _server.IsRunning)
             {
                 WriteLine($"Bimwright DWG already running on {DescribeTransport(_server)}.");
@@ -83,6 +123,7 @@ namespace Bimwright.Dwg.Plugin
             }
             catch (System.Exception ex)
             {
+                PluginLog.Error("plugin start", ex);
                 WriteLine($"Bimwright DWG start failed: {ex.Message}");
             }
         }
@@ -90,6 +131,7 @@ namespace Bimwright.Dwg.Plugin
         [CommandMethod("MCPSTOP", CommandFlags.Session)]
         public static void McpStop()
         {
+            CancelStartup();
             if (_server == null || !_server.IsRunning)
             {
                 WriteLine("Bimwright DWG not running.");
@@ -196,17 +238,27 @@ namespace Bimwright.Dwg.Plugin
 
         private static void StartServerInternal()
         {
-            ToolCatalogStore.Clear();
-            DocumentInvoker.Initialize();
-            LispCommands.Initialize();
-            InitializeToast();
-            CommandDispatcher.SetSendCodeEnabled(true);
+            try
+            {
+                ToolCatalogStore.Clear();
+                DocumentInvoker.Initialize();
+                LispCommands.Initialize();
+                Blocks.BlockAngleBindingService.Initialize();
+                InitializeToast();
+                CommandDispatcher.SetSendCodeEnabled(true);
 #if ACAD2025_OR_GREATER
-            _server = new PipeTransportServer(PluginTarget.AutoCadYear);
+                _server = new PipeTransportServer(PluginTarget.AutoCadYear);
 #else
-            _server = new TcpTransportServer(PluginTarget.AutoCadYear);
+                _server = new TcpTransportServer(PluginTarget.AutoCadYear);
 #endif
-            _server.Start();
+                // Advertise the listener only after all host services are installed.
+                _server.Start();
+            }
+            catch
+            {
+                ShutdownServices();
+                throw;
+            }
         }
 
         private static void InitializeToast()
@@ -250,6 +302,18 @@ namespace Bimwright.Dwg.Plugin
         /// </summary>
         private static void OnIdleToast(object sender, System.EventArgs args)
         {
+            try { FlushIdleToast(); }
+            catch (System.Exception ex)
+            {
+                // An optional UI notification must never terminate the CAD host.
+                try { Application.Idle -= OnIdleToast; } catch { }
+                _idleHooked = false;
+                PluginLog.Error("toast idle disabled", ex);
+            }
+        }
+
+        private static void FlushIdleToast()
+        {
             var notifier = ToastNotifier;
             if (notifier == null)
                 return;
@@ -286,8 +350,14 @@ namespace Bimwright.Dwg.Plugin
 
         private static void WriteLine(string message)
         {
-            var doc = Application.DocumentManager.MdiActiveDocument;
-            doc?.Editor.WriteMessage($"\n[Bimwright.Dwg] {message}\n");
+            // Reporting startup errors must also work with the Start tab/no editor.
+            PluginLog.Debug(message);
+            try
+            {
+                var doc = Application.DocumentManager?.MdiActiveDocument;
+                doc?.Editor.WriteMessage($"\n[Bimwright.Dwg] {message}\n");
+            }
+            catch (System.Exception ex) { PluginLog.Error("plugin status display", ex); }
         }
     }
 }
