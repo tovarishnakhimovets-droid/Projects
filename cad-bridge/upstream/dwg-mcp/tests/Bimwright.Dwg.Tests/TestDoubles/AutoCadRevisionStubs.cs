@@ -1,10 +1,14 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 
 namespace Autodesk.AutoCAD.DatabaseServices
 {
     public class DBObject
     {
+        public ObjectId ObjectId { get; set; }
+        public ObjectId OwnerId { get; set; }
         public bool IsModified { get; set; } = true;
         public bool IsModifiedGraphics { get; set; }
         public bool IsModifiedXData { get; set; }
@@ -13,6 +17,9 @@ namespace Autodesk.AutoCAD.DatabaseServices
         public bool IsEraseStatusToggled { get; set; }
     }
     public class Entity : DBObject { }
+    public class BlockReference : Entity { }
+    public class LineAngularDimension2 : Entity { }
+    public class Point3AngularDimension : Entity { }
     public class Viewport : Entity { }
     public class ViewportTableRecord : DBObject { }
     public class ObjectEventArgs : EventArgs { public DBObject DBObject { get; set; } }
@@ -28,6 +35,8 @@ namespace Autodesk.AutoCAD.DatabaseServices
         {
             internal ObjectEventHandler Modified, Appended, Unappended, Reappended;
             internal ObjectErasedEventHandler Erased;
+            internal bool Disposed;
+            internal bool FailModifiedSubscribe;
         }
         private readonly NativeState state;
         public Database() : this(new NativeState()) { }
@@ -35,7 +44,17 @@ namespace Autodesk.AutoCAD.DatabaseServices
         public Database NewWrapper() => new Database(state);
         public override bool Equals(object other) => other is Database db && ReferenceEquals(state, db.state);
         public override int GetHashCode() => RuntimeHelpers.GetHashCode(state);
-        public event ObjectEventHandler ObjectModified { add => state.Modified += value; remove => state.Modified -= value; }
+        public bool IsDisposed { get => state.Disposed; set => state.Disposed = value; }
+        public bool ThrowOnObjectModifiedSubscribe { get => state.FailModifiedSubscribe; set => state.FailModifiedSubscribe = value; }
+        public event ObjectEventHandler ObjectModified
+        {
+            add
+            {
+                if (state.FailModifiedSubscribe) throw new InvalidOperationException("native database subscription failed");
+                state.Modified += value;
+            }
+            remove => state.Modified -= value;
+        }
         public event ObjectEventHandler ObjectAppended { add => state.Appended += value; remove => state.Appended -= value; }
         public event ObjectEventHandler ObjectUnappended { add => state.Unappended += value; remove => state.Unappended -= value; }
         public event ObjectEventHandler ObjectReappended { add => state.Reappended += value; remove => state.Reappended -= value; }
@@ -62,14 +81,71 @@ namespace Autodesk.AutoCAD.ApplicationServices
 {
     public class DocumentCollectionEventArgs : EventArgs { public Document Document { get; set; } }
     public delegate void DocumentCollectionEventHandler(object sender, DocumentCollectionEventArgs args);
-    public class DocumentCollection
+    public class DocumentCollection : IEnumerable
     {
-        public event DocumentCollectionEventHandler DocumentToBeDestroyed;
-        public int Subscribers => DocumentToBeDestroyed?.GetInvocationList().Length ?? 0;
-        public void Destroy(Document document) => DocumentToBeDestroyed?.Invoke(this, new DocumentCollectionEventArgs { Document = document });
+        private readonly List<Document> documents = new List<Document>();
+        private Document activeDocument;
+        public Exception ActiveDocumentReadError;
+        public Document MdiActiveDocument
+        {
+            get => ActiveDocumentReadError == null ? activeDocument : throw ActiveDocumentReadError;
+            set => activeDocument = value;
+        }
+        public string ThrowOnSubscribe;
+        private DocumentCollectionEventHandler created, activated, destroyed;
+        public event DocumentCollectionEventHandler DocumentCreated
+        {
+            add { Subscribe("created"); created += value; }
+            remove { created -= value; }
+        }
+        public event DocumentCollectionEventHandler DocumentActivated
+        {
+            add { Subscribe("activated"); activated += value; }
+            remove { activated -= value; }
+        }
+        public event DocumentCollectionEventHandler DocumentToBeDestroyed
+        {
+            add { Subscribe("destroyed"); destroyed += value; }
+            remove { destroyed -= value; }
+        }
+        private void Subscribe(string name)
+        {
+            if (ThrowOnSubscribe == name) throw new InvalidOperationException("native document collection subscription failed: " + name);
+        }
+        private static int Count(Delegate value) => value?.GetInvocationList().Length ?? 0;
+        public int Subscribers => Count(created) + Count(activated) + Count(destroyed);
+        public IEnumerator GetEnumerator() => documents.GetEnumerator();
+        public void Create(Document document)
+        {
+            if (document != null && !documents.Contains(document)) documents.Add(document);
+            RaiseCreated(new DocumentCollectionEventArgs { Document = document });
+        }
+        public void Activate(Document document)
+        {
+            MdiActiveDocument = document;
+            RaiseActivated(new DocumentCollectionEventArgs { Document = document });
+        }
+        public void Destroy(Document document)
+        {
+            RaiseDestroyed(new DocumentCollectionEventArgs { Document = document });
+            documents.Remove(document);
+            if (ReferenceEquals(MdiActiveDocument, document)) MdiActiveDocument = null;
+        }
+        public void RaiseCreated(DocumentCollectionEventArgs args) => created?.Invoke(this, args);
+        public void RaiseActivated(DocumentCollectionEventArgs args) => activated?.Invoke(this, args);
+        public void RaiseDestroyed(DocumentCollectionEventArgs args) => destroyed?.Invoke(this, args);
+        public void ResetDocuments() { documents.Clear(); MdiActiveDocument = null; ThrowOnSubscribe = null; ActiveDocumentReadError = null; }
     }
     public static class Application
     {
-        public static DocumentCollection DocumentManager { get; } = new DocumentCollection();
+        private static readonly DocumentCollection documents = new DocumentCollection();
+        public static Exception DocumentManagerReadError;
+        public static DocumentCollection DocumentManager => DocumentManagerReadError == null ? documents : throw DocumentManagerReadError;
+        public static NativeMainWindow MainWindow { get; } = new NativeMainWindow();
+        public static void ShowModelessWindow(object window) { }
+        public static event EventHandler Idle;
+        public static int IdleSubscribers => Idle?.GetInvocationList().Length ?? 0;
+        public static void RaiseIdle() => Idle?.Invoke(null, EventArgs.Empty);
     }
+    public sealed class NativeMainWindow { public IntPtr Handle => IntPtr.Zero; }
 }
