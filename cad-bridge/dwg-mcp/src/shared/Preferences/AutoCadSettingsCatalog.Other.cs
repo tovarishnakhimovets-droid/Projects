@@ -246,4 +246,3 @@ public static partial class AutoCadSettingsCatalog
             source: profilesSource);
     }
 }
-
