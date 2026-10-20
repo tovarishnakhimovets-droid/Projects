@@ -1,147 +1,112 @@
 # Shared AutoCAD MCP
 
-These are the canonical bridge rules. Source lives in the Projects repository,
-`cad-bridge/`; implementation is `upstream/dwg-mcp` (v2.0.1, already patched).
-Use the local Projects/cad-bridge checkout selected by the user. Resolve paths
-relative to that checkout; its absolute location differs between computers.
-There is no nested Git repository. Before bridge edits read that checkout's
-docs/CAD_WORKFLOW.md and relevant WORK_STATUS.md section; inspect current Git
-changes from the enclosing Projects repository and preserve others' work.
+These are the canonical bridge rules. Source is Projects/cad-bridge/dwg-mcp,
+a patched upstream v2.0.1 snapshot, with no nested Git. Resolve paths relative
+to the user's local cad-bridge checkout. Before bridge edits read
+docs/CAD_WORKFLOW.md and the relevant WORK_STATUS.md section;
+inspect current Git changes and preserve other chats' work.
 
-New runtime packages carry an exact generated copy of this file in
-server/current/bridge-docs/AGENTS.md. That folder contains runtime files, not the
-source checkout. Drawing tasks need only the installed matching MCP. Development
-requires the configured local Projects/cad-bridge checkout; if unavailable,
-report the missing source and required operation instead of creating a replacement.
+## Organization and ownership
 
-Keep one implementation tree, one docs/ directory and one WORK_STATUS.md in
-cad-bridge. Store release artifacts in its releases/ directory. Do not add parallel
-source, documentation, status, backup or archive folders. Runtime instruction copies
-are generated from this file, never maintained separately. Preserve unique project
-scripts and other chats' work when cleaning the workspace.
+Keep one implementation in dwg-mcp/, one docs/ directory and one WORK_STATUS.md.
+Reuse existing folders. No parallel sources, instruction copies, backup folders
+or per-drawing servers. Runtime bridge-docs are generated exact copies from
+these sources during packaging; never maintain them separately. In installed
+bridge-docs, referenced docs are sibling files: read TOOLS.md, CAD_WORKFLOW.md
+and TEAM_SETUP.md there; docs/... paths refer to the source checkout. Drawing-specific
+conventions remain in the drawing project's instructions. Preserve unique scripts.
+State substantial moves/deletions before doing them and check active runtime paths.
 
-The runtime path belongs to each computer's MCP configuration. Standard packages
-install under %LOCALAPPDATA%\Bimwright\Dwg\server\current; retained development
-builds may use other paths. Source cleanup or a Git merge does not replace
-installed DLLs or switch the MCP.
+Each computer has its own local checkout and installed runtime. The standard
+runtime is %LOCALAPPDATA%\Bimwright\Dwg\server\current. NAS holds immutable version
+folders of the installer; it does not host the running shared EXE/DLL. Git updates
+source, not installed binaries. Missing source is a limitation to report, not a
+reason to create a replacement. The setup/development/release sequence is solely
+docs/TEAM_SETUP.md.
 
-The user owns Git setup, branches, staging, commits, pushes and merges. Prepare
-reviewable edits, explain small steps and inspect results; no Git mutations or
-remote publishing unless the specific step is explicitly delegated. Merges stay
-with the user. The agent edits/builds/offline-tests; the user performs AutoCAD UI
-actions and explicitly enabled live tests. No live tests merely because a build passed.
-Explain newly introduced command flags next to the command in plain language.
+The user owns Git setup, branches, staging, commits, pushes and merges unless
+that specific step is explicitly delegated. Automatic fast-forward pulls below
+are explicitly authorized; ordinary merges remain with the user. Each person uses a permanent branch;
+PRs target develop. The agent prepares changes, builds and offline-tests. The user
+performs AutoCAD UI actions and explicitly enabled live tests. Do not authorize
+live tests from a successful build. Explain new flags beside their commands.
+Serialize overlapping source edits and live operations; do not overwrite another
+chat's changes or switch its shared checkout underneath it.
 
-## Hosts and tools
+## Before repository edits
 
-- AutoCAD 2026 .NET 8: plugin-acad26 net8.0-windows, dwg-2026 / --target 2026.
-  Use official AutoCAD.NET 25.1.0 compile references with UseAutoCadNuGetRefs=true.
-  25.1.1 targets .NET 10; do not upgrade it automatically in this build.
-- AutoCAD 2027: plugin-acad27 net10.0-windows, dwg-2027 / --target 2027;
-  references from the installed AutoCAD 2027. Source is shared under src/shared.
-- External stdio server: net8.0; packaged win-x64 EXE is self-contained.
-- Both host years are supported by the same source changes. A developer's installed
-  AutoCAD year does not narrow this contract. Build both plugins for changes to
-  shared code; record which native/live checks remain unavailable on that computer.
-- Profile query,modify,drawing,view: installed team.2/style-tools has 42 tools;
-  the unreleased source candidate adds text tools, block inspection/variants,
-  atomic entity creation, in-place vertex editing and session-approved AutoLISP
-  file execution with tracked job status: 58 tools (20 in read-only mode), checked
-  through actual MCP stdio on 2026-10-16. Verify the connected server's tools/list;
-  source changes do not update an installed build.
-  Older team.2/style-tools builds refuse AutoLISP. Never bypass a runtime refusal through
-  C# or legacy COM.
+Once before starting a new editing task, inspect Git status, the current branch,
+its upstream and any unfinished Git operation. Only on the confirmed personal
+branch, with matching origin/<branch> upstream, no staged, unstaged or untracked
+changes reported by Git, and no overlapping chat edits, automatically run in order:
+`git pull --ff-only`, then `git pull --ff-only origin develop`.
+The first updates the personal branch; the second includes freshly fetched shared
+develop without switching branches or changing the personal upstream. --ff-only
+allows fast-forward updates and creates no merge commit.
 
-Before drawing edits use dwg_get_drawing_info. The source candidate returns the
-active titled DWG's document_path/fingerprint and distinguishes an unsaved document
-from its DWT template. New network/proxy writes require both identity fields and
-fresh object expectations; dry_run validates without writing. Contract and scope
-are in docs/CAD_WORKFLOW.md. Older installed builds have no full-path guard and
-may report has_saved_path for a DWT; do not infer a saved DWG from that result.
-Inspect only necessary objects. Prefer current selection when the user refers
-to it; non-text selection has no typed reader, so use provided handles or a bounded
-query without substituting unrelated objects. Coordinates are drawing units.
+If prerequisites fail or either command fails, stop before new edits and explain
+the exact condition. Preserve existing work; never auto-stash, rebase, reset,
+force, switch branches or perform an ordinary merge. Do not pull mid-task or for
+read-only/drawing-only work. Report successful updates even if the second pull
+fails; do not roll them back. After updates, reread the applicable instructions
+and work log. Commit, push and conflict resolution remain human-controlled.
 
-Unique drawing scripts remain in `D:\CAD-Automation\scripts` and
-`D:\CAD-Automation\lisp`. Trusted C# scripts must guard the active document,
-finish synchronously and use a transaction. Do not load an existing sandbox.lsp
-as a connection smoke test.
+## Hosts and CAD operations
 
-Candidate AutoLISP: the user approves an exact local .lsp path/SHA256/function
-through AutoCAD MCPTRUSTLISP. Scanner findings or request flags do not grant trust.
-dwg_run_lisp evaluates captured standalone source and returns a queued job, not
-success; use dwg_get_lisp_status until the actual terminal result. It requires a
-fresh named DWG path/fingerprint and a free command line. Interactive prompts are
-answered in AutoCAD; other CAD operations are blocked while the job is active.
-Changed file bytes require approval again. MCPDISABLELISP/MCPSTOP clear approvals;
-running code must be cancelled manually. This is full-trust code, not a sandbox
-or a rollback guarantee. No inline, batch or ToolBaker LISP execution. Saves still
-require a request. Limits and procedure are in docs/CAD_WORKFLOW.md.
+- AutoCAD 2026: plugin-acad26 / net8.0-windows; dwg-2026, target 2026. Compile-only
+  AutoCAD.NET references are 25.1.0 via UseAutoCadNuGetRefs=true; 25.1.1 targets .NET 10.
+- AutoCAD/Civil 3D 2027: plugin-acad27 / net10.0-windows; dwg-2027, target 2027;
+  build against installed AutoCAD 2027 assemblies.
+- The external stdio server targets net8.0; the packaged EXE is self-contained.
+  Shared code is dwg-mcp/src/shared. Both plugin years remain supported.
+- Verify the connected server's tools/list; source availability and old counts
+  do not prove installed capabilities. Standard team toolsets: query,modify,drawing,view.
 
-Use typed tools, including dwg_set_lineweight (explicit mm/by_layer/by_block),
-dwg_set_layer_lineweight (exact supported mm), dwg_create_hatch (one Circle or
-closed planar lightweight Polyline, SOLID only, ACI/RGB, optional association).
-No arbitrary hatch patterns or islands. Inspect ok and per-item results. Normal
-MCP text may contain a failure; batches may partially succeed and do not provide
-grouped Undo. Never repeat an uncertain timed-out mutation automatically.
-Never save without a request or run purge/audit as a connection check.
+Before drawing edits read dwg_get_drawing_info and only the necessary objects.
+Prefer the current selection when requested; do not substitute unrelated objects
+for an empty selection or an unavailable reader. Coordinates use drawing units.
+Fresh full DWG path/fingerprint and object expectations are required by guarded
+write tools. An unsaved DWG is not its DWT template. Existing old runtimes may
+misreport has_saved_path; do not infer a saved DWG from that field alone.
 
-For text work on the updated candidate, read dwg_list_text_styles and the needed
-entity properties, then prefer dwg_create_text/dwg_create_mtext with an existing text_style,
-dwg_set_text_style, or dwg_match_properties with an explicit property list.
-Style assignment and matching preflight all targets and use one transaction;
-other existing batches retain their documented partial-success behavior.
-Preserve the justification reference anchor. Do not confuse style names such
-as GOST TYPE A with font metadata such as ISOCPEUR. See docs/TEXT_TOOLS.md.
-The installed server must expose these tools before they are used.
+Use typed MCP operations and their documented limits in docs/TOOLS.md.
+Layers, styles and object expectations come from the current drawing. Preflight
+before writing, use transactions, inspect top-level ok and per-item outcomes.
+Batches may partially succeed; separate calls do not share atomicity or grouped
+Undo. Never automatically retry an uncertain timed-out mutation: read state first.
+Never save without a request, or use purge/audit as a connection check.
+Routine drawing work needs no scratch DWGs, regression runs or extra logs.
 
-For a whole schematic use the candidate's dwg_create_entities: explicit existing
-layers/styles and bounded typed objects with local IDs, expected document/fingerprint,
-all-target preflight and one transaction. It does not run legacy commands or save.
-Native single-Undo still requires a user-enabled host check. For existing lightweight
-Polyline vertices use dwg_edit_polyline_vertices with complete fresh snapshots;
-it preserves handles, bends/width metadata and ownership. See docs/EOM_TOOLS.md.
-LWDISPLAY is an allowlisted boolean/0/1 variable; it does not alter stored weights.
+Missing general operations belong in bounded typed tools after inspecting
+upstream and official Autodesk APIs/examples. A synchronous trusted C# prototype
+is not a completed tool; guard the active document, finish inside the transaction,
+and do not move CAD API calls to worker threads. Respect runtime refusals.
+Unique local prototypes remain D:\CAD-Automation\scripts and D:\CAD-Automation\lisp;
+never load sandbox.lsp as a connection test.
 
-Routine drawing tasks require no scratch DWGs, regression runs or extra logs.
-For missing general capabilities inspect existing tools/upstream and official
-Autodesk examples; bounded additions belong in typed MCP methods and plugin handlers.
-Trusted synchronous C# via an explicitly enabled code profile is a prototype, not
-a completed reusable tool. Keep project conventions outside bridge code.
+AutoLISP trust, launch and completion rules are in
+docs/CAD_WORKFLOW.md, section «Запуск AutoLISP».
+Only the user grants session trust for an exact local path/SHA256/function through
+MCPTRUSTLISP. Scanner verdicts and request flags do not grant trust. queued is not
+success: poll dwg_get_lisp_status to a terminal result. Interactive prompts belong
+to the user. A job can leave partial changes; no rollback or sandbox is promised.
+MCPDISABLELISP/MCPSTOP clear approvals; running code must be cancelled manually.
+No inline, batch, ToolBaker or C# bypass of LISP restrictions. Saves still need a request.
 
-## Legacy AutoCAD 2023
+## Verification and legacy
 
-The separate legacy server and tools live in `D:\CAD-Automation\legacy\autocad-2023`.
-Use cad-automation when available; read that directory's README.md for schemas.
-Otherwise use its shared PowerShell COM bridge with Windows PowerShell 5.1
-(powershell.exe), not pwsh. Sandboxed COM/ROT lookup can return MK_E_UNAVAILABLE
-while AutoCAD is running; use the authorized bridge outside the sandbox.
-Never route AutoCAD 2026/2027 through this legacy COM server.
-Resolve the active document on every call and pass the full path returned by
-status for edits. Use current PICKFIRST selection when requested; do not replace
-an empty selection with unrelated objects. Legacy AutoLISP must finish without
-prompts and return a unique completion/error result, not rely on a fixed delay.
-Explicit live-test and save authorization rules apply to this bridge too.
-Reuse `D:\CAD-Automation\.venv` locally instead of creating another environment.
+Run affected checks proportionately. Shared-code changes require both plugin
+builds and actual MCP SDK schema checks; full .NET tests run from cad-bridge:
+`dotnet test dwg-mcp/tests/Bimwright.Dwg.Tests/Bimwright.Dwg.Tests.csproj -c Release`.
+Python diagnostics use requirements-dev.txt and the existing local environment
+(D:\CAD-Automation\.venv on this machine). Colleagues use their own environment.
+Keep stdout exclusively for MCP. Record source/offline/installed/loaded/live
+state separately in WORK_STATUS.md, with incomplete work and its next step.
+Do not repeat successful checks or rebuild packages for documentation-only edits.
+Live tests need explicit enablement, identifiable scratch objects, cleanup and no saves.
 
-## Offline development and releases
-
-Run the affected checks proportionately. Full .NET suite from this directory:
-dotnet test upstream/dwg-mcp/tests/Bimwright.Dwg.Tests/Bimwright.Dwg.Tests.csproj -c Release
-Local Python diagnostics reuse `D:\CAD-Automation\.venv\Scripts\python.exe` and
-requirements-dev.txt in this source root. Colleagues use their own Python
-environment with those dependencies; no environment is distributed in Git. Schema
-checks must use the actual MCP SDK; don't infer schemas from successful compilation.
-Live switches require explicit user enablement, own identifiable scratch objects,
-cleanup and no saves; preserve pre-existing changes and selection.
-
-Keep stdout for MCP protocol. Preflight before edits, use transactions, report
-rollback limits and real failures; no silent headless fallback. Record source,
-offline, loaded and live state separately, plus unfinished work and its next step.
-
-tools/package-team-dwg.ps1 packages both host plugins and their matching server,
-and copies these canonical rules into the runtime package without editing them.
-Use fresh output directories. Do not commit generated releases or Autodesk DLLs.
-Existing patches document the applied import; normal subsequent changes use Git
-commits, not repeated patch application. Do not copy the source/runtime into each
-drawing project or work on loaded DLLs through cloud-synchronised folders.
+AutoCAD 2023 is separate: D:\CAD-Automation\legacy\autocad-2023. Read its README
+before cad-automation work. Never route AutoCAD 2026/2027 through legacy COM.
+Legacy PowerShell COM requires powershell.exe, not pwsh; resolve the active document
+each call, pass the actual full path, preserve selection and await real completion.
+Explicit live-test and save rules apply there too. Reuse the existing .venv.

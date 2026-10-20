@@ -1,4 +1,4 @@
-// Modified by the CAD team (2026-10-09): text/style tools; see cad-bridge/docs/TEXT_TOOLS.md.
+// Modified by the CAD team (2026-10-09): text/style tools; see cad-bridge/docs/TOOLS.md#text.
 using System;
 using System.Reflection;
 using Bimwright.Dwg.Plugin;

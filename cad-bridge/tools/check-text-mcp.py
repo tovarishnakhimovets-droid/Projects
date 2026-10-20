@@ -11,7 +11,7 @@ from mcp.client.stdio import stdio_client
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SERVER = ROOT / "upstream/dwg-mcp/src/server/bin/Release/net8.0/Bimwright.Dwg.Server.dll"
+SERVER = ROOT / "dwg-mcp/src/server/bin/Release/net8.0/Bimwright.Dwg.Server.dll"
 STANDARD = "query,modify,drawing,view"
 MUTATORS = {"dwg_create_text", "dwg_create_mtext", "dwg_create_entities",
             "dwg_edit_polyline_vertices", "dwg_set_text_style", "dwg_match_properties"}
@@ -68,7 +68,7 @@ async def listing(options, toolsets, readonly=False):
 async def run(options):
     require(options.server.is_file(), f"Server not found: {options.server}")
     initialized, tools = await listing(options, STANDARD)
-    require(len(tools) == 56, f"Standard profile: expected 56 tools, got {len(tools)}")
+    require(len(tools) == 58, f"Standard profile: expected 58 tools, got {len(tools)}")
     by_name = {tool.name: tool for tool in tools}
     expected = MUTATORS | {"dwg_list_text_styles", "dwg_inspect_block"}
     require(expected <= by_name.keys(), f"Missing tools: {expected - by_name.keys()}")
@@ -105,7 +105,7 @@ async def run(options):
     matrix = [{"profile": STANDARD, "read_only": False, "count": len(tools), "tools": sorted(by_name)}]
     _, annotation = await listing(options, STANDARD + ",annotation")
     annotation_names = {tool.name for tool in annotation}
-    require(len(annotation) == 58, f"Combined annotation profile: expected 58, got {len(annotation)}")
+    require(len(annotation) == 60, f"Combined annotation profile: expected 60, got {len(annotation)}")
     require(annotation_names - by_name.keys() == {"dwg_create_leader", "dwg_create_table"},
             "Combined annotation profile: unexpected additions")
     require(sum(tool.name == "dwg_create_text" for tool in annotation) == 1,
@@ -116,7 +116,7 @@ async def run(options):
                    "count": len(annotation), "tools": sorted(annotation_names)})
     _, readonly = await listing(options, STANDARD, readonly=True)
     readonly_names = {tool.name for tool in readonly}
-    require(len(readonly) == 19, f"Read-only profile: expected 19, got {len(readonly)}")
+    require(len(readonly) == 20, f"Read-only profile: expected 20, got {len(readonly)}")
     require("dwg_list_text_styles" in readonly_names, "Read-only profile lost text-style query")
     require(not (MUTATORS & readonly_names), "Read-only profile retained a text/style mutation")
     require(all(tool.annotations is not None and tool.annotations.readOnlyHint is True for tool in readonly),
@@ -124,7 +124,7 @@ async def run(options):
     require(readonly_names == {tool.name for tool in tools if tool.annotations and tool.annotations.readOnlyHint is True},
             "Read-only profile differs from the standard read-only surface")
     matrix.append({"profile": STANDARD, "read_only": True, "count": len(readonly), "tools": sorted(readonly_names)})
-    for profile, expected_count in (("query", 12), ("modify", 31), ("drawing", 7),
+    for profile, expected_count in (("query", 13), ("modify", 32), ("drawing", 7),
                                     ("annotation", 4), ("drawing,annotation", 9)):
         _, isolated = await listing(options, profile)
         require(len(isolated) == expected_count, f"{profile}: expected {expected_count}, got {len(isolated)}")

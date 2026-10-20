@@ -11,7 +11,7 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 ROOT = Path(__file__).resolve().parents[1]
-SERVER = ROOT / "upstream/dwg-mcp/src/server/bin/Release/net8.0/Bimwright.Dwg.Server.dll"
+SERVER = ROOT / "dwg-mcp/src/server/bin/Release/net8.0/Bimwright.Dwg.Server.dll"
 
 def require(condition, detail):
     if not condition:
