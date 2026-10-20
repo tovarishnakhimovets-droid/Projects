@@ -4,22 +4,21 @@ param([Parameter(Mandatory = $true)][ValidatePattern('^\d+\.\d+\.\d+(?:[-+][A-Za
       [ValidateSet(2026, 2027)][int[]]$Years = @(2026, 2027), [switch]$FinalizeOnly, [switch]$AllowDirty)
 $ErrorActionPreference = 'Stop'
 $root = [IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
-$repo = Join-Path $root 'upstream\dwg-mcp'
-if (-not $OutputDir) { $OutputDir = Join-Path $root "releases\team\$Version" }
+$repo = Join-Path $root 'dwg-mcp'
+if (-not $OutputDir) { $OutputDir = Join-Path $root "releases\$Version" }
 $OutputDir = [IO.Path]::GetFullPath($OutputDir)
 if (-not $OutputDir.StartsWith($root.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Team package output must be inside the CAD workspace.' }
 $zip = Join-Path $OutputDir "DwgMcp.Setup-v$Version-win-x64.zip"
 if ((Test-Path -LiteralPath ($zip + '.sha256')) -or (-not $FinalizeOnly -and (Test-Path -LiteralPath $zip))) {
     throw 'Release ZIP or SHA256 file already exists. Choose a new version or output directory.'
 }
-$extras = Join-Path $root 'packaging\team'
+$extras = Join-Path $root 'packaging'
 foreach ($file in @('INSTALL-RU.md', 'setup-codex.ps1')) {
     if (-not (Test-Path -LiteralPath (Join-Path $extras $file))) { throw "Missing package extra: $file" }
 }
 $canonicalInstructions = Join-Path $root 'AGENTS.md'
 if (-not (Test-Path -LiteralPath $canonicalInstructions -PathType Leaf)) { throw 'Missing canonical bridge AGENTS.md.' }
-$runtimeDocNames = @('TEAM_SETUP.md', 'IMPORT_MANIFEST.json', 'CAD_WORKFLOW.md',
-    'STYLE_TOOLS.md', 'TEXT_TOOLS.md', 'BLOCK_INSPECTION.md', 'BLOCK_VARIANTS.md', 'EOM_TOOLS.md', 'CROSSHAIR_SETTINGS.md', 'AUTOCAD_SETTINGS.md')
+$runtimeDocNames = @('TEAM_SETUP.md', 'IMPORT_MANIFEST.json', 'CAD_WORKFLOW.md', 'TOOLS.md')
 $runtimeDocPaths = @($runtimeDocNames | ForEach-Object {
     $docPath = Join-Path $root "docs\$_"
     if (-not (Test-Path -LiteralPath $docPath -PathType Leaf)) { throw "Missing runtime documentation: $_" }
