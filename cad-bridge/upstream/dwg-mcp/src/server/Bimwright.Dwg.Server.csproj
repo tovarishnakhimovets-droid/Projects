@@ -39,6 +39,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\shared\Preferences\CrosshairSettingsContract.cs" LinkBase="Shared\Preferences" />
+    <Compile Include="..\shared\Preferences\AutoCadSettingsCatalog*.cs" LinkBase="Shared\Preferences" />
+    <Compile Include="..\shared\Preferences\GeneralSettingsContract.cs" LinkBase="Shared\Preferences" />
     <Compile Include="..\shared\ToolBaker\*.cs" LinkBase="Shared\ToolBaker" />
     <Compile Include="..\shared\Security\SecretMasker.cs" LinkBase="Shared\Security" />
     <Compile Include="..\shared\Security\ErrorSanitizer.cs" LinkBase="Shared\Security" />

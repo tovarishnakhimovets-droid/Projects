@@ -26,6 +26,10 @@ namespace Bimwright.Dwg.Plugin
             _commands = new Dictionary<string, IAcadCommand>
             {
                 { "get_drawing_info",        new GetDrawingInfoHandler() },
+                { "get_crosshair_settings",  new GetCrosshairSettingsHandler() },
+                { "set_crosshair_settings",  new SetCrosshairSettingsHandler() },
+                { "get_settings",           new GetSettingsHandler() },
+                { "set_settings",           new SetSettingsHandler() },
                 { "inventory_proxies",       new InventoryProxiesHandler() },
                 { "erase_proxy_objects",     new EraseProxyObjectsHandler() },
                 { "node_network",            new NodeNetworkHandler() },

@@ -58,6 +58,8 @@ namespace Bimwright.Dwg.Server
 AutoCAD routing: versions are 4-digit years 2022..2027. If multiple AutoCAD instances run, use dwg_list_available_targets then dwg_switch_target, or start the server with --target 2022|2023|2024|2025|2026|2027.
 
 Tools use prefix dwg_:
+- Crosshair preferences: dwg_get_crosshair_settings reads the active profile, size and separate model/layout colors. dwg_set_crosshair_settings changes only explicitly supplied size/RGB fields, requires the exact current profile and verifies native readback. Pass BOTH model_color_rgb and layout_color_rgb for both spaces. Preferences persist outside DWG/Undo; finish active commands/close Options first. No UI automation or drawing save. On failure inspect rollback_verified and reread before retrying.
+- Other application preferences: dwg_list_settings is the fixed typed catalog with ranges, effect timing and read-only restrictions. Read only needed IDs using dwg_get_settings; pass its exact profile and per-ID typed values as expected_value to dwg_set_settings. Validate with dry_run first. New colors use RGB; raw OLE colors are valid expectations. Native readback verifies stored preferences, not screen refresh or future restart/plot effects. Unsupported properties have explicit per-ID availability errors. No arbitrary preference paths, security/code-loading/path/profile changes, DWG save or automatic retry.
 - query: dwg_get_drawing_info, dwg_list_layers, and dwg_get_entity_properties read the current active document; dwg_get_selected_texts reads current AutoCAD pickfirst text selection and returns clustered text groups; dwg_list_text_styles reads existing style/font metadata; dwg_inspect_lisp statically scans .lsp files or inline AutoLISP for known suspicious patterns (verdict clean/caution/dangerous). No verdict certifies safety or authorizes execution. dwg_get_lisp_status reads session approvals and tracked LISP job state.
 - modify: dwg_create_layer, dwg_create_line, dwg_create_circle, dwg_change_layer, dwg_update_texts, dwg_translate_and_rewrite, dwg_apply_unicode_style, dwg_collapse_and_rewrite write drawing/text/style changes. dwg_set_text_style assigns an existing style; dwg_match_properties copies an explicit property list. dwg_edit_polyline_vertices edits guarded existing indices in place without erasing the Polyline. dwg_run_lisp queues a session-approved standalone file/function.
 - drawing: dwg_create_text and dwg_create_mtext create editable text using an existing style; both are also in annotation without duplicate registration. dwg_create_entities creates one bounded heterogeneous plan with local IDs, full document identity, all-target preflight, dry_run and one transaction. It is separate from legacy sequential dwg_batch_execute; native single-Undo behavior still needs verification. LWDISPLAY can be read and set using boolean or 0/1 values.
@@ -90,6 +92,8 @@ Call dwg_get_selected_texts before text writeback. Read-only mode also permits v
             if (enabled.Contains("query"))
             {
                 toolTypes.Add(typeof(QueryTools));
+                toolTypes.Add(typeof(CrosshairQueryTools));
+                toolTypes.Add(typeof(GeneralSettingsQueryTools));
                 toolTypes.Add(typeof(TextQueryTools));
                 toolTypes.Add(typeof(BlockInspectionTools));
                 toolTypes.Add(typeof(ProxyTools));
@@ -97,6 +101,8 @@ Call dwg_get_selected_texts before text writeback. Read-only mode also permits v
             if (enabled.Contains("modify") && !readOnly)
             {
                 toolTypes.Add(typeof(ModifyTools));
+                toolTypes.Add(typeof(CrosshairWriteTools));
+                toolTypes.Add(typeof(GeneralSettingsWriteTools));
                 toolTypes.Add(typeof(EntityStyleTools));
                 toolTypes.Add(typeof(ProxyWriteTools));
                 toolTypes.Add(typeof(NetworkTools));
@@ -149,6 +155,10 @@ Call dwg_get_selected_texts before text writeback. Read-only mode also permits v
         private static IMcpServerBuilder RegisterToolType(IMcpServerBuilder mcp, Type toolType)
         {
             if (toolType == typeof(QueryTools)) return mcp.WithTools<QueryTools>();
+            if (toolType == typeof(CrosshairQueryTools)) return mcp.WithTools<CrosshairQueryTools>();
+            if (toolType == typeof(CrosshairWriteTools)) return mcp.WithTools<CrosshairWriteTools>();
+            if (toolType == typeof(GeneralSettingsQueryTools)) return mcp.WithTools<GeneralSettingsQueryTools>();
+            if (toolType == typeof(GeneralSettingsWriteTools)) return mcp.WithTools<GeneralSettingsWriteTools>();
             if (toolType == typeof(TextQueryTools)) return mcp.WithTools<TextQueryTools>();
             if (toolType == typeof(BlockInspectionTools)) return mcp.WithTools<BlockInspectionTools>();
             if (toolType == typeof(BlockVariantTools)) return mcp.WithTools<BlockVariantTools>();

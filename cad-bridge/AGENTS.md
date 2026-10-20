@@ -46,8 +46,9 @@ Explain newly introduced command flags next to the command in plain language.
 - Profile query,modify,drawing,view: installed team.2/style-tools has 42 tools;
   the unreleased source candidate adds text tools, block inspection/variants,
   atomic entity creation, in-place vertex editing and session-approved AutoLISP
-  file execution with tracked job status: 58 tools (20 in read-only mode), checked
-  through actual MCP stdio on 2026-10-16. Verify the connected server's tools/list;
+  file execution with tracked job status, crosshair and general preferences:
+  63 tools (23 in read-only mode), checked through actual MCP stdio on 2026-10-19.
+  Verify the connected server's tools/list;
   source changes do not update an installed build.
   Older team.2/style-tools builds refuse AutoLISP. Never bypass a runtime refusal through
   C# or legacy COM.
@@ -85,6 +86,25 @@ No arbitrary hatch patterns or islands. Inspect ok and per-item results. Normal
 MCP text may contain a failure; batches may partially succeed and do not provide
 grouped Undo. Never repeat an uncertain timed-out mutation automatically.
 Never save without a request or run purge/audit as a connection check.
+
+For other application preferences use dwg_list_settings (static catalog), then
+dwg_get_settings for 1-32 needed IDs. dwg_set_settings requires the exact current
+profile and fresh typed expected_value for EVERY changed ID; use dry_run first.
+Read-only properties are intentionally restricted; never bypass those restrictions
+through registry/arbitrary code. Native readback verifies stored values, not display
+refresh or future effects. Catalog entries do not prove native availability.
+On failure inspect rollback_verified and reread; no automatic retry. Preferences
+are outside DWG/Undo; no save. See docs/AUTOCAD_SETTINGS.md. Agent work remains
+source/build/offline only; installation and enabled native checks belong to the user.
+
+For crosshair preferences use dwg_get_crosshair_settings, then
+dwg_set_crosshair_settings with the exact current profile. Size is 1–100;
+model_color_rgb and layout_color_rgb are independent [R,G,B] triples. Pass both
+to change both spaces. The candidate verifies native readback; it does not
+automate Options or modify the drawing. Preferences persist outside DWG/Undo;
+on failure inspect rollback_verified and reread before any retry. Close Options
+and finish active commands first. See docs/CROSSHAIR_SETTINGS.md; tools must be
+present in the installed runtime before use.
 
 For text work on the updated candidate, read dwg_list_text_styles and the needed
 entity properties, then prefer dwg_create_text/dwg_create_mtext with an existing text_style,

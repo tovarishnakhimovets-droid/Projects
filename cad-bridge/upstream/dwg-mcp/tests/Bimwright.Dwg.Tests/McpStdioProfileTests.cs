@@ -17,11 +17,11 @@ namespace Bimwright.Dwg.Tests
         // Exercise the built entry point and real SDK registration/stdio handshake.
         // Only initialize and tools/list are sent: these tests never call a CAD tool.
         [Theory]
-        [InlineData("query,modify,drawing,view", false, 58)]
-        [InlineData("query,modify,drawing,view,annotation", false, 60)]
-        [InlineData("query,modify,drawing,view", true, 20)]
-        [InlineData("query", false, 13)]
-        [InlineData("modify", false, 32)]
+        [InlineData("query,modify,drawing,view", false, 63)]
+        [InlineData("query,modify,drawing,view,annotation", false, 65)]
+        [InlineData("query,modify,drawing,view", true, 23)]
+        [InlineData("query", false, 16)]
+        [InlineData("modify", false, 34)]
         [InlineData("drawing", false, 7)]
         [InlineData("annotation", false, 4)]
         [InlineData("drawing,annotation", false, 9)]
@@ -70,6 +70,11 @@ namespace Bimwright.Dwg.Tests
             Assert.DoesNotContain("dwg_list_baked_tools", names);
 
             var enabled = profile.Split(',').ToHashSet(StringComparer.Ordinal);
+            Assert.Equal(enabled.Contains("query"), names.Contains("dwg_get_crosshair_settings", StringComparer.Ordinal));
+            Assert.Equal(!readOnly && enabled.Contains("modify"), names.Contains("dwg_set_crosshair_settings", StringComparer.Ordinal));
+            Assert.Equal(enabled.Contains("query"), names.Contains("dwg_list_settings", StringComparer.Ordinal));
+            Assert.Equal(enabled.Contains("query"), names.Contains("dwg_get_settings", StringComparer.Ordinal));
+            Assert.Equal(!readOnly && enabled.Contains("modify"), names.Contains("dwg_set_settings", StringComparer.Ordinal));
             bool hasLisp = !readOnly && (enabled.Contains("modify") || enabled.Contains("meta") || enabled.Contains("code"));
             Assert.Equal(hasLisp, names.Contains("dwg_run_lisp", StringComparer.Ordinal));
             Assert.Equal(enabled.Contains("query"), names.Contains("dwg_get_lisp_status", StringComparer.Ordinal));
@@ -123,7 +128,7 @@ namespace Bimwright.Dwg.Tests
             if (readOnly)
                 foreach (string mutation in new[] { "dwg_create_entities", "dwg_edit_polyline_vertices",
                     "dwg_create_text", "dwg_create_mtext", "dwg_set_text_style", "dwg_match_properties",
-                    "dwg_create_block_variant", "dwg_update_block_angles", "dwg_set_system_variable", "dwg_run_lisp" })
+                    "dwg_create_block_variant", "dwg_update_block_angles", "dwg_set_system_variable", "dwg_run_lisp", "dwg_set_crosshair_settings", "dwg_set_settings" })
                     Assert.DoesNotContain(mutation, names);
         }
 
