@@ -19,7 +19,7 @@ foreach ($file in @('INSTALL-RU.md', 'setup-codex.ps1')) {
 $canonicalInstructions = Join-Path $root 'AGENTS.md'
 if (-not (Test-Path -LiteralPath $canonicalInstructions -PathType Leaf)) { throw 'Missing canonical bridge AGENTS.md.' }
 $runtimeDocNames = @('TEAM_SETUP.md', 'IMPORT_MANIFEST.json', 'CAD_WORKFLOW.md',
-    'STYLE_TOOLS.md', 'TEXT_TOOLS.md', 'BLOCK_INSPECTION.md', 'BLOCK_VARIANTS.md', 'EOM_TOOLS.md')
+    'STYLE_TOOLS.md', 'TEXT_TOOLS.md', 'BLOCK_INSPECTION.md', 'BLOCK_VARIANTS.md', 'EOM_TOOLS.md', 'CROSSHAIR_SETTINGS.md', 'AUTOCAD_SETTINGS.md')
 $runtimeDocPaths = @($runtimeDocNames | ForEach-Object {
     $docPath = Join-Path $root "docs\$_"
     if (-not (Test-Path -LiteralPath $docPath -PathType Leaf)) { throw "Missing runtime documentation: $_" }
