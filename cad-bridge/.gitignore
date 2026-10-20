@@ -1,0 +1,6 @@
+# Share this Codex skill; keep other local agent settings ignored.
+!/.agents/
+/.agents/*
+!/.agents/skills/
+/.agents/skills/*
+!/.agents/skills/count-fbs-profile/
