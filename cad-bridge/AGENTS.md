@@ -77,6 +77,15 @@ Undo. Never automatically retry an uncertain timed-out mutation: read state firs
 Never save without a request, or use purge/audit as a connection check.
 Routine drawing work needs no scratch DWGs, regression runs or extra logs.
 
+Application preferences use dwg_list_settings/dwg_get_settings and guarded
+setters with exact current profile and fresh expected values; dry_run first.
+Crosshair model/layout RGB are independent. Preferences are outside DWG/Undo;
+inspect rollback_verified and reread after failures, never retry automatically.
+Catalog entries and readback do not prove native availability or visible effects.
+Do not bypass read-only restrictions through registry/arbitrary code. Finish
+commands and close Options first. Full contracts are in docs/TOOLS.md, sections
+«Общие настройки AutoCAD» and «Настройки перекрестия»; verify runtime tools/list.
+
 Missing general operations belong in bounded typed tools after inspecting
 upstream and official Autodesk APIs/examples. A synchronous trusted C# prototype
 is not a completed tool; guard the active document, finish inside the transaction,

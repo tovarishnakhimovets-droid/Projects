@@ -484,6 +484,23 @@ namespace Bimwright.Dwg.Plugin
 
         public static readonly CommandSchema GetVariables = CommandSchema.Empty;
 
+        public static readonly CommandSchema GetCrosshairSettings = CommandSchema.Empty;
+
+        public static readonly CommandSchema GetSettings = CommandSchema.Object(
+            SchemaProperty.Required("ids", JTokenType.Array));
+
+        public static readonly CommandSchema SetSettings = CommandSchema.Object(
+            SchemaProperty.RequiredNonEmptyString("expected_profile"),
+            SchemaProperty.Required("changes", JTokenType.Array),
+            SchemaProperty.Optional("dry_run", JTokenType.Boolean));
+
+        public static readonly CommandSchema SetCrosshairSettings = CommandSchema.Object(
+            SchemaProperty.RequiredNonEmptyString("expected_profile"),
+            SchemaProperty.Optional("crosshair_size", JTokenType.Integer),
+            SchemaProperty.Optional("model_color_rgb", JTokenType.Array),
+            SchemaProperty.Optional("layout_color_rgb", JTokenType.Array),
+            SchemaProperty.Optional("dry_run", JTokenType.Boolean));
+
         public static readonly CommandSchema SetSystemVariable = CommandSchema.Object(
             SchemaProperty.Required("name", JTokenType.String),
             SchemaProperty.Required("value", JTokenType.String, JTokenType.Integer, JTokenType.Float, JTokenType.Boolean));
