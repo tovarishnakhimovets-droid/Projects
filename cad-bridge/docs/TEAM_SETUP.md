@@ -4,58 +4,89 @@
 исходников и постоянная ветка. Общий принятый код — `develop`.
 **Git обновляет исходники; установщик обновляет работающий мост.**
 
-Команды — для Windows PowerShell. Выполняй по порядку; при ошибке остановись
-и покажи вывод Codex. В новом окне сначала задай свои значения:
-
-```powershell
-$repo = 'D:\CAD-Automation\team\Projects'
-$branch = 'andrew'
-$setup = '\\NAS\CAD\2.0.1-team.4-rc.1'
-```
-
-`$repo` — локальная папка исходников, `$branch` — твоя ветка (`andrew`, `artem`
-или согласованное имя). `$setup` — **пример** пути: замени на настоящую общую
-папку нужного установщика, внутри которой лежит `install.ps1`.
-Год в командах ниже — 2027; для AutoCAD 2026 замени его в обеих командах настройки.
+Команды — для обычного Windows PowerShell **без запуска от администратора**.
+Исходники у всех находятся в `D:\CAD-Automation\team\Projects`.
+В примерах `ivan` — личная ветка сотрудника: замени на согласованное имя.
+Год — 2027; для AutoCAD 2026 замени его в командах установки и настройки.
+Выполняй шаги по порядку; при ошибке остановись и покажи вывод Codex.
 
 ## 1. Подключение новой машины — один раз
 
-**1. Доступ и программы.** Создать сотруднику собственный GitHub-аккаунт.
-Андрей добавляет его в репозитории **Settings → Collaborators → Add people**;
-сотрудник принимает приглашение. Чужие SSH-ключи в свой профиль не добавляем.
+**1. Программы и доступ.** Установить [Git for Windows](https://git-scm.com/install/windows),
+локальный Codex, AutoCAD/Civil 3D и [.NET SDK 8 и 10](https://dotnet.microsoft.com/en-us/download).
+После установки Git открыть новое окно PowerShell.
 
-Установить [Git for Windows](https://git-scm.com/install/windows) с Git Credential
-Manager, локальный Codex и AutoCAD/Civil 3D. Для доработок — [.NET SDK 8 и 10](https://dotnet.microsoft.com/en-us/download).
-Открыть новое окно PowerShell. При первом запросе Git войти в браузере
-**собственным** GitHub-аккаунтом; для этого варианта SSH настраивать не нужно.
+Сотрудник создаёт **свой GitHub-аккаунт** и сообщает Андрею логин.
+Андрей открывает репозиторий **Projects → Settings → Collaborators → Add people**
+и приглашает этот логин; сотрудник принимает приглашение.
+Это даёт право отправлять изменения в общий репозиторий.
+[Порядок приглашения на GitHub](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/repository-access-and-collaboration/inviting-collaborators-to-a-personal-repository).
 
-**2. Получить исходники и завести личную ветку.** Значения имени/почты заменить своими:
+**2. Создать SSH-ключ и привязать к своему аккаунту.** Почту заменить своей.
+Если `id_ed25519` уже есть в папке `.ssh` своего профиля, генерацию пропустить;
+существующий ключ не перезаписывать.
 
 ```powershell
-git config --global user.name 'Имя Фамилия'
-git config --global user.email 'your-email@example.com'
-git clone --branch develop https://github.com/tovarishnakhimovets-droid/Projects.git $repo
-Set-Location $repo
-git switch -c $branch
-git push -u origin $branch
+ssh-keygen -t ed25519 -C "your-email@example.com"
 ```
 
-`--global` сохраняет подпись автора на этом компьютере; `clone --branch develop`
-скачивает исходники и выбирает `develop`. `Set-Location` переходит в папку;
+`-t ed25519` выбирает тип ключа, `-C` добавляет подпись с почтой.
+На вопрос о файле нажать Enter — оставить стандартный путь; затем задать
+и повторить пароль ключа. Он вводится при запросах SSH.
+[Создание ключа по инструкции GitHub](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent).
+
+```powershell
+Get-Content ~\.ssh\id_ed25519.pub
+```
+
+`~` — папка своего профиля. Скопировать **всю выведенную публичную строку**.
+В **своём профиле GitHub** открыть **Settings → SSH and GPG keys → New SSH key**,
+тип **Authentication Key**, вставить строку и сохранить. Файл без `.pub` —
+закрытый ключ: его не отправляем и в GitHub не вставляем.
+[Инструкция GitHub](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/adding-a-new-ssh-key-to-your-github-account).
+
+```powershell
+ssh -T git@github.com
+```
+
+`-T` проверяет вход без открытия терминала на GitHub. При первом подключении
+сверить отпечаток с [официальной инструкцией](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/testing-your-ssh-connection)
+и ответить полностью `yes`. Успех — `Hi свой-логин! You've successfully authenticated...`.
+Код возврата 1 у этой проверки нормален. SSH-ключ добавляется в профиль сотрудника;
+доступ к Projects выдаётся отдельно через приглашение из шага 1.
+
+**3. Получить исходники и завести личную ветку.** Имя, почту и `ivan` заменить своими:
+
+```powershell
+git clone --branch develop git@github.com:tovarishnakhimovets-droid/Projects.git 'D:\CAD-Automation\team\Projects'
+Set-Location 'D:\CAD-Automation\team\Projects'
+git config user.name 'Имя Фамилия'
+git config user.email 'your-email@example.com'
+git switch -c ivan
+git push -u origin ivan
+```
+
+`clone --branch develop` скачивает исходники и выбирает `develop`.
+`Set-Location` переходит в папку; `config user.name/user.email` задаёт автора
+коммитов в этой копии репозитория;
 `switch -c` создаёт ветку; `push -u` публикует её и связывает с одноимённой веткой
 на GitHub. Это делается один раз. Если личная ветка уже есть на GitHub,
-вместо последних двух команд выполни `git switch $branch`.
+вместо последних двух команд выполни `git switch ivan`.
 
-**3. Установить мост из общей папки.** Сохранить работу и закрыть AutoCAD/Civil 3D и Codex.
-ZIP на компьютер копировать и распаковывать не требуется:
+**4. Установить мост из общей папки.** Сохранить работу и закрыть AutoCAD/Civil 3D и Codex.
+В Проводнике открыть общую папку установщика, где видны `install.ps1`
+и `setup-codex.ps1`. Нажать правой кнопкой по свободному месту → **Открыть в терминале**;
+использовать PowerShell. Обе команды ниже выполнить **из этой папки**.
+Отдельно переходить на `Z:` не требуется; ZIP на компьютер копировать тоже не нужно.
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$setup\install.ps1" -Years 2027 -Client none
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$setup\setup-codex.ps1" -AcadYear 2027 -BridgeSourceRoot "$repo\cad-bridge"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -Years 2027 -Client none
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\setup-codex.ps1 -AcadYear 2027 -BridgeSourceRoot 'D:\CAD-Automation\team\Projects\cad-bridge'
 ```
 
-`-NoProfile` запускает PowerShell без личных настроек; `-ExecutionPolicy Bypass`
-разрешает скрипт только в этом процессе; `-File` задаёт запускаемый файл.
+`.\` означает файл в текущей папке. `-NoProfile` запускает PowerShell без личных
+настроек; `-ExecutionPolicy Bypass` разрешает скрипт только в этом процессе;
+`-File` задаёт запускаемый файл.
 `-Years` выбирает плагин; `-Client none` оставляет настройку Codex второй команде.
 В ней `-AcadYear` выбирает подключение, а `-BridgeSourceRoot` сообщает Codex,
 где лежат местные исходники и общие правила доработки.
@@ -64,8 +95,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$setup\setup-codex.ps1"
 настроек и путь к `config.toml`. В настройках Codex добавь или замени только
 этот блок `dwg-2027` вместе с его `.env`, затем перезапусти Codex.
 
-**4. Проверить.** Запустить AutoCAD обычным способом, создать или открыть чертёж,
-затем открыть в Codex локальный проект `$repo` и попросить:
+**5. Проверить.** Запустить AutoCAD обычным способом, создать или открыть чертёж,
+затем открыть в Codex папку `D:\CAD-Automation\team\Projects` и попросить:
 «Проверь dwg-2027: получи сведения об активном чертеже, ничего не меняй и не сохраняй».
 Ожидается успешный ответ со сведениями именно об этом чертеже.
 Для 2026 в запросе использовать `dwg-2026`.
@@ -76,22 +107,19 @@ VS Code открытым при обычной работе не требует�
 
 ## 2. Доработка → коммит → push → принятие в develop
 
-**1. Перед задачей Codex сам обновляет исходники.** Один раз до первых правок:
-проверяет чистоту папки и личную ветку, затем выполняет две команды:
+**1. Открыть свою папку в терминале и проверить ветку:**
 
 ```powershell
-git pull --ff-only
-git pull --ff-only origin develop
+Set-Location 'D:\CAD-Automation\team\Projects'
+git status --short --branch
 ```
 
-Первая получает изменения личной ветки, вторая — общий код `develop` в неё же.
-`--ff-only` разрешает только обновление без нового merge-коммита; личная ветка
-и её привязка сохраняются. `origin develop` явно выбирает общую ветку на GitHub.
-При незакоммиченных файлах (включая новые), неверной ветке или ошибке обновления
-Codex останавливается перед правками и сообщает причину. Ничего не прячет и не удаляет.
-Если истории разошлись, человек разбирает с Codex, какая ветка требует слияния,
-и выполняет обычный merge. Для расхождения с develop это `git merge origin/develop`.
-Проверить и зафиксировать объединение нужно до правок. В середине задачи автопул не запускается.
+`--short --branch` показывает краткий статус и ветку. Должна быть своя личная
+ветка (`ivan`, `andrew` и т.п.). Codex перед первыми правками сам обновляет
+личную ветку и локальную `develop` по правилам `cad-bridge/AGENTS.md`.
+При незакоммиченных файлах или расхождении истории остановится и объяснит причину.
+Если нужно слияние — человек выполняет согласованный с Codex merge, проверяет
+и фиксирует результат. В середине работы автообновление не запускается.
 
 **2. Сделать доработку с Codex.** Передать задачу и указать прочитать
 `cad-bridge/AGENTS.md`. Codex меняет код, проводит нужные offline-проверки
@@ -118,7 +146,7 @@ git push
 перед следующей задачей повторяем пункт 1. Если общий код успел измениться,
 сначала включаем его в свою ветку и проверяем объединённый результат.
 
-Коммиты, push и обычный merge делает человек; автоматизирован только fast-forward pull.
+Коммиты, push и обычный merge делает человек; автоматизировано только fast-forward обновление.
 Новые инструменты появятся в работающем
 MCP после выпуска и установки пакета из следующего раздела.
 
@@ -128,14 +156,14 @@ MCP после выпуска и установки пакета из следу
 быть незакоммиченных файлов:
 
 ```powershell
-Set-Location $repo
+Set-Location 'D:\CAD-Automation\team\Projects'
 git status --short --branch
 git switch develop
 git pull --ff-only origin develop
 ```
 
-`--short --branch` показывает краткий статус и ветку;
-`origin develop` явно указывает получить командную ветку с GitHub.
+`--ff-only` разрешает обновление только вперёд по истории, без нового merge-коммита;
+при расхождении команда остановится. `origin develop` выбирает общую ветку на GitHub.
 Попросить Codex проверить готовность выпуска: нужные offline-тесты, поддержку
 обоих годов и незавершённые пункты в `WORK_STATUS.md`. Уже успешные проверки
 того же кода не повторяем без причины. Для одной правки документации новый
@@ -146,7 +174,7 @@ git pull --ff-only origin develop
 для ссылок при сборке плагина. Можно поручить саму сборку Codex:
 
 ```powershell
-Set-Location "$repo\cad-bridge"
+Set-Location 'D:\CAD-Automation\team\Projects\cad-bridge'
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\package-team-dwg.ps1 -Version 2.0.1-team.4
 ```
 
@@ -160,10 +188,11 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\package-team-dwg
 
 **4. Сначала обновить свой компьютер и проверить обычный запуск и чтение MCP.**
 Затем сообщить коллегам путь к проверенной папке. На **каждой** машине закрыть
-AutoCAD/Civil 3D и Codex, указать новый `$setup` и выполнить:
+AutoCAD/Civil 3D и Codex. Через Проводник открыть терминал **в папке нового
+установщика**, как в шаге 4 раздела 1, и выполнить:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$setup\install.ps1" -Years 2027 -Client none
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -Years 2027 -Client none
 ```
 
 Для 2026 указать `-Years 2026`. Настройку `setup-codex.ps1` повторять не нужно,
@@ -176,7 +205,6 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$setup\install.ps1" -Ye
 После сборки вернуться к своей ветке:
 
 ```powershell
-Set-Location $repo
-git switch $branch
-git merge develop
+Set-Location 'D:\CAD-Automation\team\Projects'
+git switch andrew
 ```

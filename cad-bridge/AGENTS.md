@@ -25,7 +25,7 @@ reason to create a replacement. The setup/development/release sequence is solely
 docs/TEAM_SETUP.md.
 
 The user owns Git setup, branches, staging, commits, pushes and merges unless
-that specific step is explicitly delegated. Automatic fast-forward pulls below
+that specific step is explicitly delegated. Automatic fast-forward updates below
 are explicitly authorized; ordinary merges remain with the user. Each person uses a permanent branch;
 PRs target develop. The agent prepares changes, builds and offline-tests. The user
 performs AutoCAD UI actions and explicitly enabled live tests. Do not authorize
@@ -35,20 +35,26 @@ chat's changes or switch its shared checkout underneath it.
 
 ## Before repository edits
 
-Once before starting a new editing task, inspect Git status, the current branch,
-its upstream and any unfinished Git operation. Only on the confirmed personal
-branch, with matching origin/<branch> upstream, no staged, unstaged or untracked
-changes reported by Git, and no overlapping chat edits, automatically run in order:
-`git pull --ff-only`, then `git pull --ff-only origin develop`.
-The first updates the personal branch; the second includes freshly fetched shared
-develop without switching branches or changing the personal upstream. --ff-only
-allows fast-forward updates and creates no merge commit.
+Once before starting a new editing task, inspect Git status, branches, upstreams,
+worktrees and any unfinished Git operation. Require the confirmed personal branch
+with matching origin/<branch> upstream, no staged, unstaged or untracked changes,
+and no overlapping chat edits. Local develop must exist, track origin/develop and
+not be checked out in another worktree. Then automatically run in order:
+`git pull --ff-only`, `git pull --ff-only origin develop`, then
+`git fetch origin refs/heads/develop:refs/heads/develop`.
+The pulls update the personal branch and include shared develop; --ff-only allows
+only fast-forward updates without a merge commit. The fetch advances local develop
+without switching branches or changing the personal upstream: left of the colon
+is the remote branch, right is the local branch. Never add + or force options.
+Finally require `git merge-base --is-ancestor develop HEAD` to succeed: local
+develop must be included in the personal branch even if GitHub changed between
+requests. This command only checks ancestry; it does not merge.
 
-If prerequisites fail or either command fails, stop before new edits and explain
+If prerequisites or any command/check fail, stop before new edits and explain
 the exact condition. Preserve existing work; never auto-stash, rebase, reset,
 force, switch branches or perform an ordinary merge. Do not pull mid-task or for
-read-only/drawing-only work. Report successful updates even if the second pull
-fails; do not roll them back. After updates, reread the applicable instructions
+read-only/drawing-only work. Report completed updates if a later step fails;
+do not roll them back. After updates, reread the applicable instructions
 and work log. Commit, push and conflict resolution remain human-controlled.
 
 ## Hosts and CAD operations
