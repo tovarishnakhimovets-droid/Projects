@@ -4,12 +4,30 @@ using System.Threading.Tasks;
 using ModelContextProtocol.Server;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Bimwright.Dwg.Plugin.Cad;
 
 namespace Bimwright.Dwg.Server.Tools
 {
     [McpServerToolType]
     public class QueryTools
     {
+        [McpServerTool(Name = "dwg_get_selection", ReadOnly = true, Idempotent = true), Description(
+            "Read the current AutoCAD pickfirst selection of any entity types without changing it. " +
+            "Use first when the user refers to selected/highlighted objects. Returns drawing identity, " +
+            "selected/returned counts, handles, per-entity properties/errors and completeness. " +
+            "Default cheap identification omits geometry. Empty or disabled pickfirst is reported; " +
+            "never replaced with all objects. Blocks stay selected block references, without expansion. " +
+            "If incomplete/truncated, do not treat the returned subset as the whole selection.")]
+        public static Task<string> GetSelection(
+            [Description("Maximum returned objects: 1-500; default 100.")] int max_entities = 100,
+            [Description("Include existing detailed entity geometry/properties; default false for cheap identification.")] bool include_geometry = false)
+        {
+            var request = new JObject { ["max_entities"] = max_entities, ["include_geometry"] = include_geometry };
+            if (!SelectionReadInput.TryParse(request, out _, out var error))
+                return Task.FromResult(JsonConvert.SerializeObject(new { ok = false, error }));
+            return ToolGateway.LoggedCall("get_selection", request, request);
+        }
+
         [McpServerTool(Name = "dwg_get_drawing_info", ReadOnly = true, Idempotent = true), Description(
             "Return small JSON-safe metadata for the current AutoCAD drawing: " +
             "drawing name when available, current layer, current space/layout, " +
@@ -112,10 +130,9 @@ namespace Bimwright.Dwg.Server.Tools
         [McpServerTool(Name = "dwg_get_selected_texts", ReadOnly = true, Idempotent = true), Description(
             "Read and cluster text entities currently selected in AutoCAD. " +
             "Returns pre-clustered groups with combined text in reading order. " +
-            "Each cluster has id, text, entity_count, in_block (bool) and " +
-            "rewrite_mode (one of: update, collapse, rewrite_in_block) - the " +
-            "mode that dwg_translate_and_rewrite will apply if given a translation " +
-            "for this cluster. Use this BEFORE dwg_translate_and_rewrite. The user " +
+            "Each cluster has id, text, entity_count and in_block. No writeback state " +
+            "is retained. includeEntities adds owner/handles, raw text, WCS/local " +
+            "positions/heights and bounds with availability. The user " +
             "must select entities in AutoCAD BEFORE calling this tool.")]
         public static Task<string> GetSelectedTexts(
             [Description("Optional grouping strength: weak, normal, or strong. Use weak when an image/layout reference indicates nearby labels should stay separate.")] string groupingStrength = "normal",

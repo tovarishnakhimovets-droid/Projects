@@ -65,7 +65,7 @@ $begin
 For AutoCAD drawing tasks, read "$instructions" before using CAD tools.
 Use the local $mcpName MCP with query,modify,drawing,view, target $AcadYear.
 Keep drawing conventions in the drawing project's instructions. Never save without a request.
-Reusable missing operations belong in typed bridge tools; a custom scenario is a prototype.
+Choose MCP, AutoLISP or existing tools using CAD_WORKFLOW.md; keep a single implementation.
 "@
 if ($BridgeSourceRoot) {
     $block += "`r`nFor bridge development read $BridgeSourceRoot\AGENTS.md, docs\CAD_WORKFLOW.md and WORK_STATUS.md. Check current changes and preserve other chats' work. The agent builds/offline-tests; the user performs AutoCAD UI actions and explicitly enabled live tests."

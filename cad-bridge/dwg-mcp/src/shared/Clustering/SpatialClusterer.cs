@@ -11,14 +11,39 @@ namespace Bimwright.Dwg.Plugin
         public string Text { get; set; }
         public double X { get; set; }
         public double Y { get; set; }
+        public double Z { get; set; }
         public double Height { get; set; }
+        public double LocalX { get; set; }
+        public double LocalY { get; set; }
+        public double LocalZ { get; set; }
+        public double LocalHeight { get; set; }
+        public string OwnerHandle { get; set; }
         public string Layer { get; set; }
         public string BlockHandle { get; set; }  // null = top-level
         public double BoundsMinX { get; set; }
         public double BoundsMaxX { get; set; }
         public double BoundsMinY { get; set; }
         public double BoundsMaxY { get; set; }
-        public double BlockScale { get; set; } = 1.0;  // uniform scale of containing block reference (1.0 if top-level)
+        public bool BoundsAvailable { get; set; }
+        public double BlockScale { get; set; } = 1.0;  // Y-axis scale estimate, not a complete block transform
+    }
+
+    // A result of one selection read, never retained as mutable writeback state.
+    public sealed class ClusterState
+    {
+        public int Id { get; set; }
+        public string AnchorHandle { get; set; }
+        public List<EntityRecord> Entities { get; set; } = new List<EntityRecord>();
+        public List<string> AllHandles { get; set; }
+        public List<string> DeleteHandles { get; set; }
+        public string CombinedText { get; set; }
+        public bool InBlock { get; set; }
+        public double MtextWidth { get; set; }
+        public double MtextHeight { get; set; }
+        public double MedianHeight { get; set; }
+        public string Layer { get; set; }
+        public bool CanPromoteSingleToMText { get; set; }
+        public double BlockScale { get; set; } = 1.0;
     }
 
     public sealed class ClusterOptions

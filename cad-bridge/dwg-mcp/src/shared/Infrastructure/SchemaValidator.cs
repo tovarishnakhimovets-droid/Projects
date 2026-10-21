@@ -281,7 +281,10 @@ namespace Bimwright.Dwg.Plugin
             SchemaProperty.Required("points", JTokenType.Array),
             SchemaProperty.Optional("text", JTokenType.String),
             SchemaProperty.Optional("layer", JTokenType.String),
-            SchemaProperty.Optional("color_index", JTokenType.Integer));
+            SchemaProperty.Optional("color_index", JTokenType.Integer),
+            SchemaProperty.Optional("height", JTokenType.Float, JTokenType.Integer),
+            SchemaProperty.Optional("arrow_size", JTokenType.Float, JTokenType.Integer),
+            SchemaProperty.Optional("text_style", JTokenType.String));
 
         public static readonly CommandSchema CreateTable = CommandSchema.Object(
             SchemaProperty.Required("insertion_point", JTokenType.Object),
@@ -355,6 +358,10 @@ namespace Bimwright.Dwg.Plugin
             SchemaProperty.Optional("grouping_strength", JTokenType.String),
             SchemaProperty.Optional("include_entities", JTokenType.Boolean));
 
+        public static readonly CommandSchema GetSelection = CommandSchema.Object(
+            SchemaProperty.Optional("max_entities", JTokenType.Integer),
+            SchemaProperty.Optional("include_geometry", JTokenType.Boolean));
+
         public static readonly CommandSchema ListBlocks = CommandSchema.Empty;
 
         public static readonly CommandSchema GetBlockAttributes = CommandSchema.Object(
@@ -404,8 +411,7 @@ namespace Bimwright.Dwg.Plugin
             SchemaProperty.Optional("style_name", JTokenType.String));
 
         public static readonly CommandSchema UpdateTexts = CommandSchema.Object(
-            SchemaProperty.Required("items", JTokenType.Array),
-            SchemaProperty.Optional("apply_unicode_style", JTokenType.Boolean)).WithArrayRoot();
+            SchemaProperty.Required("items", JTokenType.Array)).WithArrayRoot();
 
         public static readonly CommandSchema SendCode = CommandSchema.Object(
             SchemaProperty.Required("code", JTokenType.String));
@@ -422,17 +428,10 @@ namespace Bimwright.Dwg.Plugin
         public static readonly CommandSchema GetLispStatus = CommandSchema.Object(
             SchemaProperty.Optional("job_id", JTokenType.String));
 
-        public static readonly CommandSchema ApplyUnicodeStyle = CommandSchema.Object(
-            SchemaProperty.Optional("handles", JTokenType.Array));
-
         public static readonly CommandSchema CollapseAndRewrite = CommandSchema.Object(
-            SchemaProperty.Required("clusters", JTokenType.Array),
-            SchemaProperty.Optional("apply_unicode_style", JTokenType.Boolean),
-            SchemaProperty.Optional("final_scale", JTokenType.Float, JTokenType.Integer));
-
-        public static readonly CommandSchema TranslateAndRewrite = CommandSchema.Object(
-            SchemaProperty.Optional("translations", JTokenType.Array),
-            SchemaProperty.Optional("final_scale", JTokenType.Float, JTokenType.Integer));
+            SchemaProperty.RequiredNonEmptyString("expected_document"),
+            SchemaProperty.RequiredNonEmptyString("expected_fingerprint"),
+            SchemaProperty.Required("clusters", JTokenType.Array));
 
         public static readonly CommandSchema BatchExecute = CommandSchema.Object(
             SchemaProperty.Required("commands", JTokenType.Array));

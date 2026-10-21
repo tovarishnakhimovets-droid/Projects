@@ -40,10 +40,4 @@
     <FrameworkReference Include="Microsoft.WindowsDesktop.App" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Content Include="..\shared\assets\fonts\OpenSans-CondensedLight.ttf">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <TargetPath>Fonts\OpenSans-CondensedLight.ttf</TargetPath>
-    </Content>
-  </ItemGroup>
 </Project>

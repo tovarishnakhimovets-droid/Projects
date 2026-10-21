@@ -69,8 +69,13 @@ and work log. Commit, push and conflict resolution remain human-controlled.
   do not prove installed capabilities. Standard team toolsets: query,modify,drawing,view.
 
 Before drawing edits read dwg_get_drawing_info and only the necessary objects.
-Prefer the current selection when requested; do not substitute unrelated objects
-for an empty selection or an unavailable reader. Coordinates use drawing units.
+When the user refers to selected/highlighted objects, first call dwg_get_selection
+with include_geometry=false. Use its fresh handles for further reading/writing.
+Report empty/disabled/unavailable selection; do not substitute all objects, a search
+or an earlier selection. A truncated or incomplete response describes only a subset;
+never present its type counts as the entire selection. dwg_get_selected_texts is
+for text extraction/grouping, not identification of arbitrary selected objects.
+Coordinates use drawing units.
 Fresh full DWG path/fingerprint and object expectations are required by guarded
 write tools. An unsaved DWG is not its DWT template. Existing old runtimes may
 misreport has_saved_path; do not infer a saved DWG from that field alone.
@@ -92,10 +97,18 @@ Do not bypass read-only restrictions through registry/arbitrary code. Finish
 commands and close Options first. Full contracts are in docs/TOOLS.md, sections
 «Общие настройки AutoCAD» and «Настройки перекрестия»; verify runtime tools/list.
 
-Missing general operations belong in bounded typed tools after inspecting
-upstream and official Autodesk APIs/examples. A synchronous trusted C# prototype
+Before adding code, follow docs/CAD_WORKFLOW.md, section «Выбор способа доработки»:
+reuse existing tools/instructions, add a bounded typed CAD operation, or create
+a standalone AutoLISP command. Reuse alone does not require converting LISP
+to MCP; keep one implementation. Inspect upstream and official Autodesk APIs/examples
+when extending the bridge. A synchronous trusted C# prototype
 is not a completed tool; guard the active document, finish inside the transaction,
 and do not move CAD API calls to worker threads. Respect runtime refusals.
+Shared standalone AutoLISP source is lisp/ in the local cad-bridge checkout.
+Before creating or editing it, read docs/CAD_WORKFLOW.md, section
+«Создание и обновление AutoLISP». Share changes through Git and run the local
+checkout file; do not maintain NAS or installed-runtime copies. LISP-only changes
+need no server/plugin rebuild or installer update.
 Unique local prototypes remain D:\CAD-Automation\scripts and D:\CAD-Automation\lisp;
 never load sandbox.lsp as a connection test.
 

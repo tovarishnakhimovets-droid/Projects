@@ -1,559 +1,318 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
-using System.Linq;
+using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
+using Bimwright.Dwg.Plugin.Cad;
+using Bimwright.Dwg.Plugin.Drawing;
+using Bimwright.Dwg.Plugin.Handlers;
 
 namespace Bimwright.Dwg.Plugin.Rewriting
 {
-    /// <summary>
-    /// AutoCAD-side executor for <see cref="RewriteRequest"/>. Each call opens
-    /// its own transaction so callers processing multiple requests see
-    /// per-request isolation.
-    /// </summary>
+    // Each cluster owns its transaction. No layout, style, layer or scale policy is applied.
     internal static class RewriteExecutor
     {
-        public static RewriteResult Execute(Database db, RewriteRequest req, ObjectId unicodeStyleId)
+        public static RewriteResult Execute(Document doc, CollapseAndRewriteInput input, RewriteRequest request)
         {
             try
             {
-                string targetLayer = req.ApplyUnicodeStyle
-                    ? McpLayerService.EnsureWhiteLayer(db)
-                    : null;
-
+                Require(DocumentGuard.Validate(doc, input.ExpectedDocument, input.ExpectedFingerprint));
+                Require(LineweightTargetPreflight.TryCheckDrawing(doc, out var error), error);
+                var db = doc.Database;
                 using (var tx = db.TransactionManager.StartTransaction())
                 {
-                    if (!TryGetObjectId(db, req.AnchorHandle, out var anchorId))
+                    var sources = new List<Entity> { ReadTarget(db, tx, request.AnchorHandle, request.CreatesMText) };
+                    foreach (var handle in request.DeleteHandles) sources.Add(ReadTarget(db, tx, handle, true));
+                    var anchor = sources[0];
+                    var directOwner = tx.GetObject(anchor.OwnerId, OpenMode.ForRead);
+                    var owner = OwningRecord(tx, anchor);
+                    if (request.CreatesMText)
                     {
-                        tx.Abort();
-                        return Fail(req, "anchor handle not found");
+                        Require(directOwner is BlockTableRecord, "merge anchor must belong directly to a block record");
+                        foreach (var source in sources)
+                            Require(source.OwnerId == anchor.OwnerId, "all merge sources must have the same owner");
                     }
-
-                    var deleteIds = new List<ObjectId>();
-                    foreach (var h in req.DeleteHandles)
+                    var geometry = ReadGeometry(anchor, request.CreatesMText);
+                    var originalLayerId = anchor.LayerId;
+                    if (request.CreatesMText)
                     {
-                        if (!TryGetObjectId(db, h, out var did))
+                        foreach (var source in sources)
                         {
-                            tx.Abort();
-                            return Fail(req, $"delete handle not found: {h}");
+                            var sourceGeometry = ReadGeometry(source, true);
+                            Require(SameVector(sourceGeometry.Normal.GetNormal(), geometry.Normal.GetNormal()) &&
+                                SameVector(sourceGeometry.Direction.GetNormal(), geometry.Direction.GetNormal()),
+                                "merge sources must share the anchor normal and reading direction");
+                            Require(Math.Abs((sourceGeometry.Location - geometry.Location).DotProduct(geometry.Normal.GetNormal())) <= 1e-8,
+                                "merge sources must lie in the anchor plane");
                         }
-
-                        deleteIds.Add(did);
                     }
-
-                    double effectiveHeight = req.MedianHeight
-                        ?? ComputeMedianHeight(tx, anchorId, deleteIds);
-                    if (effectiveHeight <= 0)
+                    double height = request.TextHeight ?? geometry.Height;
+                    double width = request.MtextWidth ?? (request.CreatesMText
+                        ? MergeWidth(sources, geometry) : geometry.Width);
+                    Require(Finite(height) && height > 0 && Finite(width) && width >= 0, "text height or width is invalid");
+                    if (!request.CreatesMText && anchor is DBText)
                     {
-                        effectiveHeight = 2.5;
+                        Require(!request.MtextWidth.HasValue, "mtext_width requires MText, MLeader text or conversion to MText");
+                        Require(request.NewText.IndexOfAny(new[] { '\r', '\n' }) < 0 && !request.NewText.Contains("\\P"),
+                            "DBText and single-line attributes require single-line new_text; request conversion for multiline text");
                     }
-
-                    string newHandle;
-                    int deletedCount;
-
-                    switch (req.Action)
+                    // Every target, owner, layer, style and geometry is checked ForRead before any write-open.
+                    Require(DocumentGuard.Validate(doc, input.ExpectedDocument, input.ExpectedFingerprint));
+                    Require(LineweightTargetPreflight.TryCheckDrawing(doc, out error), error);
+                    foreach (var source in sources) { source.UpgradeOpen(); Require(source.IsWriteEnabled, "text cannot be opened for writing"); }
+                    Entity resultEntity;
+                    RewriteAction action;
+                    if (request.CreatesMText)
                     {
-                        case RewriteAction.Collapse:
-                            if (!DoCollapse(tx, db, anchorId, deleteIds, req, effectiveHeight, unicodeStyleId, targetLayer,
-                                out newHandle, out string collapseError))
-                            {
-                                tx.Abort();
-                                return Fail(req, collapseError);
-                            }
-                            deletedCount = deleteIds.Count;
-                            break;
-
-                        case RewriteAction.RewriteInBlock:
-                            if (!DoRewriteInBlock(tx, anchorId, deleteIds, req, unicodeStyleId, targetLayer,
-                                out newHandle, out string rewriteError))
-                            {
-                                tx.Abort();
-                                return Fail(req, rewriteError);
-                            }
-                            deletedCount = deleteIds.Count;
-                            break;
-
-                        case RewriteAction.Update:
-                            if (!DoUpdate(tx, anchorId, req, unicodeStyleId, targetLayer,
-                                out newHandle, out string updateError))
-                            {
-                                tx.Abort();
-                                return Fail(req, updateError);
-                            }
-                            deletedCount = 0;
-                            break;
-
-                        case RewriteAction.StyleOnly:
-                            DoStyleOnly(tx, anchorId, deleteIds, unicodeStyleId, targetLayer, req.FinalScale);
-                            newHandle = req.AnchorHandle;
-                            deletedCount = 0;
-                            break;
-
-                        default:
-                            tx.Abort();
-                            return Fail(req, $"unknown action: {req.Action}");
+                        owner.UpgradeOpen(); Require(owner.IsWriteEnabled, "owner cannot be opened for writing");
+                        var created = new MText();
+                        try
+                        {
+                            created.SetDatabaseDefaults(db);
+                            // Native entity properties are inherited explicitly, without a team style/layer policy.
+                            created.LayerId = anchor.LayerId;
+                            created.Color = anchor.Color;
+                            created.LinetypeId = anchor.LinetypeId;
+                            created.LinetypeScale = anchor.LinetypeScale;
+                            created.LineWeight = anchor.LineWeight;
+                            created.Transparency = anchor.Transparency;
+                            created.TextStyleId = geometry.StyleId;
+                            created.Normal = geometry.Normal;
+                            created.Direction = geometry.Direction;
+                            created.Attachment = geometry.Attachment;
+                            created.Location = geometry.Location;
+                            created.TextHeight = height;
+                            created.Width = width;
+                            created.Contents = request.NewText;
+                            owner.AppendEntity(created);
+                            tx.AddNewlyCreatedDBObject(created, true);
+                            foreach (var source in sources) source.Erase();
+                            resultEntity = created;
+                        }
+                        catch { if (created.ObjectId.IsNull) created.Dispose(); throw; }
+                        action = owner.IsLayout ? RewriteAction.Collapse : RewriteAction.RewriteInBlock;
                     }
-
-                    tx.Commit();
-                    return new RewriteResult
+                    else
                     {
-                        Ok = true,
-                        Action = req.Action,
-                        AnchorHandle = req.AnchorHandle,
-                        NewHandle = newHandle,
-                        DeletedCount = deletedCount,
-                        Error = null,
-                        LayoutHint = req.LayoutHint,
-                        FinalWidth = req.MtextWidth,
-                        FinalTextHeight = DetermineReportedFinalHeight(req, effectiveHeight)
+                        Update(anchor, request);
+                        resultEntity = anchor;
+                        action = RewriteAction.Update;
+                    }
+                    var actual = ReadGeometry(resultEntity, false);
+                    Require(ReadContent(resultEntity) == request.NewText, "native text readback mismatch; cluster aborted");
+                    Require(SameNumber(actual.Height, height) && SameNumber(actual.Width, width),
+                        "native text dimension readback mismatch; cluster aborted");
+                    if (resultEntity is MLeader resultLeader && request.TextHeight.HasValue)
+                        Require(SameNumber(resultLeader.TextHeight, request.TextHeight.Value),
+                            "native MLeader text height readback mismatch; cluster aborted");
+                    if (!request.CreatesMText)
+                    {
+                        Require((actual.Location - geometry.Location).Length <= 1e-8 &&
+                            SameVector(actual.Normal, geometry.Normal) && SameVector(actual.Direction, geometry.Direction) &&
+                            actual.StyleId == geometry.StyleId && resultEntity.LayerId == originalLayerId &&
+                            actual.Attachment == geometry.Attachment && actual.Justification == geometry.Justification,
+                            "native in-place anchor, orientation, style, layer or justification changed; cluster aborted");
+                    }
+                    var result = new RewriteResult
+                    {
+                        Ok = true, AnchorHandle = request.AnchorHandle, NewHandle = resultEntity.Handle.ToString(),
+                        Action = action, DeletedCount = request.CreatesMText ? sources.Count : 0,
+                        OwnerHandle = resultEntity.OwnerId.Handle.ToString(), OwnerName = owner.Name,
+                        OwnerIsLayout = owner.IsLayout, FinalWidth = actual.Width, FinalTextHeight = actual.Height
                     };
+                    Require(Finite(actual.Height) && actual.Height > 0 && Finite(actual.Width) && actual.Width >= 0,
+                        "native text dimension readback is invalid; cluster aborted");
+                    tx.Commit();
+                    return result;
                 }
             }
             catch (Exception ex)
             {
-                return Fail(req, ex.Message);
+                return new RewriteResult { AnchorHandle = request.AnchorHandle, Ok = false,
+                    Error = ErrorSanitizer.Sanitize(ex.Message) };
             }
         }
 
-        private static bool DoCollapse(
-            Transaction tx,
-            Database db,
-            ObjectId anchorId,
-            List<ObjectId> deleteIds,
-            RewriteRequest req,
-            double effectiveHeight,
-            ObjectId unicodeStyleId,
-            string targetLayer,
-            out string newHandle,
-            out string error)
+        private static Entity ReadTarget(Database db, Transaction tx, string handle, bool merging)
         {
-            newHandle = null;
-            error = null;
-
-            var anchorEnt = (Entity)tx.GetObject(anchorId, OpenMode.ForWrite);
-            if (!TryExtractLocation(anchorEnt, out var pos, out var rotation, out var anchorStyleId, out var layer, out var needsBaselineToTopOffset))
+            Require(CadHandleResolver.TryResolve(db, handle, out var id, out var error), error);
+            Require(!id.IsErased && !id.IsEffectivelyErased, "text is erased: " + handle);
+            var entity = tx.GetObject(id, OpenMode.ForRead) as Entity;
+            Require(entity != null, "handle is not an entity: " + handle);
+            bool ordinary = entity.GetType() == typeof(DBText) || entity.GetType() == typeof(MText);
+            Require(ordinary || !merging && (entity.GetType() == typeof(AttributeReference) || entity.GetType() == typeof(MLeader)),
+                merging ? "merge only supports ordinary DBText and MText; attributes and leaders cannot be erased"
+                    : "target must be ordinary DBText, MText, single-line AttributeReference or MLeader MText");
+            Require(!entity.HasFields && entity.Annotative != AnnotativeStates.True,
+                "field-bearing or annotative text is unsupported: " + handle);
+            var content = ReadContent(entity);
+            Require(content != null && !content.Contains("%<") && content.IndexOf('\0') < 0,
+                "field codes or null characters in existing text are unsupported: " + handle);
+            Require(LineweightTargetPreflight.TryCheckEntity(tx, entity, out error), error);
+            var owner = OwningRecord(tx, entity);
+            Require(!owner.IsDependent && !owner.IsFromExternalReference && !owner.IsFromOverlayReference,
+                "xref or dependent owner is unsupported");
+            Require(owner.IsLayout || !owner.IsAnonymous && !owner.IsDynamicBlock,
+                "anonymous or dynamic block definitions are unsupported");
+            if (entity is AttributeReference attribute)
             {
-                error = "anchor is not a text entity";
-                return false;
+                Require(!attribute.IsMTextAttribute, "multiline attributes are unsupported");
+                var reference = tx.GetObject(attribute.OwnerId, OpenMode.ForRead) as BlockReference;
+                Require(reference != null && reference.Annotative != AnnotativeStates.True, "attribute owner is unavailable or annotative");
+                Require(LineweightTargetPreflight.TryCheckEntity(tx, reference, out error), error);
             }
-
-            double textHeight = req.ExplicitTextHeight
-                ?? (req.ApplyUnicodeStyle
-                    ? UnicodeStyleService.ComputeTargetHeight(tx, anchorStyleId, unicodeStyleId, effectiveHeight)
-                    : effectiveHeight);
-            textHeight = FinalTextScalePolicy.Apply(textHeight, req.FinalScale);
-
-            if (needsBaselineToTopOffset)
-            {
-                pos = new Point3d(pos.X, pos.Y + textHeight, pos.Z);
-            }
-
-            var newMText = new MText
-            {
-                Location = pos,
-                Rotation = rotation,
-                TextHeight = textHeight,
-                Contents = req.NewText ?? string.Empty,
-                TextStyleId = req.ApplyUnicodeStyle ? unicodeStyleId : anchorStyleId,
-                Layer = targetLayer ?? layer,
-                Width = req.MtextWidth > 0 ? req.MtextWidth : 0,
-                Attachment = AttachmentPoint.TopLeft
-            };
-
-            var btr = (BlockTableRecord)tx.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
-            btr.AppendEntity(newMText);
-            tx.AddNewlyCreatedDBObject(newMText, true);
-            newHandle = newMText.Handle.ToString();
-
-            anchorEnt.Erase();
-            foreach (var did in deleteIds)
-            {
-                tx.GetObject(did, OpenMode.ForWrite).Erase();
-            }
-
-            return true;
+            var geometry = ReadGeometry(entity, merging);
+            var style = tx.GetObject(geometry.StyleId, OpenMode.ForRead) as TextStyleTableRecord;
+            Require(style != null && !style.IsErased && !style.IsDependent && !style.IsShapeFile && style.Annotative != AnnotativeStates.True,
+                "text style is unavailable, dependent, a shape style or annotative");
+            Require(!merging || !style.IsVertical, "vertical text style conversion is unsupported");
+            return entity;
         }
 
-        private static bool DoRewriteInBlock(
-            Transaction tx,
-            ObjectId anchorId,
-            List<ObjectId> deleteIds,
-            RewriteRequest req,
-            ObjectId unicodeStyleId,
-            string targetLayer,
-            out string newHandle,
-            out string error)
+        private static BlockTableRecord OwningRecord(Transaction tx, Entity entity)
         {
-            newHandle = null;
-            error = null;
+            var direct = tx.GetObject(entity.OwnerId, OpenMode.ForRead);
+            if (direct is BlockReference reference)
+                direct = tx.GetObject(reference.OwnerId, OpenMode.ForRead);
+            var owner = direct as BlockTableRecord;
+            Require(owner != null && !owner.IsErased, "text has no valid owning block record");
+            return owner;
+        }
 
-            var anchorEnt = (Entity)tx.GetObject(anchorId, OpenMode.ForWrite);
-
-            // Single entity: keep existing behavior (just update text + style)
-            if (deleteIds.Count == 0)
+        private static TextGeometry ReadGeometry(Entity entity, bool converting)
+        {
+            if (entity is DBText text)
             {
-                if (!SetText(anchorEnt, req.NewText ?? string.Empty))
+                Require(Finite(text.Height) && text.Height > 0 && Finite(text.Rotation), "DBText height or rotation is invalid");
+                CheckNormal(text.Normal);
+                Require(Enum.IsDefined(typeof(TextHorizontalMode), text.HorizontalMode) && Enum.IsDefined(typeof(TextVerticalMode), text.VerticalMode),
+                    "invalid DBText justification");
+                Require(text.HorizontalMode != TextHorizontalMode.TextAlign && text.HorizontalMode != TextHorizontalMode.TextFit,
+                    "aligned/fit DBText requires a separate two-anchor operation");
+                var direction = Vector3d.XAxis.TransformBy(Matrix3d.PlaneToWorld(text.Normal)).RotateBy(text.Rotation, text.Normal);
+                var location = text.IsDefaultAlignment ? text.Position : text.AlignmentPoint;
+                CheckPoint(location);
+                var attachment = AttachmentPoint.TopLeft;
+                if (converting)
                 {
-                    error = "anchor is not a text entity";
-                    return false;
+                    Require(!text.IsMirroredInX && !text.IsMirroredInY && Math.Abs(text.Oblique) <= 1e-12,
+                        "mirrored or oblique DBText conversion is unsupported");
+                    Require(text.HorizontalMode == TextHorizontalMode.TextLeft && text.VerticalMode == TextVerticalMode.TextBase,
+                        "DBText conversion requires left/baseline justification; other justification requires an explicit placement operation");
+                    // Move in the text's own plane, retaining the full owner-local Z coordinate.
+                    location += text.Normal.GetNormal().CrossProduct(direction.GetNormal()) * text.Height;
                 }
+                return new TextGeometry { Location = location, Normal = text.Normal, Direction = direction,
+                    Attachment = attachment, StyleId = text.TextStyleId, Height = text.Height, Width = 0,
+                    Justification = (int)text.HorizontalMode * 100 + (int)text.VerticalMode };
+            }
+            if (entity is MText mtext) return ReadMText(mtext);
+            var leader = entity as MLeader;
+            Require(leader != null && leader.ContentType == ContentType.MTextContent, "MLeader must contain MText");
+            using (var inner = leader.MText)
+            {
+                Require(inner != null && !inner.HasFields && inner.Annotative != AnnotativeStates.True,
+                    "MLeader MText is unavailable, field-bearing or annotative");
+                return ReadMText(inner);
+            }
+        }
 
-                if (req.ApplyUnicodeStyle)
+        private static TextGeometry ReadMText(MText text)
+        {
+            CheckNormal(text.Normal); CheckPoint(text.Location);
+            Require(Finite(text.Direction.X) && Finite(text.Direction.Y) && Finite(text.Direction.Z) && text.Direction.Length > 1e-12,
+                "MText direction is invalid");
+            Require(Math.Abs(text.Normal.GetNormal().DotProduct(text.Direction.GetNormal())) <= 1e-9, "MText direction must lie in its normal plane");
+            Require((int)text.Attachment >= (int)AttachmentPoint.TopLeft && (int)text.Attachment <= (int)AttachmentPoint.BottomRight,
+                "MText attachment is unsupported");
+            Require(Finite(text.TextHeight) && text.TextHeight > 0 && Finite(text.Width) && text.Width >= 0,
+                "MText height or width is invalid");
+            return new TextGeometry { Location = text.Location, Normal = text.Normal, Direction = text.Direction,
+                Attachment = text.Attachment, StyleId = text.TextStyleId, Height = text.TextHeight, Width = text.Width };
+        }
+
+        private static double MergeWidth(List<Entity> sources, TextGeometry geometry)
+        {
+            if (geometry.Width > 0) return geometry.Width;
+            // Project native bounds into the anchor's reading direction. Never invent a width on failed bounds.
+            var direction = geometry.Direction.GetNormal();
+            double minimum = double.PositiveInfinity, maximum = double.NegativeInfinity;
+            foreach (var source in sources)
+            {
+                Extents3d bounds;
+                try { bounds = source.GeometricExtents; }
+                catch (Autodesk.AutoCAD.Runtime.Exception) { throw new InvalidOperationException("native text bounds unavailable; supply mtext_width explicitly"); }
+                CheckPoint(bounds.MinPoint); CheckPoint(bounds.MaxPoint);
+                for (int corner = 0; corner < 8; corner++)
                 {
-                    UnicodeStyleService.ApplyToObject(tx, anchorEnt, unicodeStyleId);
-                    McpLayerService.ApplyToObject(anchorEnt, targetLayer);
-                }
-
-                ApplyFinalScale(anchorEnt, req.FinalScale);
-
-                newHandle = req.AnchorHandle;
-                return true;
-            }
-
-            // Multi-fragment: create MText in block definition, erase old DBTexts
-            if (!TryExtractLocation(anchorEnt, out var anchorPos, out var rotation,
-                out var anchorStyleId, out var layer, out _))
-            {
-                error = "anchor is not a text entity";
-                return false;
-            }
-
-            // Compute bounding box from all entities
-            double minX = double.MaxValue, maxX = double.MinValue;
-            double minY = double.MaxValue, maxY = double.MinValue;
-            var allIds = new List<ObjectId> { anchorId };
-            allIds.AddRange(deleteIds);
-
-            foreach (var oid in allIds)
-            {
-                var ent = (Entity)tx.GetObject(oid, OpenMode.ForRead);
-                try
-                {
-                    var ext = ent.GeometricExtents;
-                    if (ext.MinPoint.X < minX) minX = ext.MinPoint.X;
-                    if (ext.MaxPoint.X > maxX) maxX = ext.MaxPoint.X;
-                    if (ext.MinPoint.Y < minY) minY = ext.MinPoint.Y;
-                    if (ext.MaxPoint.Y > maxY) maxY = ext.MaxPoint.Y;
-                }
-                catch { /* use anchor position fallback */ }
-            }
-
-            if (minX == double.MaxValue)
-            {
-                // Fallback: no bounds available, use anchor position
-                minX = anchorPos.X;
-                maxY = anchorPos.Y;
-                maxX = minX + (req.MtextWidth > 0 ? req.MtextWidth : 500);
-            }
-
-            double effectiveHeight = req.MedianHeight
-                ?? ComputeMedianHeight(tx, anchorId, deleteIds);
-            if (effectiveHeight <= 0) effectiveHeight = 2.5;
-
-            double textHeight = req.ExplicitTextHeight
-                ?? (req.ApplyUnicodeStyle
-                    ? UnicodeStyleService.ComputeTargetHeight(tx, anchorStyleId, unicodeStyleId, effectiveHeight)
-                    : effectiveHeight);
-            textHeight = FinalTextScalePolicy.Apply(textHeight, req.FinalScale);
-
-            double mtextWidth = req.MtextWidth > 0 ? req.MtextWidth : (maxX - minX);
-
-            // Scale down for in-block: textHeight/width were computed in world space,
-            // but MText created in block definition renders at (value × block scale).
-            // Divide by the block reference's scale factor so world-rendered size matches intent.
-            double scale = req.BlockScale > 0 ? req.BlockScale : 1.0;
-            double blockDefTextHeight = textHeight / scale;
-            double blockDefWidth = mtextWidth / scale;
-
-            // Find the owner BlockTableRecord
-            var ownerBtrId = anchorEnt.OwnerId;
-            var ownerBtr = (BlockTableRecord)tx.GetObject(ownerBtrId, OpenMode.ForWrite);
-
-            var newMText = new MText
-            {
-                Location = new Point3d(minX, maxY, 0),
-                Rotation = rotation,
-                TextHeight = blockDefTextHeight,
-                Contents = req.NewText ?? string.Empty,
-                TextStyleId = req.ApplyUnicodeStyle ? unicodeStyleId : anchorStyleId,
-                Layer = targetLayer ?? layer,
-                Width = blockDefWidth,
-                Attachment = AttachmentPoint.TopLeft
-            };
-
-            ownerBtr.AppendEntity(newMText);
-            tx.AddNewlyCreatedDBObject(newMText, true);
-            newHandle = newMText.Handle.ToString();
-
-            // Erase all old entities
-            anchorEnt.Erase();
-            foreach (var did in deleteIds)
-            {
-                tx.GetObject(did, OpenMode.ForWrite).Erase();
-            }
-
-            return true;
-        }
-
-        private static bool DoUpdate(
-            Transaction tx,
-            ObjectId anchorId,
-            RewriteRequest req,
-            ObjectId unicodeStyleId,
-            string targetLayer,
-            out string newHandle,
-            out string error)
-        {
-            newHandle = null;
-            error = null;
-
-            var anchorEnt = (Entity)tx.GetObject(anchorId, OpenMode.ForWrite);
-            if (!SetText(anchorEnt, req.NewText ?? string.Empty))
-            {
-                error = "anchor is not a text entity";
-                return false;
-            }
-
-            if (req.ApplyUnicodeStyle)
-            {
-                UnicodeStyleService.ApplyToObject(tx, anchorEnt, unicodeStyleId);
-                McpLayerService.ApplyToObject(anchorEnt, targetLayer);
-            }
-
-            ApplyFinalScale(anchorEnt, req.FinalScale);
-
-            newHandle = req.AnchorHandle;
-            return true;
-        }
-
-        private static void DoStyleOnly(
-            Transaction tx,
-            ObjectId anchorId,
-            List<ObjectId> deleteIds,
-            ObjectId unicodeStyleId,
-            string targetLayer,
-            double finalScale)
-        {
-            var anchorEnt = (Entity)tx.GetObject(anchorId, OpenMode.ForWrite);
-            UnicodeStyleService.ApplyToObject(tx, anchorEnt, unicodeStyleId);
-            McpLayerService.ApplyToObject(anchorEnt, targetLayer);
-            ApplyFinalScale(anchorEnt, finalScale);
-
-            foreach (var did in deleteIds)
-            {
-                var delEnt = (Entity)tx.GetObject(did, OpenMode.ForWrite);
-                UnicodeStyleService.ApplyToObject(tx, delEnt, unicodeStyleId);
-                McpLayerService.ApplyToObject(delEnt, targetLayer);
-                ApplyFinalScale(delEnt, finalScale);
-            }
-        }
-
-        private static double DetermineReportedFinalHeight(RewriteRequest req, double effectiveHeight)
-        {
-            double baseHeight = req.ExplicitTextHeight ?? effectiveHeight;
-            return FinalTextScalePolicy.Apply(baseHeight, req.FinalScale);
-        }
-
-        private static void ApplyFinalScale(Entity ent, double scale)
-        {
-            switch (ent)
-            {
-                case AttributeReference att when att.Height > 0:
-                    att.Height = FinalTextScalePolicy.Apply(att.Height, scale);
-                    break;
-                case DBText dbt when dbt.Height > 0:
-                    dbt.Height = FinalTextScalePolicy.Apply(dbt.Height, scale);
-                    break;
-                case MText mt when mt.TextHeight > 0:
-                    mt.TextHeight = FinalTextScalePolicy.Apply(mt.TextHeight, scale);
-                    break;
-                case MLeader ml:
-                    double leaderHeight = ml.TextHeight > 0
-                        ? ml.TextHeight
-                        : (ml.MText?.TextHeight ?? 0);
-                    double scaledLeaderHeight = FinalTextScalePolicy.Apply(leaderHeight, scale);
-                    if (scaledLeaderHeight > 0)
-                    {
-                        ml.TextHeight = scaledLeaderHeight;
-                    }
-
-                    if (ml.MText != null && scaledLeaderHeight > 0)
-                    {
-                        var inner = ml.MText;
-                        inner.TextHeight = scaledLeaderHeight;
-                        ml.MText = inner;
-                    }
-                    break;
-            }
-        }
-
-        private static bool TryExtractLocation(
-            Entity ent,
-            out Point3d pos,
-            out double rotation,
-            out ObjectId styleId,
-            out string layer,
-            out bool needsBaselineToTopOffset)
-        {
-            switch (ent)
-            {
-                case AttributeReference att:
-                    pos = att.Position;
-                    rotation = att.Rotation;
-                    styleId = att.TextStyleId;
-                    layer = att.Layer;
-                    needsBaselineToTopOffset = true;
-                    return true;
-                case DBText dbt:
-                    pos = dbt.Position;
-                    rotation = dbt.Rotation;
-                    styleId = dbt.TextStyleId;
-                    layer = dbt.Layer;
-                    needsBaselineToTopOffset = true;
-                    return true;
-                case MText mt:
-                    pos = mt.Location;
-                    rotation = mt.Rotation;
-                    styleId = mt.TextStyleId;
-                    layer = mt.Layer;
-                    needsBaselineToTopOffset = false;
-                    return true;
-                case MLeader ml:
-                    try
-                    {
-                        pos = ml.GetFirstVertex(0);
-                    }
-                    catch
-                    {
-                        pos = Point3d.Origin;
-                    }
-                    rotation = ml.MText != null ? ml.MText.Rotation : 0;
-                    styleId = ml.TextStyleId;
-                    layer = ml.Layer;
-                    needsBaselineToTopOffset = false;
-                    return true;
-                default:
-                    pos = Point3d.Origin;
-                    rotation = 0;
-                    styleId = ObjectId.Null;
-                    layer = null;
-                    needsBaselineToTopOffset = false;
-                    return false;
-            }
-        }
-
-        private static bool SetText(Entity ent, string text)
-        {
-            switch (ent)
-            {
-                case AttributeReference att:
-                    att.TextString = text;
-                    return true;
-                case DBText dbt:
-                    dbt.TextString = text;
-                    return true;
-                case MText mt:
-                    mt.Contents = text;
-                    return true;
-                case MLeader ml:
-                    if (ml.MText == null)
-                    {
-                        return false;
-                    }
-                    var inner = ml.MText;
-                    inner.Contents = text;
-                    ml.MText = inner;
-                    return true;
-                default:
-                    return false;
-            }
-        }
-
-        private static double ComputeMedianHeight(Transaction tx, ObjectId anchorId, List<ObjectId> deleteIds)
-        {
-            var heights = new List<double>();
-            CollectHeight(tx, anchorId, heights);
-            foreach (var did in deleteIds)
-            {
-                CollectHeight(tx, did, heights);
-            }
-            return Median(heights);
-        }
-
-        private static void CollectHeight(Transaction tx, ObjectId id, List<double> heights)
-        {
-            try
-            {
-                var obj = tx.GetObject(id, OpenMode.ForRead);
-                switch (obj)
-                {
-                    case DBText t when t.Height > 0:
-                        heights.Add(t.Height);
-                        break;
-                    case MText m when m.TextHeight > 0:
-                        heights.Add(m.TextHeight);
-                        break;
-                    case MLeader ml when ml.TextHeight > 0:
-                        heights.Add(ml.TextHeight);
-                        break;
-                    case AttributeReference a when a.Height > 0:
-                        heights.Add(a.Height);
-                        break;
+                    var point = new Point3d((corner & 1) == 0 ? bounds.MinPoint.X : bounds.MaxPoint.X,
+                        (corner & 2) == 0 ? bounds.MinPoint.Y : bounds.MaxPoint.Y,
+                        (corner & 4) == 0 ? bounds.MinPoint.Z : bounds.MaxPoint.Z);
+                    double distance = (point - geometry.Location).DotProduct(direction);
+                    minimum = Math.Min(minimum, distance); maximum = Math.Max(maximum, distance);
                 }
             }
-            catch
+            return maximum - minimum;
+        }
+
+        private static void Update(Entity entity, RewriteRequest request)
+        {
+            if (entity is DBText text)
             {
+                bool defaultAlignment = text.IsDefaultAlignment;
+                var anchor = defaultAlignment ? text.Position : text.AlignmentPoint;
+                text.TextString = request.NewText;
+                if (request.TextHeight.HasValue) text.Height = request.TextHeight.Value;
+                if (defaultAlignment) text.Position = anchor; else text.AlignmentPoint = anchor;
+            }
+            else if (entity is MText mtext)
+            {
+                mtext.Contents = request.NewText;
+                if (request.TextHeight.HasValue) mtext.TextHeight = request.TextHeight.Value;
+                if (request.MtextWidth.HasValue) mtext.Width = request.MtextWidth.Value;
+            }
+            else
+            {
+                var leader = (MLeader)entity;
+                if (request.TextHeight.HasValue) leader.TextHeight = request.TextHeight.Value;
+                using (var inner = leader.MText)
+                {
+                    inner.Contents = request.NewText;
+                    if (request.TextHeight.HasValue) inner.TextHeight = request.TextHeight.Value;
+                    if (request.MtextWidth.HasValue) inner.Width = request.MtextWidth.Value;
+                    leader.MText = inner;
+                }
             }
         }
 
-        private static double Median(List<double> values)
+        private static string ReadContent(Entity entity)
         {
-            if (values == null || values.Count == 0)
-            {
-                return 0;
-            }
-
-            var sorted = values.OrderBy(v => v).ToList();
-            int mid = sorted.Count / 2;
-            return sorted.Count % 2 == 1
-                ? sorted[mid]
-                : (sorted[mid - 1] + sorted[mid]) / 2.0;
+            if (entity is DBText text) return text.TextString;
+            if (entity is MText mtext) return mtext.Contents;
+            var leader = entity as MLeader;
+            Require(leader != null && leader.ContentType == ContentType.MTextContent, "MLeader must contain MText");
+            using (var inner = leader.MText) return inner?.Contents;
         }
 
-        private static bool TryGetObjectId(Database db, string handleStr, out ObjectId id)
+        private static void CheckNormal(Vector3d normal)
         {
-            id = ObjectId.Null;
-            if (string.IsNullOrWhiteSpace(handleStr))
-            {
-                return false;
-            }
-
-            if (!long.TryParse(handleStr, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out long h))
-            {
-                return false;
-            }
-
-            try
-            {
-                id = db.GetObjectId(false, new Handle(h), 0);
-                return !id.IsNull;
-            }
-            catch
-            {
-                return false;
-            }
+            Require(Finite(normal.X) && Finite(normal.Y) && Finite(normal.Z) && Finite(normal.Length) && normal.Length > 1e-12,
+                "text normal is invalid");
         }
-
-        private static RewriteResult Fail(RewriteRequest req, string error)
+        private static void CheckPoint(Point3d point) => Require(Finite(point.X) && Finite(point.Y) && Finite(point.Z), "text position or bounds is invalid");
+        private static bool Finite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
+        private static bool SameNumber(double actual, double expected) => Finite(actual) && Math.Abs(actual - expected) <= 1e-9 * Math.Max(1, Math.Abs(expected));
+        private static bool SameVector(Vector3d actual, Vector3d expected) => (actual - expected).Length <= 1e-9;
+        private static void Require(string error) { if (error != null) throw new InvalidOperationException(error); }
+        private static void Require(bool valid, string error) { if (!valid) throw new InvalidOperationException(error); }
+        private sealed class TextGeometry
         {
-            return new RewriteResult
-            {
-                Ok = false,
-                Action = req.Action,
-                AnchorHandle = req.AnchorHandle,
-                Error = error
-            };
+            internal Point3d Location;
+            internal Vector3d Normal, Direction;
+            internal AttachmentPoint Attachment;
+            internal ObjectId StyleId;
+            internal double Height, Width;
+            internal int Justification;
         }
     }
 }

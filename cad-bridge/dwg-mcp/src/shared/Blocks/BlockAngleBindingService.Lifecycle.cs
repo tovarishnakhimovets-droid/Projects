@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Linq;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
+using Newtonsoft.Json.Linq;
 
 namespace Bimwright.Dwg.Plugin.Blocks
 {
@@ -53,6 +54,23 @@ namespace Bimwright.Dwg.Plugin.Blocks
         {
             internal string Snapshot;
             internal bool Wrote;
+        }
+
+        // Only IDs and managed values cross the read/write transaction boundary.
+        private sealed class AttributeRefreshUpdate
+        {
+            internal ObjectId AttributeId, ReferenceId, DefinitionId;
+            internal string Tag, OldText, NewText;
+            internal JObject Binding, ExpectedAngles;
+        }
+
+        private sealed class RefreshPlan
+        {
+            internal long StartedAt;
+            internal string Snapshot;
+            internal readonly List<AttributeRefreshUpdate> Updates = new List<AttributeRefreshUpdate>();
+            internal HashSet<ObjectId> BoundReferences = new HashSet<ObjectId>();
+            internal HashSet<ObjectId> EvaluatedDefinitions = new HashSet<ObjectId>();
         }
 
         internal static void Initialize()
@@ -156,7 +174,8 @@ namespace Bimwright.Dwg.Plugin.Blocks
             {
                 if (!(sender is Document doc) || !Documents.TryGetValue(doc, out var context)) return;
                 context.Notify(DeferredAngleRefreshNotification.ExternalChange);
-                RunPass(doc, context, true);
+                // UNDO/REDO also raise this event. Never open a write transaction
+                // or acquire a write lock from inside their native callbacks.
             });
         }
 
@@ -166,11 +185,11 @@ namespace Bimwright.Dwg.Plugin.Blocks
             {
                 var doc = documentManager?.MdiActiveDocument;
                 if (doc == null) return;
-                if (Attach(doc) && Documents.TryGetValue(doc, out var context)) RunPass(doc, context, false);
+                if (Attach(doc) && Documents.TryGetValue(doc, out var context)) RunPass(doc, context);
             });
         }
 
-        private static void RunPass(Document doc, RefreshContext context, bool commandEnded)
+        private static void RunPass(Document doc, RefreshContext context)
         {
             // Keep pending notifications while a tracked LISP owns the document.
             if (busy || LispJobStore.Session.IsBusy) return;
@@ -180,13 +199,25 @@ namespace Bimwright.Dwg.Plugin.Blocks
             {
                 // Native getters can fail during document activation/destruction too.
                 if (doc == null || context.Database.IsDisposed || doc != documentManager?.MdiActiveDocument ||
-                    doc.IsReadOnly || (!commandEnded && !doc.Editor.IsQuiescent)) return;
+                    doc.IsReadOnly || !doc.Editor.IsQuiescent) return;
                 if (!context.Queue.TryBeginPass(Clock.ElapsedMilliseconds, out ticket)) return;
                 began = true;
                 busy = true;
-                RefreshReadback readback;
-                using (doc.LockDocument()) readback = Refresh(context);
-                // Complete only AFTER lock release and its native notifications.
+                var plan = InspectRefresh(context);
+                var readback = new RefreshReadback { Snapshot = plan.Snapshot, Wrote = false };
+                if (plan.Updates.Count != 0)
+                {
+                    using (doc.LockDocument())
+                    {
+                        if (context.Database.IsDisposed || doc != documentManager?.MdiActiveDocument ||
+                            doc.IsReadOnly || LispJobStore.Session.IsBusy)
+                            throw new InvalidOperationException("active drawing changed before angle attribute refresh");
+                        readback = ApplyRefresh(context, plan);
+                    }
+                }
+                context.BoundReferences = plan.BoundReferences;
+                context.EvaluatedDefinitions = plan.EvaluatedDefinitions;
+                // Complete only AFTER transactions/lock release and their native notifications.
                 var outcome = context.Queue.CompletePass(ticket, readback.Snapshot, readback.Wrote, Clock.ElapsedMilliseconds);
                 if (outcome == DeferredAngleRefreshOutcome.Exhausted || outcome == DeferredAngleRefreshOutcome.Failed)
                     ReportStopped(doc, "native annotation did not settle within the bounded refresh passes");

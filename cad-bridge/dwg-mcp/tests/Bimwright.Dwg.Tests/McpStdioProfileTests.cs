@@ -18,11 +18,11 @@ namespace Bimwright.Dwg.Tests
         // Only initialize and tools/list are sent: these tests never call a CAD tool.
         [Theory]
         [InlineData("query,modify,drawing,view", false, 63)]
-        [InlineData("query,modify,drawing,view,annotation", false, 65)]
-        [InlineData("query,modify,drawing,view", true, 23)]
-        [InlineData("query", false, 16)]
-        [InlineData("modify", false, 34)]
-        [InlineData("drawing", false, 7)]
+        [InlineData("query,modify,drawing,view,annotation", false, 64)]
+        [InlineData("query,modify,drawing,view", true, 24)]
+        [InlineData("query", false, 17)]
+        [InlineData("modify", false, 32)]
+        [InlineData("drawing", false, 8)]
         [InlineData("annotation", false, 4)]
         [InlineData("drawing,annotation", false, 9)]
         public async Task Built_server_initializes_and_advertises_the_exact_profile(
@@ -68,6 +68,8 @@ namespace Bimwright.Dwg.Tests
             Assert.Equal(names.Length, names.Distinct(StringComparer.Ordinal).Count());
             Assert.All(names, name => Assert.StartsWith("dwg_", name, StringComparison.Ordinal));
             Assert.DoesNotContain("dwg_list_baked_tools", names);
+            Assert.DoesNotContain("dwg_translate_and_rewrite", names);
+            Assert.DoesNotContain("dwg_apply_unicode_style", names);
 
             var enabled = profile.Split(',').ToHashSet(StringComparer.Ordinal);
             Assert.Equal(enabled.Contains("query"), names.Contains("dwg_get_crosshair_settings", StringComparer.Ordinal));
@@ -78,6 +80,16 @@ namespace Bimwright.Dwg.Tests
             bool hasLisp = !readOnly && (enabled.Contains("modify") || enabled.Contains("meta") || enabled.Contains("code"));
             Assert.Equal(hasLisp, names.Contains("dwg_run_lisp", StringComparer.Ordinal));
             Assert.Equal(enabled.Contains("query"), names.Contains("dwg_get_lisp_status", StringComparer.Ordinal));
+            Assert.Equal(enabled.Contains("query"), names.Contains("dwg_get_selection", StringComparer.Ordinal));
+            if (enabled.Contains("query"))
+            {
+                var selection = Assert.Single(tools, value => value.ProtocolTool.Name == "dwg_get_selection").ProtocolTool;
+                Assert.True(selection.Annotations.ReadOnlyHint);
+                Assert.True(selection.Annotations.IdempotentHint);
+                AssertRequired(selection.InputSchema);
+                Assert.Equal(new[] { "include_geometry", "max_entities" }, selection.InputSchema.GetProperty("properties")
+                    .EnumerateObject().Select(value => value.Name).OrderBy(value => value, StringComparer.Ordinal).ToArray());
+            }
             if (hasLisp)
             {
                 var lisp = Assert.Single(tools, tool => tool.ProtocolTool.Name == "dwg_run_lisp").ProtocolTool;
@@ -88,6 +100,7 @@ namespace Bimwright.Dwg.Tests
             bool hasTextCreation = !readOnly && (enabled.Contains("drawing") || enabled.Contains("annotation"));
             Assert.Equal(hasTextCreation ? 1 : 0, names.Count(name => name == "dwg_create_mtext"));
             Assert.Equal(hasTextCreation ? 1 : 0, names.Count(name => name == "dwg_create_text"));
+            Assert.Equal(hasTextCreation ? 1 : 0, names.Count(name => name == "dwg_create_leader"));
 
             if (!readOnly && enabled.Contains("drawing"))
             {
@@ -103,6 +116,16 @@ namespace Bimwright.Dwg.Tests
 
             if (!readOnly && enabled.Contains("modify"))
             {
+                foreach (var item in new[] { ("dwg_update_texts", "items"), ("dwg_collapse_and_rewrite", "clusters") })
+                {
+                    var tool = Assert.Single(tools, value => value.ProtocolTool.Name == item.Item1).ProtocolTool;
+                    Assert.False(tool.Annotations.ReadOnlyHint);
+                    Assert.Equal(item.Item1 == "dwg_update_texts", tool.Annotations.IdempotentHint);
+                    AssertRequired(tool.InputSchema, item.Item2);
+                    var properties = tool.InputSchema.GetProperty("properties");
+                    Assert.Equal(new[] { item.Item2 }, properties.EnumerateObject().Select(value => value.Name).ToArray());
+                    AssertSchemaType(properties.GetProperty(item.Item2), "string");
+                }
                 var edit = Assert.Single(tools, tool => tool.ProtocolTool.Name == "dwg_edit_polyline_vertices").ProtocolTool;
                 Assert.False(edit.Annotations.ReadOnlyHint);
                 Assert.False(edit.Annotations.IdempotentHint);
@@ -127,7 +150,7 @@ namespace Bimwright.Dwg.Tests
             }
             if (readOnly)
                 foreach (string mutation in new[] { "dwg_create_entities", "dwg_edit_polyline_vertices",
-                    "dwg_create_text", "dwg_create_mtext", "dwg_set_text_style", "dwg_match_properties",
+                    "dwg_create_text", "dwg_create_mtext", "dwg_create_leader", "dwg_set_text_style", "dwg_match_properties",
                     "dwg_create_block_variant", "dwg_update_block_angles", "dwg_set_system_variable", "dwg_run_lisp", "dwg_set_crosshair_settings", "dwg_set_settings" })
                     Assert.DoesNotContain(mutation, names);
         }
@@ -152,7 +175,13 @@ namespace Bimwright.Dwg.Tests
 
         private static void AssertRequired(JsonElement schema, params string[] fields)
         {
-            var required = schema.GetProperty("required").EnumerateArray().Select(value => value.GetString()).ToArray();
+            if (!schema.TryGetProperty("required", out var requiredNode))
+            {
+                Assert.Empty(fields);
+                return;
+            }
+            var required = requiredNode.EnumerateArray().Select(value => value.GetString()).ToArray();
+            if (fields.Length == 0) Assert.Empty(required);
             foreach (string field in fields) Assert.Contains(field, required);
         }
     }

@@ -17,7 +17,7 @@
     <PackageId>Bimwright.Dwg.Server</PackageId>
     <Version>2.0.1</Version>
     <Authors>Khoa Le</Authors>
-    <Description>MCP gateway for AutoCAD 2022-2027 DWG workflows: text reading, translation rewriting, target routing, optional ToolBaker, and opt-in code execution.</Description>
+    <Description>MCP gateway for AutoCAD 2022-2027 DWG operations: geometry, explicit text editing, target routing, optional ToolBaker, and opt-in code execution.</Description>
     <PackageProjectUrl>https://github.com/bimwright/dwg-mcp</PackageProjectUrl>
     <RepositoryUrl>https://github.com/bimwright/dwg-mcp</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
@@ -48,6 +48,8 @@
     <Compile Include="..\shared\Security\BakeRedactor.cs" LinkBase="Shared\Security" />
     <Compile Include="..\shared\Security\LispExecutionPolicy.cs" LinkBase="Shared\Security" />
     <Compile Include="..\shared\Cad\LineweightSpec.cs" LinkBase="Shared\Cad" />
+    <Compile Include="..\shared\Cad\CadWire.cs" LinkBase="Shared\Cad" />
+    <Compile Include="..\shared\Cad\SelectionReadInput.cs" LinkBase="Shared\Cad" />
     <Compile Include="..\shared\Cad\PropertyStyleInput.cs" LinkBase="Shared\Cad" />
     <Compile Include="..\shared\Annotation\AnnotationRequestValidation.cs" LinkBase="Shared\Annotation" />
     <Compile Include="..\shared\EntityBatch\EntityBatchInput.cs" LinkBase="Shared\EntityBatch" />

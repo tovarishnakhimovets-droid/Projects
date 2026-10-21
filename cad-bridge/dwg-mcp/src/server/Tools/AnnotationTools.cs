@@ -31,30 +31,10 @@ namespace Bimwright.Dwg.Server.Tools
             [Description("Optional ACI color index for the new entity. Valid range: 1-256.")] int? color_index = null)
             => TextCreationTools.CreateMText(text, location, width, height, rotation, layer, color_index);
 
-        [McpServerTool(Name = "dwg_create_leader"), Description(
-            "Create a leader annotation. points is a JSON array of point objects with numeric x, y, " +
-            "and optional z fields.")]
-        public static Task<string> CreateLeader(
-            [Description("JSON point array, e.g. [{\"x\":0,\"y\":0},{\"x\":10,\"y\":5}].")] string points,
-            [Description("Optional leader text.")] string text = null,
-            [Description("Optional target layer name.")] string layer = null,
-            [Description("Optional ACI color index for the new entity. Valid range: 1-256.")] int? color_index = null)
-        {
-            if (!TryParseJsonArray(points, "points", out var pointsArray, out var pointsError))
-            {
-                return ToolInputError(pointsError);
-            }
-
-            var request = new JObject
-            {
-                ["points"] = pointsArray
-            };
-            if (text != null) request["text"] = text;
-            if (layer != null) request["layer"] = layer;
-            if (color_index.HasValue) request["color_index"] = color_index.Value;
-
-            return ToolGateway.LoggedCall("create_leader", request, request);
-        }
+        // Compatibility helper; the sole MCP registration is in TextCreationTools.
+        public static Task<string> CreateLeader(string points, string text = null,
+            string layer = null, int? color_index = null)
+            => TextCreationTools.CreateLeader(points, text, layer, color_index);
 
         [McpServerTool(Name = "dwg_create_table"), Description(
             "Create a table in the current AutoCAD space. insertion_point is a JSON point object, " +

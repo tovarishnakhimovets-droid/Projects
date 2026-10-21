@@ -14,7 +14,8 @@ ROOT = Path(__file__).resolve().parents[1]
 SERVER = ROOT / "dwg-mcp/src/server/bin/Release/net8.0/Bimwright.Dwg.Server.dll"
 STANDARD = "query,modify,drawing,view"
 MUTATORS = {"dwg_create_text", "dwg_create_mtext", "dwg_create_entities",
-            "dwg_edit_polyline_vertices", "dwg_set_text_style", "dwg_match_properties"}
+            "dwg_edit_polyline_vertices", "dwg_set_text_style", "dwg_match_properties",
+            "dwg_update_texts", "dwg_collapse_and_rewrite", "dwg_create_leader"}
 
 
 def require(condition, message):
@@ -70,9 +71,22 @@ async def run(options):
     initialized, tools = await listing(options, STANDARD)
     require(len(tools) == 63, f"Standard profile: expected 63 tools, got {len(tools)}")
     by_name = {tool.name: tool for tool in tools}
+    require(not ({"dwg_translate_and_rewrite", "dwg_apply_unicode_style"} & by_name.keys()),
+            "Removed workflows are still exposed")
     expected = MUTATORS | {"dwg_list_text_styles", "dwg_inspect_block"}
     require(expected <= by_name.keys(), f"Missing tools: {expected - by_name.keys()}")
     schemas = {
+        "dwg_get_selection": check_schema(by_name["dwg_get_selection"], (),
+            {"max_entities": "integer", "include_geometry": "boolean"}, readonly=True),
+        "dwg_create_leader": check_schema(by_name["dwg_create_leader"], ("points",),
+            {"points": "string", "text": "string", "layer": "string", "color_index": "integer",
+             "height": "number", "arrow_size": "number", "text_style": "string"}, idempotent=False),
+        "dwg_get_selected_texts": check_schema(by_name["dwg_get_selected_texts"], (),
+            {"groupingStrength": "string", "includeEntities": "boolean"}, readonly=True),
+        "dwg_update_texts": check_schema(by_name["dwg_update_texts"], ("items",),
+            {"items": "string"}),
+        "dwg_collapse_and_rewrite": check_schema(by_name["dwg_collapse_and_rewrite"], ("clusters",),
+            {"clusters": "string"}, idempotent=False),
         "dwg_inspect_block": check_schema(by_name["dwg_inspect_block"], ("handle",),
             {"handle": "string", "expected_document": "string", "expected_fingerprint": "string",
              "include_definition": "boolean", "max_entities": "integer", "max_metadata_objects": "integer"},
@@ -105,9 +119,11 @@ async def run(options):
     matrix = [{"profile": STANDARD, "read_only": False, "count": len(tools), "tools": sorted(by_name)}]
     _, annotation = await listing(options, STANDARD + ",annotation")
     annotation_names = {tool.name for tool in annotation}
-    require(len(annotation) == 65, f"Combined annotation profile: expected 65, got {len(annotation)}")
-    require(annotation_names - by_name.keys() == {"dwg_create_leader", "dwg_create_table"},
+    require(len(annotation) == 64, f"Combined annotation profile: expected 64, got {len(annotation)}")
+    require(annotation_names - by_name.keys() == {"dwg_create_table"},
             "Combined annotation profile: unexpected additions")
+    require(sum(tool.name == "dwg_create_leader" for tool in annotation) == 1,
+            "Combined annotation profile: dwg_create_leader must appear exactly once")
     require(sum(tool.name == "dwg_create_text" for tool in annotation) == 1,
             "Combined annotation profile: dwg_create_text must appear exactly once")
     require(sum(tool.name == "dwg_create_mtext" for tool in annotation) == 1,
@@ -116,7 +132,7 @@ async def run(options):
                    "count": len(annotation), "tools": sorted(annotation_names)})
     _, readonly = await listing(options, STANDARD, readonly=True)
     readonly_names = {tool.name for tool in readonly}
-    require(len(readonly) == 23, f"Read-only profile: expected 23, got {len(readonly)}")
+    require(len(readonly) == 24, f"Read-only profile: expected 24, got {len(readonly)}")
     require("dwg_list_text_styles" in readonly_names, "Read-only profile lost text-style query")
     require(not (MUTATORS & readonly_names), "Read-only profile retained a text/style mutation")
     require(all(tool.annotations is not None and tool.annotations.readOnlyHint is True for tool in readonly),
@@ -124,7 +140,7 @@ async def run(options):
     require(readonly_names == {tool.name for tool in tools if tool.annotations and tool.annotations.readOnlyHint is True},
             "Read-only profile differs from the standard read-only surface")
     matrix.append({"profile": STANDARD, "read_only": True, "count": len(readonly), "tools": sorted(readonly_names)})
-    for profile, expected_count in (("query", 16), ("modify", 34), ("drawing", 7),
+    for profile, expected_count in (("query", 17), ("modify", 32), ("drawing", 8),
                                     ("annotation", 4), ("drawing,annotation", 9)):
         _, isolated = await listing(options, profile)
         require(len(isolated) == expected_count, f"{profile}: expected {expected_count}, got {len(isolated)}")

@@ -77,10 +77,13 @@ namespace Bimwright.Dwg.Tests
             Assert.True(BakedToolDispatchAuthorizer.IsAllowed(command));
         }
 
-        [Fact]
-        public void BakedToolDispatchAuthorizer_RejectsUnknownTargets()
+        [Theory]
+        [InlineData("future_raw_tool")]
+        [InlineData("apply_unicode_style")]
+        [InlineData("translate_and_rewrite")]
+        public void BakedToolDispatchAuthorizer_RejectsUnknownTargets(string command)
         {
-            Assert.False(BakedToolDispatchAuthorizer.IsAllowed("future_raw_tool"));
+            Assert.False(BakedToolDispatchAuthorizer.IsAllowed(command));
         }
 
         [Fact]
@@ -92,16 +95,16 @@ namespace Bimwright.Dwg.Tests
                 ["description"] = "Fix note",
                 ["source"] = "preset",
                 ["handler_tool"] = "update_texts",
-                ["fixed_args"] = new JObject { ["apply_unicode_style"] = true },
+                ["fixed_args"] = new JObject { ["items"] = new JArray() },
                 ["params_schema"] = new JObject { ["type"] = "object" },
-                ["source_code"] = BakedToolRuntimeSource.BuildPreset("update_texts", new JObject { ["apply_unicode_style"] = true })
+                ["source_code"] = BakedToolRuntimeSource.BuildPreset("update_texts", new JObject { ["items"] = new JArray() })
             };
 
             var record = BakedToolRuntimeCommandFactory.FromApplyRequest(request);
 
             Assert.Equal("dwg_fix_note", record.Name);
             Assert.Equal("update_texts", record.HandlerTool);
-            Assert.Contains("apply_unicode_style", record.FixedArgs);
+            Assert.Contains("items", record.FixedArgs);
         }
 
         [Fact]
