@@ -23,7 +23,6 @@ namespace Bimwright.Dwg.Tests
             Assert.Equal(new[]
             {
                 "dwg_accept_bake_suggestion",
-                "dwg_apply_unicode_style",
                 "dwg_batch_execute",
                 "dwg_capture_view_image",
                 "dwg_change_color",
@@ -64,6 +63,7 @@ namespace Bimwright.Dwg.Tests
                 "dwg_get_entity_properties",
                 "dwg_get_lisp_status",
                 "dwg_get_selected_texts",
+                "dwg_get_selection",
                 "dwg_get_settings",
                 "dwg_get_variables",
                 "dwg_insert_block",
@@ -102,7 +102,6 @@ namespace Bimwright.Dwg.Tests
                 "dwg_set_system_variable",
                 "dwg_set_text_style",
                 "dwg_switch_target",
-                "dwg_translate_and_rewrite",
                 "dwg_update_block_angles",
                 "dwg_update_texts",
                 "dwg_zoom_extents",
@@ -219,10 +218,10 @@ namespace Bimwright.Dwg.Tests
             Assert.True(IsMcpToolType(dimensionTools), $"{dimensionTools.FullName} must be an MCP tool type.");
             Assert.Equal(new[]
             {
-                "dwg_create_leader",
                 "dwg_create_table"
             }, GetSortedMcpToolNames(annotationTools));
-            Assert.Equal(new[] { "dwg_create_mtext", "dwg_create_text" }, GetSortedMcpToolNames(typeof(TextCreationTools)));
+            Assert.Equal(new[] { "dwg_create_leader", "dwg_create_mtext", "dwg_create_text" },
+                GetSortedMcpToolNames(typeof(TextCreationTools)));
             Assert.Equal(new[]
             {
                 "dwg_create_aligned_dimension",

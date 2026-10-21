@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using Bimwright.Dwg.Plugin;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Newtonsoft.Json.Linq;
@@ -17,19 +16,14 @@ namespace Bimwright.Dwg.Plugin.Handlers
         public CommandResult Execute(Document doc, JToken parameters)
         {
             JArray items;
-            bool applyUnicodeStyle;
-            if (!TryParseRequest(parameters, out items, out applyUnicodeStyle))
+            if (parameters is JObject request &&
+                (request.Property("apply_unicode_style") != null || request.Property("final_scale") != null))
+                return CommandResult.Fail("automatic formatting moved to BWUNICODE; update_texts only changes text");
+            if (!TryParseRequest(parameters, out items))
                 return CommandResult.Fail("params must be { items: [...] }");
 
             var db = doc.Database;
             var results = new List<object>();
-            ObjectId unicodeStyleId = ObjectId.Null;
-            string layerName = null;
-            if (applyUnicodeStyle)
-            {
-                unicodeStyleId = UnicodeStyleService.EnsureStyle(db).StyleId;
-                layerName = McpLayerService.EnsureWhiteLayer(db);
-            }
 
             using (var tx = db.TransactionManager.StartTransaction())
             {
@@ -69,41 +63,23 @@ namespace Bimwright.Dwg.Plugin.Handlers
                         {
                             case AttributeReference att:
                                 att.TextString = newText ?? string.Empty;
-                                if (applyUnicodeStyle)
-                                {
-                                    UnicodeStyleService.ApplyToObject(tx, att, unicodeStyleId);
-                                    McpLayerService.ApplyToObject(att, layerName);
-                                }
                                 break;
                             case DBText dbText:
                                 dbText.TextString = newText ?? string.Empty;
-                                if (applyUnicodeStyle)
-                                {
-                                    UnicodeStyleService.ApplyToObject(tx, dbText, unicodeStyleId);
-                                    McpLayerService.ApplyToObject(dbText, layerName);
-                                }
                                 break;
                             case MText mText:
                                 mText.Contents = newText ?? string.Empty;
-                                if (applyUnicodeStyle)
-                                {
-                                    UnicodeStyleService.ApplyToObject(tx, mText, unicodeStyleId);
-                                    McpLayerService.ApplyToObject(mText, layerName);
-                                }
                                 break;
                             case MLeader mLeader:
-                                var mt = mLeader.MText;
-                                if (mt == null)
+                                using (var mt = mLeader.MText)
                                 {
-                                    results.Add(new { handle = handleStr, ok = false, error = "mleader has no mtext" });
-                                    continue;
-                                }
-                                mt.Contents = newText ?? string.Empty;
-                                mLeader.MText = mt;
-                                if (applyUnicodeStyle)
-                                {
-                                    UnicodeStyleService.ApplyToObject(tx, mLeader, unicodeStyleId);
-                                    McpLayerService.ApplyToObject(mLeader, layerName);
+                                    if (mt == null)
+                                    {
+                                        results.Add(new { handle = handleStr, ok = false, error = "mleader has no mtext" });
+                                        continue;
+                                    }
+                                    mt.Contents = newText ?? string.Empty;
+                                    mLeader.MText = mt;
                                 }
                                 break;
                             default:
@@ -123,10 +99,9 @@ namespace Bimwright.Dwg.Plugin.Handlers
             return CommandResult.Success(results);
         }
 
-        private static bool TryParseRequest(JToken parameters, out JArray items, out bool applyUnicodeStyle)
+        private static bool TryParseRequest(JToken parameters, out JArray items)
         {
             items = null;
-            applyUnicodeStyle = false;
 
             if (parameters == null) return false;
 
@@ -141,7 +116,6 @@ namespace Bimwright.Dwg.Plugin.Handlers
             items = parameters["items"] as JArray;
             if (items == null) return false;
 
-            applyUnicodeStyle = parameters["apply_unicode_style"]?.Value<bool>() ?? false;
             return true;
         }
     }

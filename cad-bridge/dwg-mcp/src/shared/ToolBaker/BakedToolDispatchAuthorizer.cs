@@ -9,9 +9,7 @@ namespace Bimwright.Dwg.Plugin.ToolBaker
         {
             "get_selected_texts",
             "update_texts",
-            "apply_unicode_style",
-            "collapse_and_rewrite",
-            "translate_and_rewrite"
+            "collapse_and_rewrite"
         };
 
         private static readonly HashSet<string> Denied = new HashSet<string>(StringComparer.Ordinal)

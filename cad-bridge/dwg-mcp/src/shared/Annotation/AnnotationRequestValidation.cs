@@ -1,4 +1,5 @@
 // Modified by the CAD team (2026-10-09): text/style tools; see cad-bridge/docs/TOOLS.md#text.
+using Bimwright.Dwg.Plugin.Cad;
 using Newtonsoft.Json.Linq;
 
 namespace Bimwright.Dwg.Plugin.Annotation
@@ -16,6 +17,70 @@ namespace Bimwright.Dwg.Plugin.Annotation
             if (!TryReadNumber(obj, "width", 0, false, false, out var width, out error)) return false;
             if (width < 0) { error = "width must be finite and non-negative"; return false; }
             input = new MTextInput { Appearance = appearance, Width = width };
+            return true;
+        }
+
+        internal static bool TryReadLeader(JObject obj, out LeaderInput input, out string error)
+        {
+            input = null;
+            error = null;
+            if (obj == null) { error = "params must be an object"; return false; }
+            if (!(obj["points"] is JArray points))
+            {
+                error = "points must be an array of point objects";
+                return false;
+            }
+            if (!TryValidateLeaderPointCount(points.Count, out error)) return false;
+            if (!CadWire.TryParsePoint(points[0], out var arrowPoint, out error))
+            {
+                error = "points[0] " + error;
+                return false;
+            }
+            if (!CadWire.TryParsePoint(points[1], out var textPoint, out error))
+            {
+                error = "points[1] " + error;
+                return false;
+            }
+            if (arrowPoint.Z != textPoint.Z)
+            {
+                error = "points must have the same WCS z coordinate";
+                return false;
+            }
+            if (arrowPoint.X == textPoint.X && arrowPoint.Y == textPoint.Y)
+            {
+                error = "points must be distinct";
+                return false;
+            }
+
+            string text = null;
+            var textToken = obj["text"];
+            if (textToken != null && textToken.Type != JTokenType.Null)
+            {
+                if (textToken.Type != JTokenType.String)
+                {
+                    error = "text must be a string or null";
+                    return false;
+                }
+                text = textToken.Value<string>();
+                if (text.Length > 16384 || text.IndexOf('\0') >= 0 || text.Contains("%<"))
+                {
+                    error = "text must contain at most 16384 characters, without fields or null characters";
+                    return false;
+                }
+                if (string.IsNullOrWhiteSpace(text)) text = null;
+            }
+            if (!TryReadNumber(obj, "height", 2.5, false, true, out var height, out error) ||
+                !TryReadNumber(obj, "arrow_size", 2.5, false, true, out var arrowSize, out error) ||
+                !TryReadOptionalName(obj, "text_style", out var textStyle, out error) ||
+                !TryReadOptionalName(obj, "layer", out var layer, out error) ||
+                !CadWire.TryReadAciColor(obj, "color_index", 256, out var color, out error)) return false;
+
+            input = new LeaderInput
+            {
+                ArrowPoint = arrowPoint, TextPoint = textPoint, Text = text,
+                Height = height, ArrowSize = arrowSize, TextStyle = textStyle,
+                Layer = layer, ColorIndex = color
+            };
             return true;
         }
 
@@ -155,9 +220,9 @@ namespace Bimwright.Dwg.Plugin.Annotation
         internal static bool TryValidateLeaderPointCount(int count, out string error)
         {
             error = null;
-            if (count < 2)
+            if (count != 2)
             {
-                error = "points must contain at least 2 point objects";
+                error = "points must contain exactly 2 point objects";
                 return false;
             }
 
@@ -229,5 +294,17 @@ namespace Bimwright.Dwg.Plugin.Annotation
     {
         internal DbTextInput Appearance { get; set; }
         internal double Width { get; set; }
+    }
+
+    internal sealed class LeaderInput
+    {
+        internal CadPointInput ArrowPoint { get; set; }
+        internal CadPointInput TextPoint { get; set; }
+        internal string Text { get; set; }
+        internal double Height { get; set; }
+        internal double ArrowSize { get; set; }
+        internal string TextStyle { get; set; }
+        internal string Layer { get; set; }
+        internal int ColorIndex { get; set; }
     }
 }

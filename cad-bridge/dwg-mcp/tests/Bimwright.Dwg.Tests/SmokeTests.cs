@@ -7,15 +7,14 @@ namespace Bimwright.Dwg.Tests
     public class DtoRoundTripTests
     {
         [Fact]
-        public void UpdateTextsRequest_roundtrips_with_unicode_style_flag()
+        public void UpdateTextsRequest_roundtrips_without_formatting_side_effects()
         {
             var original = new UpdateTextsRequest
             {
                 Items = new[]
                 {
                     new UpdateTextItem { Handle = "2A4F", NewText = "Ban ve ky thuat" }
-                },
-                ApplyUnicodeStyle = true
+                }
             };
             var json = JsonConvert.SerializeObject(original);
             var decoded = JsonConvert.DeserializeObject<UpdateTextsRequest>(json);
@@ -23,7 +22,7 @@ namespace Bimwright.Dwg.Tests
             Assert.Single(decoded.Items);
             Assert.Equal("2A4F", decoded.Items[0].Handle);
             Assert.Equal("Ban ve ky thuat", decoded.Items[0].NewText);
-            Assert.True(decoded.ApplyUnicodeStyle);
+            Assert.DoesNotContain("apply_unicode_style", json);
         }
     }
 }

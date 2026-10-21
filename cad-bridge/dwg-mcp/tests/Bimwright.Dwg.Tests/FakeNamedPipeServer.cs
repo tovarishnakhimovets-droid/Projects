@@ -69,6 +69,7 @@ namespace Bimwright.Dwg.Tests
                     try { await pipe.WaitForConnectionAsync(ct); }
                     catch (OperationCanceledException) when (ct.IsCancellationRequested) { return; }
                     catch (ObjectDisposedException) when (ct.IsCancellationRequested) { return; }
+                    catch (IOException) when (ct.IsCancellationRequested) { return; }
 
                     reader = new StreamReader(pipe, new UTF8Encoding(false), true, -1, leaveOpen: true);
                     writer = new StreamWriter(pipe, new UTF8Encoding(false), -1, leaveOpen: true) { AutoFlush = true };

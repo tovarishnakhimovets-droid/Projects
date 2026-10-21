@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Bimwright.Dwg.Plugin;
-using Bimwright.Dwg.Plugin.Rewriting;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
@@ -12,9 +11,8 @@ using Newtonsoft.Json.Linq;
 namespace Bimwright.Dwg.Plugin.Handlers
 {
     /// <summary>
-    /// Reads text from the pickfirst selection, clusters it spatially, stores
-    /// clusters in ClusterStateStore, and returns a lightweight summary so the
-    /// LLM can reason about groups without receiving a large payload.
+    /// Reads text from the pickfirst selection and returns spatial groups.
+    /// The response is a snapshot; no cross-document writeback state is stored.
     /// </summary>
     public class GetSelectedTextsHandler : IAcadCommand
     {
@@ -30,21 +28,19 @@ namespace Bimwright.Dwg.Plugin.Handlers
                 return CommandResult.Fail("no selection");
 
             var records = new List<EntityRecord>();
-            using (var tx = doc.Database.TransactionManager.StartTransaction())
+            using (var tx = doc.Database.TransactionManager.StartOpenCloseTransaction())
             {
                 foreach (SelectedObject so in pickfirst.Value)
                 {
                     var obj = tx.GetObject(so.ObjectId, OpenMode.ForRead);
                     CollectEntityRecords(tx, obj, Matrix3d.Identity, null, records, depth: 0);
                 }
-                tx.Commit();
             }
 
             var options = ClusterOptions.FromWire(parameters?["grouping_strength"]?.Value<string>());
             bool includeEntities = parameters?["include_entities"]?.Value<bool>() ?? false;
 
             var clusters = SpatialClusterer.Cluster(records, options);
-            ClusterStateStore.Replace(clusters);
 
             var lightweight = clusters.Select(c => new
             {
@@ -52,8 +48,6 @@ namespace Bimwright.Dwg.Plugin.Handlers
                 text = c.CombinedText,
                 entity_count = c.AllHandles.Count,
                 in_block = c.InBlock,
-                rewrite_mode = RewriteActionNames.ToWire(
-                    RewriteRequestBuilder.DetermineAction(c, hasTranslation: true)),
                 entities = includeEntities ? c.Entities.Select(e => new
                 {
                     handle = e.Handle,
@@ -61,7 +55,17 @@ namespace Bimwright.Dwg.Plugin.Handlers
                     text = e.Text,
                     x = e.X,
                     y = e.Y,
-                    layer = e.Layer
+                    z = e.Z,
+                    height = e.Height,
+                    layer = e.Layer,
+                    owner_handle = e.OwnerHandle,
+                    block_handle = e.BlockHandle,
+                    block_scale = e.BlockScale,
+                    local_position = new { x = e.LocalX, y = e.LocalY, z = e.LocalZ },
+                    local_height = e.LocalHeight,
+                    bounds_available = e.BoundsAvailable,
+                    bounds = new { min_x = e.BoundsMinX, max_x = e.BoundsMaxX,
+                        min_y = e.BoundsMinY, max_y = e.BoundsMaxY }
                 }).ToList() : null
             }).ToList();
 
@@ -114,7 +118,9 @@ namespace Bimwright.Dwg.Plugin.Handlers
                     break;
 
                 case MLeader mLeader:
-                    var mlText = mLeader.MText != null ? mLeader.MText.Contents : string.Empty;
+                    string mlText;
+                    using (var text = mLeader.MText)
+                        mlText = text?.Contents ?? string.Empty;
                     Point3d mlPos;
                     try { mlPos = mLeader.GetFirstVertex(0); }
                     catch { mlPos = Point3d.Origin; }
@@ -162,6 +168,7 @@ namespace Bimwright.Dwg.Plugin.Handlers
 
             double boundsMinX = worldPos.X, boundsMaxX = worldPos.X;
             double boundsMinY = worldPos.Y, boundsMaxY = worldPos.Y;
+            bool boundsAvailable = false;
             try
             {
                 var ext = ent.GeometricExtents;
@@ -188,6 +195,7 @@ namespace Bimwright.Dwg.Plugin.Handlers
                 }
                 boundsMinX = minX; boundsMaxX = maxX;
                 boundsMinY = minY; boundsMaxY = maxY;
+                boundsAvailable = true;
             }
             catch { /* use position fallback */ }
 
@@ -198,13 +206,20 @@ namespace Bimwright.Dwg.Plugin.Handlers
                 Text = text,
                 X = worldPos.X,
                 Y = worldPos.Y,
+                Z = worldPos.Z,
                 Height = worldH > 0 ? worldH : localHeight,
+                LocalX = localPos.X,
+                LocalY = localPos.Y,
+                LocalZ = localPos.Z,
+                LocalHeight = localHeight,
+                OwnerHandle = ent.OwnerId.IsNull ? null : ent.OwnerId.Handle.ToString(),
                 Layer = ent.Layer,
                 BlockHandle = blockHandle,
                 BoundsMinX = boundsMinX,
                 BoundsMaxX = boundsMaxX,
                 BoundsMinY = boundsMinY,
                 BoundsMaxY = boundsMaxY,
+                BoundsAvailable = boundsAvailable,
                 BlockScale = YScaleOf(xform)
             };
         }

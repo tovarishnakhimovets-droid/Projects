@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
@@ -103,18 +102,17 @@ namespace Bimwright.Dwg.Plugin.Blocks
             using(var data=record.Data)
             {var values=data?.AsArray();BlockVariantService.Require(values!=null&&values.Length==1&&values[0].Value is string s&&s.Length<=4096,"angle binding record invalid");return JObject.Parse((string)values[0].Value);}
         }
-        private static RefreshReadback Refresh(RefreshContext context)
+        private static RefreshPlan InspectRefresh(RefreshContext context)
         {
-            var db=context.Database;var watch=Stopwatch.StartNew();
-            using(var tx=db.TransactionManager.StartTransaction())
+            var db = context.Database;
+            var plan = new RefreshPlan { StartedAt = Clock.ElapsedMilliseconds };
+            using (var tx = db.TransactionManager.StartOpenCloseTransaction())
             {
                 var table=(BlockTable)tx.GetObject(db.BlockTableId,OpenMode.ForRead);
-                var updates=new List<Tuple<AttributeReference,string,BlockReference>>();
-                var references=new HashSet<ObjectId>();var evaluated=new HashSet<ObjectId>();
                 var snapshot=new JArray();int definitions=0,snapshotCharacters=0;
                 foreach(ObjectId id in table)
                 {
-                    BlockVariantService.Require(watch.ElapsedMilliseconds<RefreshBudgetMilliseconds,"angle refresh time budget exceeded");
+                    RequireRefreshBudget(plan);
                     BlockVariantService.Require(++definitions<=10000,"angle refresh definition limit exceeded");
                     var definition=(BlockTableRecord)tx.GetObject(id,OpenMode.ForRead);
                     if(definition.IsAnonymous||definition.IsDependent||definition.IsFromExternalReference)continue;
@@ -123,15 +121,15 @@ namespace Bimwright.Dwg.Plugin.Blocks
                     foreach(ObjectId anonymous in definition.GetAnonymousBlockIds())records.Add((BlockTableRecord)tx.GetObject(anonymous,OpenMode.ForRead));
                     foreach(var record in records)foreach(ObjectId refId in record.GetBlockReferenceIds(true,false))
                     {
-                        if(!references.Add(refId)||refId.IsErased||refId.IsEffectivelyErased)continue;
-                        BlockVariantService.Require(references.Count<=1000,"angle refresh reference limit exceeded");
+                        if(!plan.BoundReferences.Add(refId)||refId.IsErased||refId.IsEffectivelyErased)continue;
+                        BlockVariantService.Require(plan.BoundReferences.Count<=1000,"angle refresh reference limit exceeded");
                         var reference=tx.GetObject(refId,OpenMode.ForRead) as BlockReference;
                         if(reference==null||!reference.IsDynamicBlock)continue;
                         var a=Attribute(tx,reference,(string)binding["tag"]);
                         BlockVariantService.Require(a!=null&&!a.HasFields&&!a.IsMTextAttribute,"bound attribute missing or contains a field");
                         var angles=BlockVariantService.ReadAngles(reference);JObject native=null;
                         var wanted=Calculate(tx,reference,angles,binding,
-                            ()=>watch.ElapsedMilliseconds<RefreshBudgetMilliseconds,n=>native=n);
+                            ()=>Clock.ElapsedMilliseconds-plan.StartedAt<RefreshBudgetMilliseconds,n=>native=n);
                         var source=new JObject{["reference"]=reference.Handle.ToString(),
                             ["evaluated_definition"]=reference.BlockTableRecord.Handle.ToString(),
                             ["angles"]=new JObject(angles.OrderBy(p=>p.Key,StringComparer.Ordinal).Select(p=>new JProperty(p.Key,p.Value))),
@@ -142,38 +140,96 @@ namespace Bimwright.Dwg.Plugin.Blocks
                             source["dimension"]=dimension["handle"].DeepClone();
                             source["measurement_radians"]=dimension["measurement_radians"].DeepClone();
                             source["formatted"]=dimension["formatted_plain_text"].DeepClone();
-                            evaluated.Add(reference.BlockTableRecord);
+                            plan.EvaluatedDefinitions.Add(reference.BlockTableRecord);
                         }
                         snapshotCharacters+=source.ToString(Formatting.None).Length;
                         BlockVariantService.Require(snapshotCharacters<=256*1024,"angle refresh snapshot limit exceeded");
                         snapshot.Add(source);
                         if(a.TextString==wanted)continue;
                         BlockVariantService.CheckLayer(tx,db,a.Layer);BlockVariantService.CheckLayer(tx,db,reference.Layer);
-                        updates.Add(Tuple.Create(a,wanted,reference));
+                        plan.Updates.Add(new AttributeRefreshUpdate
+                        {
+                            AttributeId = a.ObjectId,
+                            ReferenceId = reference.ObjectId,
+                            DefinitionId = definition.ObjectId,
+                            Tag = a.Tag,
+                            OldText = a.TextString,
+                            NewText = wanted,
+                            Binding = (JObject)binding.DeepClone(),
+                            ExpectedAngles = JObject.FromObject(angles)
+                        });
                     }
                 }
-                BlockVariantService.Require(watch.ElapsedMilliseconds<RefreshBudgetMilliseconds,"angle refresh time budget exceeded");
-                // Native command/Undo integration remains to be verified. UpgradeOpen itself can
-                // begin Undo filing; do not claim this is one-Undo proof. Database Undo is NEVER disabled.
-                foreach(var update in updates)
+                RequireRefreshBudget(plan);
+                // Do not commit a read-only scan or take a document write lock:
+                // even an empty normal transaction can interfere with Undo/Redo.
+                using (var hash = SHA256.Create())
+                    plan.Snapshot = Convert.ToBase64String(hash.ComputeHash(
+                        Encoding.UTF8.GetBytes(snapshot.ToString(Formatting.None))));
+            }
+            return plan;
+        }
+
+        private static RefreshReadback ApplyRefresh(RefreshContext context, RefreshPlan plan)
+        {
+            // The caller owns the document write lock. Reopen every object and
+            // validate the whole plan before the first UpgradeOpen or setter.
+            var db = context.Database;
+            using (var tx = db.TransactionManager.StartOpenCloseTransaction())
+            {
+                var updates = new List<Tuple<AttributeReference, string, BlockReference>>();
+                foreach (var change in plan.Updates)
                 {
-                    var a=update.Item1;context.OwnWrites.Add(a.ObjectId);a.UpgradeOpen();a.DisableUndoRecording(true);
-                    try{a.TextString=update.Item2;}finally{a.DisableUndoRecording(false);}
-                    BlockVariantService.Require(a.TextString==update.Item2,"derived attribute write did not retain the native display text");
+                    RequireRefreshBudget(plan);
+                    BlockVariantService.Require(!change.ReferenceId.IsErased && !change.ReferenceId.IsEffectivelyErased,
+                        "bound reference was erased before angle attribute refresh");
+                    var reference = tx.GetObject(change.ReferenceId, OpenMode.ForRead) as BlockReference;
+                    BlockVariantService.Require(reference != null && reference.IsDynamicBlock &&
+                        reference.DynamicBlockTableRecord == change.DefinitionId, "bound reference definition changed");
+                    var definition = (BlockTableRecord)tx.GetObject(change.DefinitionId, OpenMode.ForRead);
+                    BlockVariantService.Require(!definition.IsDependent && !definition.IsFromExternalReference &&
+                        JToken.DeepEquals(ReadBinding(tx, definition), change.Binding), "angle binding changed before refresh");
+                    var attribute = Attribute(tx, reference, change.Tag);
+                    BlockVariantService.Require(attribute != null && attribute.ObjectId == change.AttributeId &&
+                        attribute.OwnerId == reference.ObjectId && !attribute.HasFields && !attribute.IsMTextAttribute &&
+                        attribute.TextString == change.OldText, "bound attribute changed before refresh");
+                    BlockVariantService.CheckLayer(tx, db, attribute.Layer);
+                    BlockVariantService.CheckLayer(tx, db, reference.Layer);
+                    var angles = BlockVariantService.ReadAngles(reference);
+                    BlockVariantService.CheckAngles(angles, change.ExpectedAngles, 1e-9);
+                    BlockVariantService.Require(Calculate(tx, reference, angles, change.Binding,
+                        () => Clock.ElapsedMilliseconds - plan.StartedAt < RefreshBudgetMilliseconds) == change.NewText,
+                        "derived angle display changed before refresh");
+                    updates.Add(Tuple.Create(attribute, change.NewText, reference));
                 }
-                foreach(var parent in updates.Select(u=>u.Item3).GroupBy(r=>r.ObjectId).Select(g=>g.First()))
+                RequireRefreshBudget(plan);
+                // Real derived writes still need native grip/Undo/Redo verification.
+                // Database Undo is never disabled; UpgradeOpen itself may start filing.
+                foreach (var update in updates)
                 {
-                    context.OwnWrites.Add(parent.ObjectId);parent.UpgradeOpen();parent.DisableUndoRecording(true);
-                    try{parent.RecordGraphicsModified(true);}finally{parent.DisableUndoRecording(false);}
+                    var attribute = update.Item1;
+                    context.OwnWrites.Add(attribute.ObjectId);
+                    attribute.UpgradeOpen();
+                    attribute.DisableUndoRecording(true);
+                    try { attribute.TextString = update.Item2; }
+                    finally { attribute.DisableUndoRecording(false); }
+                    BlockVariantService.Require(attribute.TextString == update.Item2,
+                        "derived attribute write did not retain the native display text");
+                }
+                foreach (var parent in updates.Select(u => u.Item3).GroupBy(r => r.ObjectId).Select(g => g.First()))
+                {
+                    context.OwnWrites.Add(parent.ObjectId);
+                    parent.UpgradeOpen();
+                    parent.DisableUndoRecording(true);
+                    try { parent.RecordGraphicsModified(true); }
+                    finally { parent.DisableUndoRecording(false); }
                 }
                 tx.Commit();
-                context.BoundReferences=references;context.EvaluatedDefinitions=evaluated;
-                // The policy retains a bounded signature, not a growing copy of block data.
-                // Include raw source values even when native rounding leaves display text unchanged.
-                using(var hash=SHA256.Create())
-                    return new RefreshReadback{Snapshot=Convert.ToBase64String(hash.ComputeHash(
-                        Encoding.UTF8.GetBytes(snapshot.ToString(Formatting.None)))),Wrote=updates.Count!=0};
+                return new RefreshReadback { Snapshot = plan.Snapshot, Wrote = updates.Count != 0 };
             }
         }
+
+        private static void RequireRefreshBudget(RefreshPlan plan) => BlockVariantService.Require(
+            Clock.ElapsedMilliseconds - plan.StartedAt < RefreshBudgetMilliseconds, "angle refresh time budget exceeded");
     }
 }

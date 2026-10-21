@@ -134,8 +134,8 @@ namespace Bimwright.Dwg.Tests
         public void BuildCompleted_rewrite_reports_processed_and_failed()
         {
             var vm = ToastContentBuilder.BuildCompleted(
-                toolName: "translate_and_rewrite",
-                resultJson: "{\"results\":[{\"ok\":true},{\"ok\":false},{\"ok\":true}]}",
+                toolName: "collapse_and_rewrite",
+                resultJson: "[{\"ok\":true},{\"ok\":false},{\"ok\":true}]",
                 success: true,
                 errorMessage: null,
                 toolDescription: null

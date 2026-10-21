@@ -10,6 +10,47 @@ namespace Bimwright.Dwg.Server.Tools
     [McpServerToolType]
     public class TextCreationTools
     {
+        [McpServerTool(Name = "dwg_create_leader", ReadOnly = false, Idempotent = false), Description(
+            "Create one plain non-annotative MLeader: a straight segment from arrow tip to text, " +
+            "closed-filled arrow, no dogleg, landing or text frame. points is a JSON array of " +
+            "exactly two distinct WCS point objects at the same elevation, first the arrow tip. " +
+            "Positive height and arrow_size default to 2.5 drawing units. Optional text_style " +
+            "must be an existing local horizontal non-annotative style. Current styles and " +
+            "system variables are not modified. Available in drawing and annotation profiles.")]
+        public static Task<string> CreateLeader(
+            [Description("JSON array of two WCS points: arrow tip, then text anchor; x/y required, z defaults to 0.")] string points,
+            [Description("Optional MText annotation; omit for an arrow without text.")] string text = null,
+            [Description("Optional target layer; missing layer is created transactionally.")] string layer = null,
+            [Description("ACI index 1-256; default 256 is ByLayer.")] int? color_index = null,
+            [Description("Finite positive text height; default 2.5 drawing units.")] double? height = null,
+            [Description("Finite positive arrow size; default 2.5 drawing units.")] double? arrow_size = null,
+            [Description("Optional existing local horizontal non-annotative text style.")] string text_style = null)
+        {
+            if (!TryBuildLeaderRequest(points, text, layer, color_index, height, arrow_size,
+                text_style, out var request, out var error))
+                return Task.FromResult(JsonConvert.SerializeObject(new { ok = false, error }));
+            return ToolGateway.LoggedCall("create_leader", request, request);
+        }
+
+        internal static bool TryBuildLeaderRequest(string points, string text, string layer,
+            int? colorIndex, double? height, double? arrowSize, string textStyle,
+            out JObject request, out string error)
+        {
+            request = null;
+            JArray vertices;
+            try { vertices = JArray.Parse(points ?? ""); }
+            catch (JsonException) { error = "points must be a JSON array of exactly two WCS points"; return false; }
+            var candidate = new JObject { ["points"] = vertices, ["color_index"] = colorIndex ?? 256 };
+            if (text != null) candidate["text"] = text;
+            if (layer != null) candidate["layer"] = layer;
+            if (height.HasValue) candidate["height"] = height.Value;
+            if (arrowSize.HasValue) candidate["arrow_size"] = arrowSize.Value;
+            if (textStyle != null) candidate["text_style"] = textStyle;
+            if (!AnnotationRequestValidation.TryReadLeader(candidate, out _, out error)) return false;
+            request = candidate;
+            return true;
+        }
+
         [McpServerTool(Name = "dwg_create_mtext", ReadOnly = false, Idempotent = false), Description(
             "Create one editable multiline MText in the current drawing space. location is a JSON WCS point " +
             "in drawing units; height defaults to 2.5 and rotation is in degrees. Optional text_style must " +

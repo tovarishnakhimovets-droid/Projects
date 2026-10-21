@@ -9,7 +9,10 @@
 - [Настройки приложения AutoCAD](#settings)
 - [Настройки перекрестия](#crosshair-settings)
 - [Вес линий и SOLID-заливка](#styles)
+- [Текущее выделение объектов](#selection)
 - [Текст, стили и выбранные свойства](#text)
+- [Чтение и переписывание текста](#text-rewrite)
+- [Выноски](#leaders)
 - [Чтение динамического блока](#block-inspection)
 - [Независимый вариант блока и угловые атрибуты](#block-variants)
 - [Атомарное создание объектов](#create-entities)
@@ -25,6 +28,41 @@
 требует запроса пользователя; эти инструменты не сохраняют его автоматически.
 Наличие исходников и успешные offline-тесты не обновляют загруженный runtime
 и не подтверждают нативное поведение AutoCAD.
+
+<a id="selection"></a>
+## Текущее выделение объектов
+
+`dwg_get_selection(max_entities=100, include_geometry=false)` доступен в `query`,
+включая read-only режим. Читает только текущее предварительное выделение AutoCAD
+через SelectImplied; не вызывает запрос выбора, не меняет выделение и PICKFIRST.
+Если пользователь говорит «выбранные объекты», начинать с этого инструмента.
+
+`max_entities` — целое 1..500. По умолчанию возвращаются основные свойства,
+native `dxf_name`/`class_name`, handles и типы без подробной геометрии или раскрытия
+блоков. `include_geometry=true` добавляет обычное подробное описание существующего
+reader, в том числе доступные атрибуты блоков; это не полный обход вложенных объектов.
+Для дальнейших операций использовать свежие handles и читать нужные свойства.
+
+Ответ содержит identity текущего документа (`document_name`, `document_path`,
+`fingerprint`), `status` (`ok`, `empty`, `disabled`), `native_prompt_status`,
+`pickfirst`, `selected_count`, `returned_count`, `handles`, `entities`, `complete`,
+`truncated`, `errors`. Элемент entities: `handle`, `ok`, `entity`, `error`; ошибки
+остаются отдельными строками, а не исчезают из подсчёта. Handles соответствуют
+возвращённым строкам; null означает, что даже handle прочитать не удалось.
+`type_counts.scope="returned"`: counts учитывает только распознанные типы
+возвращённых строк, включая строки с ошибкой последующего чтения свойств.
+Это не статистика пропущенных из-за лимита объектов.
+
+`selected_count` — размер нативного SelectionSet до ограничения. `complete=true`
+означает, что прочитаны все выбранные объекты без ошибок. При `PICKFIRST=0`
+возвращается `disabled`, `complete=false`; размер недоступного выбора не известен.
+`empty` означает отсутствие доступного pickfirst-выбора. Ошибка самого чтения —
+отказ, не пустой список. При пустом, отключённом или недоступном выборе сообщить
+об этом; поиск по всему чертежу и старые handles не подменяют пользовательский выбор.
+`dwg_get_selected_texts` отдельно извлекает и группирует текст, а не описывает
+все выбранные объекты. Чтение работает и с несохранённым DWG.
+
+Основание — [официальный пример pickfirst/SelectImplied](https://help.autodesk.com/cloudhelp/2027/ENU/OARX-DevGuide-Managed/files/GUID-D4987D00-1164-4217-A82E-B8B49FFB7A29.htm).
 
 <a id="styles"></a>
 ## Вес линий и SOLID-заливка
@@ -181,6 +219,80 @@ live-проверкой подготовленного патча.
 [`DBText.TextStyleId`](https://help.autodesk.com/cloudhelp/2026/ENU/OARX-ManagedRefGuide/files/OARX-ManagedRefGuide-Autodesk_AutoCAD_DatabaseServices_DBText_TextStyleId.html)
 и [`DBText.AdjustAlignment`](https://help.autodesk.com/cloudhelp/2024/ENU/OARX-ManagedRefGuide/files/OARX-ManagedRefGuide-Autodesk_AutoCAD_DatabaseServices_DBText_AdjustAlignment_Database.html).
 Для MText: [свойства MText](https://help.autodesk.com/cloudhelp/2026/ENU/OARX-ManagedRefGuide/files/OARX-ManagedRefGuide-__MEMBERTYPE_Properties_Autodesk_AutoCAD_DatabaseServices_MText.html).
+
+<a id="text-rewrite"></a>
+## Чтение и переписывание текста
+
+`dwg_get_selected_texts(groupingStrength="normal", includeEntities=false)`
+читает пользовательское pickfirst-выделение. `weak`/`normal`/`strong` управляют
+пространственной группировкой. Пустое выделение — отказ. При `includeEntities=true`
+возвращаются handles, типы/тексты, слой и owner, координаты/высота WCS,
+`local_position`/`local_height`, `block_handle`/`block_scale`, bounds с признаком
+`bounds_available`. Вложенные определения читаются на один уровень. Группы
+не сохраняются для будущей записи; `rewrite_mode` больше не возвращается.
+Снимок не доказывает, что произвольные фрагменты безопасно объединять.
+
+`dwg_update_texts(items)` принимает строку JSON-массива
+`[{"handle":"1A2B","new_text":"Текст"}]` и меняет только текст DBText/MText,
+AttributeReference и текстового MLeader. Геометрия, высота, стиль и слой
+не назначаются автоматически. Ответ — результаты элементов `handle/ok/error`;
+отказ элемента не отменяет удачные элементы запроса.
+
+`dwg_collapse_and_rewrite(clusters)` принимает **одну строку JSON-объекта**:
+
+- Обязательные поля корня: `expected_document` — полный путь текущего сохранённого
+  DWG, `expected_fingerprint` из свежего чтения и массив `clusters`.
+- Элемент: `anchor_handle`, `new_text`; необязательные `delete_handles`,
+  `convert_to_mtext`, `mtext_width`, `text_height`.
+- Ширина/высота задаются в **локальных единицах владельца**, не WCS блока.
+  Это конечные числа: ширина >=0, высота >0. Неуказанные свойства наследуются
+  от исходного текста; скрытого множителя высоты и фирменного стиля нет.
+- Объединение поддерживает обычные DBText/MText одного владельца. Атрибуты и
+  MLeader допускают замену текста, но не удаление/преобразование при merge.
+  Fields, annotative, xref и заблокированные объекты отклоняются.
+- До записи проверяется весь план элемента. Транзакции отдельные для каждого
+  элемента: учитывать top-level `ok` и все результаты; общий Undo не обещается.
+  Ответ содержит `anchor_handle`, `ok`, `new_handle`, `deleted_count`, `action`,
+  фактические размеры и ошибку. `deleted_count` включает стёртый старый anchor
+  при создании MText. Анонимные/динамические определения отклоняются; обычное
+  определение изменяется для всех ссылок. После замены старый anchor может быть стёрт.
+
+`dwg_translate_and_rewrite`/`dwg_apply_unicode_style` удалены; старые параметры
+автоматического оформления отклоняются. Перевод и фирменное оформление выполняются
+по [сценарию](CAD_WORKFLOW.md#перевод-и-оформление-текста), оформление — одним LISP.
+
+<a id="leaders"></a>
+## Выноски
+
+| Возможность | Текущая реализация и границы |
+| --- | --- |
+| Чтение | `dwg_get_entity_properties` с `includeGeometry:true` для MLeader: текст, высота, количество leaders/lines, first/last vertex линии с индексом 0. Это не полная геометрия всех стрелок; при отсутствии этого индекса точки могут быть null. |
+| Текст | `dwg_update_texts` меняет MText-содержимое MLeader. Для старого LEADER нужно отдельно прочитать связанную аннотацию; его handle не является handle текста. Блочное содержимое MLeader этим setter не редактируется. |
+| Создание | `dwg_create_leader(points,text?,layer?,color_index?,height?,arrow_size?,text_style?)` создаёт обычную MLeader в текущем пространстве. Доступен в штатном `drawing` и в `annotation`; при совместном включении регистрируется один раз. |
+| Длины участков | `PLLENLEADERS` из общего LISP сопоставляет стрелки существующих MLeader/Leader с сегментами выбранных полилиний и меняет число после `L=`. Несколько стрелок должны указывать на один сегмент; неоднозначности отклоняются. |
+
+`points` — строка JSON-массива ровно двух различных WCS-точек `{x,y,z?}` на одной
+отметке: сначала конец стрелки, затем точка у текста. Координаты конечные, z по
+умолчанию 0. Линия прямая сплошная, стрелка закрытая заполненная; полка, dogleg,
+рамка, удлинение к тексту и аннотационный масштаб отключены, Scale=1. Это явные
+свойства создаваемого объекта; текущий MLeaderStyle и системные переменные не меняются.
+Без текста создаётся стрелка без содержимого. Текст ограничен 16384 символами,
+без fields и NUL. `height` и `arrow_size` — конечные положительные размеры в
+единицах чертежа, по умолчанию 2.5. `text_style` — существующий local horizontal
+неаннотативный стиль; без параметра проверяется и используется текущий default
+стиль текста. Цвет ACI 1..256,
+по умолчанию ByLayer; вес линии ByLayer. Возможное создание слоя и самой выноски
+выполняется одной транзакцией. Ответ: handle, обычные свойства `entity` и фактические
+параметры `leader`. Визуальная проверка стрелки и Undo выполняется после обновления.
+
+Контракт использует [свойства MLeader](https://help.autodesk.com/cloudhelp/2026/ENU/OARX-ManagedRefGuide/files/OARX-ManagedRefGuide-__MEMBERTYPE_Properties_Autodesk_AutoCAD_DatabaseServices_MLeader.html)
+и [per-line ArrowSymbolId](https://help.autodesk.com/cloudhelp/2026/ENU/OARX-ManagedRefGuide/files/OARX-ManagedRefGuide-Autodesk_AutoCAD_DatabaseServices_MLeader_SetArrowSymbolId_int_ObjectId.html).
+Для closed filled применяется ObjectId.Null по [проверке автора на Autodesk Community](https://forums.autodesk.com/t5/net-forum/arrowhead-api-for-mleader/m-p/12747274);
+это не заменяет проверку в наших 2026/2027.
+
+Общих MCP-setters всех стрелок/полок, стиля MLeader и блочного содержимого пока
+нет. Для работы с несколькими стрелками не подменять полную геометрию первой
+линией и не вычислять связь по одному положению текста.
 
 <a id="block-inspection"></a>
 ## Чтение динамического блока
@@ -347,16 +459,22 @@ symbol only in these legacy modes. They do NOT guarantee equality with the
 dimension's selected angular quadrant or display precision. The technical
 attribute tag is unchanged.
 
-Command-ended/cancelled/failed callbacks start a bounded refresh episode and
-attempt a transactional pass before returning. Idle performs subsequent passes
-only for the active, quiescent, writable document. Database ObjectModified
+Command-ended/cancelled/failed callbacks only queue a bounded refresh episode;
+they do not lock, open or write objects inside the native command callback.
+Idle performs all passes only for the active, quiescent, writable document.
+Database ObjectModified
 callbacks only queue watched bound references/current evaluated angular dimensions;
 they never open, evaluate or write objects. The retained database wrapper is
 unsubscribed when its document closes. Only explicitly owned attribute/parent
 writes are suppressed; a dimension event during lock release remains pending.
 
-Each pass preflights before writes and reads the current annotation again.
-Completion occurs after releasing the document lock and requires two identical
+Each pass first scans with a read-only OpenCloseTransaction, without Commit or a
+document write lock. A current attribute therefore causes no write phase. Only
+pending changes acquire a document lock; IDs and managed values cross the
+transaction boundary. All affected objects, binding, old text, angles, layers
+and calculated output are reopened and revalidated before any UpgradeOpen.
+The apply phase also uses OpenCloseTransaction and commits actual changes.
+Completion occurs after releasing transactions/the lock and requires two identical
 read-only observations on separate callbacks. Raw angles, current evaluated
 definition/dimension identities and native measurement/display are included in a
 bounded SHA256 signature. A write or late dimension event resets stability.
@@ -374,6 +492,9 @@ Only affected attribute/parent Undo recording is temporarily disabled; database
 Undo is never disabled, and UpgradeOpen can already begin native Undo filing.
 Live Undo/Redo, immediate Properties refresh, COPY and reopen must be checked
 separately; compilation/offline temporal tests do not establish these behaviors.
+The read-only/event policy follows Autodesk's explanation of
+[normal transactions and write opens destroying Redo in callbacks](https://blog.autodesk.io/nothing-to-redo-message-appears-straight-after-undoing-in-autocad-for-net-and-objectarx/).
+This does not establish that every document lock alone destroys Redo.
 
 <a id="create-entities"></a>
 ## Атомарное создание объектов: dwg_create_entities

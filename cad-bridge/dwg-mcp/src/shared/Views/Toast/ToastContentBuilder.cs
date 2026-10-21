@@ -53,7 +53,6 @@ namespace Bimwright.Dwg.Plugin.Views.Toast
                     return BuildDrawingInfoSuccess(resultObj);
                 case "send_code":
                     return BuildSendCodeSuccess(resultObj);
-                case "translate_and_rewrite":
                 case "collapse_and_rewrite":
                 case "update_texts":
                     return BuildRewriteSuccess(result);

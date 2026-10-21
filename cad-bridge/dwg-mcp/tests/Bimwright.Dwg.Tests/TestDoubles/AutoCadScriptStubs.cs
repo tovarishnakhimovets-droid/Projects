@@ -27,6 +27,9 @@ namespace Autodesk.AutoCAD.ApplicationServices
         public string ThrowOnCommandSubscribe;
         public Exception LockError;
         public int LockCount;
+        public int LockDepth;
+        public Action OnLockAcquired;
+        public Action OnLockReleased;
         private CommandEventHandler ended, cancelled, failed;
         public event CommandEventHandler CommandEnded
         {
@@ -61,9 +64,31 @@ namespace Autodesk.AutoCAD.ApplicationServices
         {
             if (LockError != null) throw LockError;
             LockCount++;
-            return new DocumentLock();
+            LockDepth++;
+            try
+            {
+                OnLockAcquired?.Invoke();
+                return new DocumentLock(this);
+            }
+            catch
+            {
+                LockDepth--;
+                throw;
+            }
         }
-        private sealed class DocumentLock : IDisposable { public void Dispose() { } }
+        private sealed class DocumentLock : IDisposable
+        {
+            private Document document;
+            public DocumentLock(Document document) { this.document = document; }
+            public void Dispose()
+            {
+                var current = document;
+                if (current == null) return;
+                document = null;
+                current.LockDepth--;
+                current.OnLockReleased?.Invoke();
+            }
+        }
         public string LispGuardError;
 
         public string NativeProperty

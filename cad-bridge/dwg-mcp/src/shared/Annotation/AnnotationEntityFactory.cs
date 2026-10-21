@@ -1,5 +1,4 @@
 // Modified by the CAD team (2026-10-09): text/style tools; see cad-bridge/docs/TOOLS.md#text.
-using System.Collections.Generic;
 using Autodesk.AutoCAD.Colors;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
@@ -11,7 +10,6 @@ namespace Bimwright.Dwg.Plugin.Annotation
 {
     internal static class AnnotationEntityFactory
     {
-        private const double DefaultTextHeight = 2.5d;
         private const double DefaultTableRowHeight = 8d;
         private const double DefaultTableColumnWidth = 35d;
 
@@ -97,23 +95,30 @@ namespace Bimwright.Dwg.Plugin.Annotation
         }
 
         private static bool TryResolveTextStyle(string name, Database database, Transaction transaction,
-            out ObjectId id, out string error)
+            out ObjectId id, out string error, bool validateDefault = false)
         {
             id = ObjectId.Null;
             error = null;
-            if (name == null) return true;
+            if (name == null && !validateDefault) return true;
             if (database == null || transaction == null)
             {
                 error = "text_style requires the active database transaction";
                 return false;
             }
-            var styles = (TextStyleTable)transaction.GetObject(database.TextStyleTableId, OpenMode.ForRead);
-            if (!styles.Has(name))
+            if (name == null)
             {
-                error = "text_style does not exist in the active drawing";
-                return false;
+                id = database.Textstyle;
             }
-            id = styles[name];
+            else
+            {
+                var styles = (TextStyleTable)transaction.GetObject(database.TextStyleTableId, OpenMode.ForRead);
+                if (!styles.Has(name))
+                {
+                    error = "text_style does not exist in the active drawing";
+                    return false;
+                }
+                id = styles[name];
+            }
             var style = (TextStyleTableRecord)transaction.GetObject(id, OpenMode.ForRead);
             if (style.IsErased || style.IsDependent || style.IsShapeFile || style.IsVertical ||
                 style.Annotative == AnnotativeStates.True)
@@ -124,13 +129,16 @@ namespace Bimwright.Dwg.Plugin.Annotation
             return true;
         }
 
-        internal static bool TryCreateLeader(JObject obj, out MLeader entity, out string error)
+        internal static bool TryCreateLeader(JObject obj, out MLeader entity, out string error,
+            Database database = null, Transaction transaction = null)
         {
             entity = null;
             error = null;
 
-            if (!TryParsePoints(obj["points"], out var points, out error))
+            if (!AnnotationRequestValidation.TryReadLeader(obj, out var input, out error)) return false;
+            if (database == null || transaction == null)
             {
+                error = "leader creation requires the active database transaction";
                 return false;
             }
 
@@ -138,37 +146,69 @@ namespace Bimwright.Dwg.Plugin.Annotation
             var ownsEntity = false;
             try
             {
+                if (!TryResolveTextStyle(input.TextStyle, database, transaction, out var textStyleId, out error,
+                    validateDefault: input.Text != null))
+                    return false;
                 created = new MLeader();
                 ownsEntity = true;
-                created.SetDatabaseDefaults();
-                var leaderLineIndex = created.AddLeaderLine(ToPoint3d(points[0]));
-                for (var i = 1; i < points.Count; i++)
-                {
-                    created.AddLastVertex(leaderLineIndex, ToPoint3d(points[i]));
-                }
+                created.SetDatabaseDefaults(database);
+                using (var plane = new Plane(new Point3d(0, 0, input.ArrowPoint.Z), Vector3d.ZAxis))
+                    created.SetPlane(plane);
+                created.ContentType = ContentType.NoneContent;
+                created.LeaderLineType = LeaderType.StraightLeader;
+                created.LeaderLineTypeId = database.ContinuousLinetype;
+                created.LeaderLineWeight = LineWeight.ByLayer;
+                created.EnableLanding = false;
+                created.EnableDogleg = false;
+                created.ExtendLeaderToText = false;
+                created.EnableFrameText = false;
+                created.EnableAnnotationScale = false;
+                created.Scale = 1d;
+                created.ArrowSymbolId = ObjectId.Null;
+                created.ArrowSize = input.ArrowSize;
+                var color = Color.FromColorIndex(input.ColorIndex == 256 ? ColorMethod.ByLayer : ColorMethod.ByAci,
+                    (short)input.ColorIndex);
+                created.Color = color;
+                created.LeaderLineColor = color;
+                created.TextColor = color;
 
-                var text = obj["text"]?.Value<string>();
-                if (!string.IsNullOrWhiteSpace(text))
+                if (input.Text != null)
                 {
                     created.ContentType = ContentType.MTextContent;
-                    created.TextHeight = DefaultTextHeight;
-                    var textLocation = ToPoint3d(points[points.Count - 1]);
-                    created.TextLocation = textLocation;
                     using (var leaderText = new MText())
                     {
-                        leaderText.SetDatabaseDefaults();
-                        leaderText.Contents = text;
-                        leaderText.Location = textLocation;
-                        leaderText.TextHeight = DefaultTextHeight;
+                        leaderText.SetDatabaseDefaults(database);
+                        if (!textStyleId.IsNull) leaderText.TextStyleId = textStyleId;
+                        leaderText.Normal = Vector3d.ZAxis;
+                        leaderText.Location = ToPoint3d(input.TextPoint);
+                        leaderText.TextHeight = input.Height;
+                        leaderText.Color = color;
+                        leaderText.Contents = input.Text;
                         created.MText = leaderText;
+                        created.TextStyleId = leaderText.TextStyleId;
                     }
+                    created.TextHeight = input.Height;
+                    created.TextLocation = ToPoint3d(input.TextPoint);
                 }
 
+                var leaderLineIndex = created.AddLeaderLine(ToPoint3d(input.ArrowPoint));
+                // A content-bearing MLeader may already supply a tail vertex.
+                var vertexCount = created.VerticesCount(leaderLineIndex);
+                if (vertexCount == 1)
+                    created.AddLastVertex(leaderLineIndex, ToPoint3d(input.TextPoint));
+                else if (vertexCount == 2)
+                    created.SetLastVertex(leaderLineIndex, ToPoint3d(input.TextPoint));
+                else
+                {
+                    error = "native leader line must contain one head and one tail vertex";
+                    return false;
+                }
+                created.SetArrowSymbolId(leaderLineIndex, ObjectId.Null);
                 return TransferToCaller(created, out entity, ref ownsEntity);
             }
             catch (System.Exception ex)
             {
-                error = "failed to create leader entity: " + ex.Message;
+                error = "failed to create leader entity: " + ErrorSanitizer.Sanitize(ex.Message);
                 return false;
             }
             finally
@@ -228,42 +268,6 @@ namespace Bimwright.Dwg.Plugin.Annotation
 
         internal static Point3d ToPoint3d(CadPointInput point)
             => new Point3d(point.X, point.Y, point.Z);
-
-        private static bool TryParsePoints(
-            JToken token,
-            out List<CadPointInput> points,
-            out string error)
-        {
-            points = null;
-            error = null;
-
-            var array = token as JArray;
-            if (array == null)
-            {
-                error = "points must be an array of point objects";
-                return false;
-            }
-
-            var parsed = new List<CadPointInput>();
-            for (var i = 0; i < array.Count; i++)
-            {
-                if (!CadWire.TryParsePoint(array[i], out var point, out var pointError))
-                {
-                    error = "points[" + i + "] " + pointError;
-                    return false;
-                }
-
-                parsed.Add(point);
-            }
-
-            if (!AnnotationRequestValidation.TryValidateLeaderPointCount(parsed.Count, out error))
-            {
-                return false;
-            }
-
-            points = parsed;
-            return true;
-        }
 
         private static void FillCells(Table table, JArray cells)
         {

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Bimwright.Dwg.Plugin.Blocks;
@@ -20,6 +21,9 @@ namespace Bimwright.Dwg.Tests
             Documents.ResetDocuments();
             BlockAngleBindingService.LifecycleRefreshedDocuments.Clear();
             BlockAngleBindingService.LifecycleRefreshOverride = null;
+            BlockAngleBindingService.LifecyclePendingWrites = false;
+            BlockAngleBindingService.LifecycleApplyCount = 0;
+            BlockAngleBindingService.LifecycleApplyOverride = null;
         }
 
         public void Dispose()
@@ -27,6 +31,8 @@ namespace Bimwright.Dwg.Tests
             BlockAngleBindingService.Shutdown();
             Documents.ResetDocuments();
             BlockAngleBindingService.LifecycleRefreshOverride = null;
+            BlockAngleBindingService.LifecycleApplyOverride = null;
+            BlockAngleBindingService.LifecyclePendingWrites = false;
         }
 
         private static Document ActiveDocument()
@@ -261,21 +267,27 @@ namespace Bimwright.Dwg.Tests
             var failure = new InvalidOperationException("native document is temporarily unavailable");
             if (kind == "readonly") doc.IsReadOnlyReadError = failure;
             if (kind == "quiescent") doc.Editor.QuiescenceReadError = failure;
-            if (kind == "lock") doc.LockError = failure;
+            if (kind == "lock")
+            {
+                BlockAngleBindingService.LifecyclePendingWrites = true;
+                doc.LockError = failure;
+            }
             if (kind == "refresh") BlockAngleBindingService.LifecycleRefreshOverride = _ => throw failure;
             Assert.Null(Record.Exception(Application.RaiseIdle));
-            Assert.Equal(kind == "refresh" ? 1 : 0, BlockAngleBindingService.LifecycleRefreshedDocuments.Count);
+            Assert.Equal(kind == "refresh" || kind == "lock" ? 1 : 0,
+                BlockAngleBindingService.LifecycleRefreshedDocuments.Count);
 
             doc.IsReadOnlyReadError = null;
             doc.Editor.QuiescenceReadError = null;
             doc.LockError = null;
             BlockAngleBindingService.LifecycleRefreshOverride = null;
             Application.RaiseIdle();
-            Assert.Equal(kind == "refresh" ? 2 : 1, BlockAngleBindingService.LifecycleRefreshedDocuments.Count);
+            Assert.Equal(kind == "refresh" || kind == "lock" ? 2 : 1,
+                BlockAngleBindingService.LifecycleRefreshedDocuments.Count);
         }
 
         [Fact]
-        public void Native_preflight_failure_does_not_escape_command_callback()
+        public void Command_callbacks_defer_native_preflight_until_idle()
         {
             var doc = ActiveDocument();
             BlockAngleBindingService.Initialize();
@@ -283,9 +295,251 @@ namespace Bimwright.Dwg.Tests
             foreach (var name in new[] { "ended", "cancelled", "failed" })
                 Assert.Null(Record.Exception(() => doc.RaiseCommand(name)));
             Assert.Empty(BlockAngleBindingService.LifecycleRefreshedDocuments);
+            Assert.Null(Record.Exception(Application.RaiseIdle));
+            Assert.Empty(BlockAngleBindingService.LifecycleRefreshedDocuments);
             doc.IsReadOnlyReadError = null;
-            doc.RaiseCommand("ended");
+            Application.RaiseIdle();
             Assert.Same(doc, Assert.Single(BlockAngleBindingService.LifecycleRefreshedDocuments));
+        }
+
+        [Fact]
+        public void Already_current_passes_never_lock_even_when_document_lock_would_fail()
+        {
+            var doc = ActiveDocument();
+            doc.LockError = new InvalidOperationException("read-only observation must not acquire this lock");
+            BlockAngleBindingService.Initialize();
+
+            Application.RaiseIdle();
+            Application.RaiseIdle();
+            Application.RaiseIdle();
+
+            Assert.Equal(2, BlockAngleBindingService.LifecycleRefreshedDocuments.Count);
+            Assert.Equal(0, doc.LockCount);
+            Assert.Equal(0, doc.LockDepth);
+            Assert.Equal(0, BlockAngleBindingService.LifecycleApplyCount);
+        }
+
+        [Fact]
+        public void Pending_write_inspects_without_lock_and_writes_once_inside_lock()
+        {
+            var doc = ActiveDocument();
+            BlockAngleBindingService.LifecyclePendingWrites = true;
+            var inspectedDepths = new List<int>();
+            var writeDepth = -1;
+            var writeOwnCount = -1;
+            BlockAngleBindingService.LifecycleRefreshOverride = current =>
+            {
+                inspectedDepths.Add(current.LockDepth);
+                // Nested Idle callbacks must not overlap this pass.
+                Application.RaiseIdle();
+            };
+            BlockAngleBindingService.LifecycleApplyOverride = current =>
+            {
+                writeDepth = current.LockDepth;
+                writeOwnCount = BlockAngleBindingService.LifecycleOwnWriteCount(current);
+                Application.RaiseIdle();
+            };
+            var released = false;
+            var releasedDepth = -1;
+            var releasedOwnCount = -1;
+            doc.OnLockReleased = () =>
+            {
+                released = true;
+                releasedDepth = doc.LockDepth;
+                releasedOwnCount = BlockAngleBindingService.LifecycleOwnWriteCount(doc);
+                Application.RaiseIdle();
+            };
+            BlockAngleBindingService.Initialize();
+
+            Application.RaiseIdle();
+            Assert.True(released);
+            Assert.Equal(1, writeDepth);
+            Assert.Equal(2, writeOwnCount);
+            Assert.Equal(0, releasedDepth);
+            Assert.Equal(2, releasedOwnCount);
+            Assert.Single(BlockAngleBindingService.LifecycleRefreshedDocuments);
+            Assert.Equal(0, BlockAngleBindingService.LifecycleOwnWriteCount(doc));
+            Application.RaiseIdle();
+            Application.RaiseIdle();
+            Application.RaiseIdle();
+
+            Assert.Equal(3, BlockAngleBindingService.LifecycleRefreshedDocuments.Count);
+            Assert.Equal(new[] { 0, 0, 0 }, inspectedDepths);
+            Assert.Equal(1, BlockAngleBindingService.LifecycleApplyCount);
+            Assert.Equal(1, doc.LockCount);
+            Assert.Equal(0, doc.LockDepth);
+        }
+
+        [Fact]
+        public void Inspection_failure_never_locks_and_pending_write_can_retry()
+        {
+            var doc = ActiveDocument();
+            BlockAngleBindingService.LifecyclePendingWrites = true;
+            BlockAngleBindingService.LifecycleRefreshOverride = _ => throw new InvalidOperationException("read failed");
+            BlockAngleBindingService.Initialize();
+
+            Assert.Null(Record.Exception(Application.RaiseIdle));
+            Assert.Single(BlockAngleBindingService.LifecycleRefreshedDocuments);
+            Assert.Equal(0, doc.LockCount);
+            Assert.Equal(0, BlockAngleBindingService.LifecycleApplyCount);
+            Assert.Equal(0, BlockAngleBindingService.LifecycleOwnWriteCount(doc));
+
+            BlockAngleBindingService.LifecycleRefreshOverride = null;
+            Application.RaiseIdle();
+            Assert.Equal(2, BlockAngleBindingService.LifecycleRefreshedDocuments.Count);
+            Assert.Equal(1, BlockAngleBindingService.LifecycleApplyCount);
+            Assert.Equal(1, doc.LockCount);
+        }
+
+        [Theory]
+        [InlineData("ended")]
+        [InlineData("cancelled")]
+        [InlineData("failed")]
+        public void Every_command_callback_only_queues_until_a_quiescent_idle(string name)
+        {
+            var doc = ActiveDocument();
+            BlockAngleBindingService.LifecyclePendingWrites = true;
+            BlockAngleBindingService.Initialize();
+
+            doc.RaiseCommand(name);
+            Assert.Empty(BlockAngleBindingService.LifecycleRefreshedDocuments);
+            Assert.Equal(0, doc.LockCount);
+            doc.Editor.IsQuiescent = false;
+            Application.RaiseIdle();
+            Assert.Empty(BlockAngleBindingService.LifecycleRefreshedDocuments);
+            Assert.Equal(0, BlockAngleBindingService.LifecycleApplyCount);
+
+            doc.Editor.IsQuiescent = true;
+            Application.RaiseIdle();
+            Assert.Same(doc, Assert.Single(BlockAngleBindingService.LifecycleRefreshedDocuments));
+            Assert.Equal(1, BlockAngleBindingService.LifecycleApplyCount);
+            Assert.Equal(1, doc.LockCount);
+        }
+
+        [Theory]
+        [InlineData("lock")]
+        [InlineData("write")]
+        public void Failed_write_phase_releases_lock_clears_own_writes_and_retries(string phase)
+        {
+            var doc = ActiveDocument();
+            var failure = new InvalidOperationException("write phase unavailable");
+            var failedWriteDepth = -1;
+            var failedOwnCount = -1;
+            BlockAngleBindingService.LifecyclePendingWrites = true;
+            if (phase == "lock") doc.LockError = failure;
+            else BlockAngleBindingService.LifecycleApplyOverride = current =>
+            {
+                failedWriteDepth = current.LockDepth;
+                failedOwnCount = BlockAngleBindingService.LifecycleOwnWriteCount(current);
+                throw failure;
+            };
+            BlockAngleBindingService.Initialize();
+
+            Assert.Null(Record.Exception(Application.RaiseIdle));
+            Assert.Single(BlockAngleBindingService.LifecycleRefreshedDocuments);
+            Assert.Equal(0, doc.LockDepth);
+            Assert.Equal(0, BlockAngleBindingService.LifecycleOwnWriteCount(doc));
+            Assert.True(BlockAngleBindingService.LifecyclePendingWrites);
+            if (phase == "write")
+            {
+                Assert.Equal(1, failedWriteDepth);
+                Assert.Equal(2, failedOwnCount);
+            }
+
+            doc.LockError = null;
+            BlockAngleBindingService.LifecycleApplyOverride = null;
+            Application.RaiseIdle();
+            Assert.Equal(2, BlockAngleBindingService.LifecycleRefreshedDocuments.Count);
+            Assert.Equal(phase == "write" ? 2 : 1, BlockAngleBindingService.LifecycleApplyCount);
+            Assert.Equal(phase == "write" ? 2 : 1, doc.LockCount);
+            Assert.Equal(0, doc.LockDepth);
+            Assert.Equal(0, BlockAngleBindingService.LifecycleOwnWriteCount(doc));
+            Assert.False(BlockAngleBindingService.LifecyclePendingWrites);
+        }
+
+        [Theory]
+        [InlineData("lock")]
+        [InlineData("write")]
+        public void Repeated_write_phase_failures_stop_until_a_new_external_command(string phase)
+        {
+            var doc = ActiveDocument();
+            var failure = new InvalidOperationException("write phase stays unavailable");
+            BlockAngleBindingService.LifecyclePendingWrites = true;
+            if (phase == "lock") doc.LockError = failure;
+            else BlockAngleBindingService.LifecycleApplyOverride = _ => throw failure;
+            BlockAngleBindingService.Initialize();
+
+            for (var i = 0; i < DeferredAngleRefreshState.MaximumPasses + 2; i++)
+                Assert.Null(Record.Exception(Application.RaiseIdle));
+
+            Assert.Equal(DeferredAngleRefreshState.MaximumPasses,
+                BlockAngleBindingService.LifecycleRefreshedDocuments.Count);
+            Assert.Equal(phase == "write" ? DeferredAngleRefreshState.MaximumPasses : 0,
+                BlockAngleBindingService.LifecycleApplyCount);
+            Assert.Equal(0, doc.LockDepth);
+            Assert.Equal(0, BlockAngleBindingService.LifecycleOwnWriteCount(doc));
+            Assert.Single(doc.Editor.Messages);
+
+            doc.LockError = null;
+            BlockAngleBindingService.LifecycleApplyOverride = null;
+            doc.RaiseCommand("ended");
+            Application.RaiseIdle();
+            Assert.Equal(DeferredAngleRefreshState.MaximumPasses + 1,
+                BlockAngleBindingService.LifecycleRefreshedDocuments.Count);
+            Assert.False(BlockAngleBindingService.LifecyclePendingWrites);
+        }
+
+        [Theory]
+        [InlineData("active_document")]
+        [InlineData("readonly")]
+        public void Document_changed_while_taking_lock_is_rechecked_before_write(string change)
+        {
+            var doc = ActiveDocument();
+            BlockAngleBindingService.LifecyclePendingWrites = true;
+            doc.OnLockAcquired = () =>
+            {
+                if (change == "active_document") Documents.Activate(null);
+                else doc.IsReadOnly = true;
+            };
+            BlockAngleBindingService.Initialize();
+
+            Assert.Null(Record.Exception(Application.RaiseIdle));
+            Assert.Single(BlockAngleBindingService.LifecycleRefreshedDocuments);
+            Assert.Equal(1, doc.LockCount);
+            Assert.Equal(0, doc.LockDepth);
+            Assert.Equal(0, BlockAngleBindingService.LifecycleApplyCount);
+            Assert.Equal(0, BlockAngleBindingService.LifecycleOwnWriteCount(doc));
+            Assert.True(BlockAngleBindingService.LifecyclePendingWrites);
+
+            doc.OnLockAcquired = null;
+            doc.IsReadOnly = false;
+            Documents.Activate(doc);
+            Application.RaiseIdle();
+            Assert.Equal(1, BlockAngleBindingService.LifecycleApplyCount);
+            Assert.Equal(2, doc.LockCount);
+        }
+
+        [Fact]
+        public void A_later_external_change_of_a_previously_written_reference_is_not_suppressed()
+        {
+            var doc = ActiveDocument();
+            BlockAngleBindingService.LifecyclePendingWrites = true;
+            BlockAngleBindingService.Initialize();
+            Application.RaiseIdle();
+            Application.RaiseIdle();
+            Application.RaiseIdle();
+            Assert.Equal(3, BlockAngleBindingService.LifecycleRefreshedDocuments.Count);
+            Assert.Equal(0, BlockAngleBindingService.LifecycleOwnWriteCount(doc));
+
+            doc.Database.Raise("modified", new BlockReference
+            {
+                ObjectId = BlockAngleBindingService.LifecycleReferenceId
+            });
+            Application.RaiseIdle();
+
+            Assert.Equal(4, BlockAngleBindingService.LifecycleRefreshedDocuments.Count);
+            Assert.Equal(1, BlockAngleBindingService.LifecycleApplyCount);
+            Assert.Equal(1, doc.LockCount);
         }
 
         [Fact]
