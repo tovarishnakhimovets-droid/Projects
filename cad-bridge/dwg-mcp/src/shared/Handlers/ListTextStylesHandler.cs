@@ -20,7 +20,7 @@ namespace Bimwright.Dwg.Plugin.Handlers
             var styles = new List<object>();
             var truncated = false;
             var db = doc.Database;
-            using (var tx = db.TransactionManager.StartTransaction())
+            using (var tx = db.TransactionManager.StartOpenCloseTransaction())
             {
                 var table = (TextStyleTable)tx.GetObject(db.TextStyleTableId, OpenMode.ForRead);
                 foreach (ObjectId styleId in table)
@@ -35,7 +35,6 @@ namespace Bimwright.Dwg.Plugin.Handlers
                     record["is_current"] = styleId == db.Textstyle;
                     styles.Add(record);
                 }
-                tx.Commit();
             }
             return CommandResult.Success(new { styles, count = styles.Count, limit = input.Limit, truncated });
         }

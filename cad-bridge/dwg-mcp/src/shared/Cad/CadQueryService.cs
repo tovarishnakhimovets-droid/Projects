@@ -59,7 +59,7 @@ namespace Bimwright.Dwg.Plugin.Cad
             var entities = new List<object>();
             var handles = new List<string>();
 
-            using (var tx = db.TransactionManager.StartTransaction())
+            using (var tx = db.TransactionManager.StartOpenCloseTransaction())
             {
                 var modelSpace = OpenModelSpace(db, tx);
                 foreach (ObjectId objectId in modelSpace)
@@ -79,7 +79,6 @@ namespace Bimwright.Dwg.Plugin.Cad
                     entities.Add(CadEntityProperties.Describe(entity, tx, options.IncludeGeometry));
                 }
 
-                tx.Commit();
             }
 
             return new CadEntityQueryResult(entities, handles);
@@ -95,7 +94,7 @@ namespace Bimwright.Dwg.Plugin.Cad
             options = options ?? new CadEntityQueryOptions(null, null, null, null, includeGeometry: false);
             var count = 0;
 
-            using (var tx = db.TransactionManager.StartTransaction())
+            using (var tx = db.TransactionManager.StartOpenCloseTransaction())
             {
                 var modelSpace = OpenModelSpace(db, tx);
                 foreach (ObjectId objectId in modelSpace)
@@ -107,7 +106,6 @@ namespace Bimwright.Dwg.Plugin.Cad
                     }
                 }
 
-                tx.Commit();
             }
 
             return count;
@@ -124,7 +122,7 @@ namespace Bimwright.Dwg.Plugin.Cad
             var limit = ClampLimit(options.Limit);
             var handles = new List<string>();
 
-            using (var tx = db.TransactionManager.StartTransaction())
+            using (var tx = db.TransactionManager.StartOpenCloseTransaction())
             {
                 var modelSpace = OpenModelSpace(db, tx);
                 foreach (ObjectId objectId in modelSpace)
@@ -143,7 +141,6 @@ namespace Bimwright.Dwg.Plugin.Cad
                     handles.Add(entity.Handle.ToString());
                 }
 
-                tx.Commit();
             }
 
             return handles;

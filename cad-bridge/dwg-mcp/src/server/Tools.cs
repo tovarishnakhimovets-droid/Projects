@@ -15,8 +15,10 @@ namespace Bimwright.Dwg.Server
         private static int _catalogAttempts;
         private const int MaxCatalogAttempts = 3;
 
-        internal static async Task<string> LoggedCall(string toolName, object inputParams, object pluginParams)
+        internal static async Task<string> LoggedCall(string toolName, object inputParams, object pluginParams,
+            DocumentRequestTarget documentTarget = null)
         {
+            var target = documentTarget ?? ServerState.DocumentTarget;
             var requestId = Guid.NewGuid().ToString("N");
             var sw = Stopwatch.StartNew();
             string paramsJson = SafeSerialize(inputParams);
@@ -24,7 +26,7 @@ namespace Bimwright.Dwg.Server
             try
             {
                 await EnsureCatalogAsync();
-                var resp = await Client.SendAsync(toolName, pluginParams, requestId);
+                var resp = await Client.SendAsync(toolName, pluginParams, requestId, target);
                 sw.Stop();
                 ServerLogger.LogFinish(requestId, toolName, resp.Ok, sw.ElapsedMilliseconds, resp.Error);
                 return JsonConvert.SerializeObject(resp);
@@ -37,10 +39,12 @@ namespace Bimwright.Dwg.Server
             }
         }
 
-        internal static async Task<McpResponse> SendRaw(string toolName, object pluginParams, string requestId = null)
+        internal static async Task<McpResponse> SendRaw(string toolName, object pluginParams, string requestId = null,
+            DocumentRequestTarget documentTarget = null)
         {
+            var target = documentTarget ?? ServerState.DocumentTarget;
             await EnsureCatalogAsync();
-            return await Client.SendAsync(toolName, pluginParams, requestId);
+            return await Client.SendAsync(toolName, pluginParams, requestId, target);
         }
 
         /// <summary>
@@ -78,7 +82,8 @@ namespace Bimwright.Dwg.Server
             try
             {
                 var payload = ToolCatalogBuilder.Build(ServerState.EnabledToolTypes);
-                var response = await Client.SendAsync("set_tool_catalog", payload);
+                var response = await Client.SendAsync("set_tool_catalog", payload,
+                    documentTarget: DocumentRequestTarget.FollowActive);
                 pushed = response != null && response.Ok;
                 if (!pushed)
                     ServerLogger.LogFinish("catalog", "set_tool_catalog", false, 0, response?.Error);

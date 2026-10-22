@@ -23,15 +23,18 @@ namespace Bimwright.Dwg.Server
             return new PluginClient(() => AuthToken.Resolve(ServerState.Config?.Target));
         }
 
-        public async Task<McpResponse> SendAsync(string cmd, object parameters, string requestId = null)
+        public async Task<McpResponse> SendAsync(string cmd, object parameters, string requestId = null,
+            DocumentRequestTarget documentTarget = null)
         {
+            var target = documentTarget ?? ServerState.DocumentTarget;
             var discovery = _discoveryProvider();
             var request = new McpRequest
             {
                 Id = string.IsNullOrWhiteSpace(requestId) ? Guid.NewGuid().ToString("N") : requestId,
                 Cmd = cmd,
                 Params = parameters,
-                Auth = discovery.Token
+                Auth = discovery.Token,
+                DocumentId = target.DocumentId
             };
             var json = JsonConvert.SerializeObject(request);
 

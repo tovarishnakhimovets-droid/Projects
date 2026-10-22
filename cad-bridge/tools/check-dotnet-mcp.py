@@ -2,9 +2,11 @@
 
 import argparse
 import json
+import ntpath
 from pathlib import Path
 import sys
 import traceback
+import uuid
 
 import anyio
 from mcp import ClientSession, StdioServerParameters
@@ -66,24 +68,104 @@ async def check_variable(session, document):
     print("PASS: invariant numeric strings / rejected comma / restored variable")
 
 
-async def check(live_line, live_variable, inspect_variable, list_tools, server, target, dotnet):
+async def check_documents(session, parameters, paths):
+    """Exercise session routing against two explicitly named open DWG copies."""
+    normalize = lambda path: ntpath.normcase(ntpath.normpath(path))
+    requested = {normalize(path) for path in paths}
+    initial = await call(session, "dwg_get_drawing_info")
+    original_selection = await call(session, "dwg_get_selection")
+    capture = await call(session, "dwg_capture_view_image")
+    listing = await call(session, "dwg_list_documents")
+    active_id = listing["active_document_id"]
+    documents = {normalize(doc["document_path"]): doc for doc in listing["documents"]
+                 if doc.get("document_path") and normalize(doc["document_path"]) in requested}
+    if len(requested) != 2 or set(documents) != requested:
+        raise RuntimeError(f"Expected both exact open DWG copies, received: {listing}")
+    inactive = next((doc for doc in documents.values() if not doc["is_active"]), None)
+    if inactive is None or normalize(initial["document_path"]) not in requested:
+        raise RuntimeError("Keep one of the two named DWGs active before this check")
+
+    try:
+        for doc in documents.values():
+            await call(session, "dwg_use_document", {"document_id": doc["document_id"]})
+            actual = await call(session, "dwg_get_drawing_info")
+            if normalize(actual["document_path"]) != normalize(doc["document_path"]):
+                raise RuntimeError(f"Wrong routed drawing: {actual}")
+            if actual["fingerprint"] != doc["fingerprint"]:
+                raise RuntimeError("Routed drawing fingerprint differs")
+            found = await call(session, "dwg_query_entities", {"limit": 3, "include_geometry": False})
+            await call(session, "dwg_count_entities")
+            await call(session, "dwg_list_text_styles", {"limit": 2})
+            if found["entities"]:
+                await call(session, "dwg_get_entity_properties", {
+                    "handles": json.dumps([found["entities"][0]["handle"]]), "includeGeometry": False})
+            print("PASS: routed database readers:", doc["document_path"], flush=True)
+
+        await call(session, "dwg_use_document", {"document_id": inactive["document_id"]})
+        for name, arguments in (
+                ("dwg_get_selection", {}),
+                ("dwg_get_variables", {}),
+                ("dwg_create_line", {"start": '{"x":0,"y":0}', "end": '{"x":1,"y":1}'})):
+            refused = await call(session, name, arguments, expect_error=True)
+            if "requires the selected drawing to be the active" not in (refused.get("error") or ""):
+                raise RuntimeError(f"Unexpected inactive refusal: {refused}")
+        print("PASS: inactive selection/variables/write requests refused before execution", flush=True)
+
+        refused = await call(session, "dwg_use_document", {"document_id": uuid.uuid4().hex}, expect_error=True)
+        if "no longer open" not in (refused.get("error") or ""):
+            raise RuntimeError(f"Unexpected missing-document refusal: {refused}")
+        actual = await call(session, "dwg_get_drawing_info")
+        if normalize(actual["document_path"]) != normalize(inactive["document_path"]):
+            raise RuntimeError("Failed selection changed the existing session target")
+
+        # A second stdio process must still follow the UI, despite the first pin.
+        async with stdio_client(parameters) as (read, write):
+            async with ClientSession(read, write) as second:
+                with anyio.fail_after(15):
+                    await second.initialize()
+                other = await call(second, "dwg_get_drawing_info")
+                if normalize(other["document_path"]) != normalize(initial["document_path"]):
+                    raise RuntimeError("Document selection leaked into a second MCP process")
+        print("PASS: session isolation and failed-selection preservation", flush=True)
+    finally:
+        await call(session, "dwg_use_document", {"document_id": None})
+
+    final = await call(session, "dwg_get_drawing_info")
+    final_selection = await call(session, "dwg_get_selection")
+    final_capture = await call(session, "dwg_capture_view_image")
+    final_list = await call(session, "dwg_list_documents")
+    if final_list["active_document_id"] != active_id or final["document_path"] != initial["document_path"]:
+        raise RuntimeError("The active AutoCAD drawing changed during routing")
+    if final["dbmod"] != initial["dbmod"]:
+        raise RuntimeError("The active drawing DBMOD changed during database reads")
+    if final_selection != original_selection or final_capture["camera"] != capture["camera"]:
+        raise RuntimeError("The UI selection or camera changed during routing")
+    print("PASS: active tab, selection, camera and DBMOD unchanged; follow-active restored", flush=True)
+
+
+async def check(live_line, live_variable, inspect_variable, list_tools, server, target, dotnet,
+                live_documents=False, document_paths=None):
     if not server.is_file():
         raise FileNotFoundError(server)
     # Listing the write tool's schema requires registering it, but invokes no CAD handler.
-    writable = live_line or live_variable or inspect_variable or list_tools
-    toolsets = ("query,modify,drawing,view" if list_tools else
+    writable = live_line or live_variable or inspect_variable or list_tools or live_documents
+    toolsets = ("query,modify,drawing,view" if list_tools or live_documents else
                 "query,drawing" if live_variable or inspect_variable else
                 "query,modify" if live_line else "query")
     parameters = StdioServerParameters(
         command=dotnet,
         args=[str(server), "--target", str(target), "--toolsets", toolsets],
-        env={"BIMWRIGHT_DWG_READ_ONLY": "false" if writable else "true"},
+        env={"BIMWRIGHT_DWG_READ_ONLY": "false" if writable else "true",
+             "Logging__LogLevel__Default": "Warning"},
     )
     async with stdio_client(parameters) as (read, write):
         async with ClientSession(read, write) as session:
             with anyio.fail_after(15):
                 initialized = await session.initialize()
             print(f"MCP: {initialized.serverInfo.name} {initialized.serverInfo.version}")
+            if live_documents:
+                await check_documents(session, parameters, document_paths)
+                return
             if inspect_variable or list_tools:
                 with anyio.fail_after(15):
                     listing = await session.list_tools()
@@ -160,10 +242,17 @@ if __name__ == "__main__":
                       help="Print the variable setter's input schema without calling any CAD tool")
     live.add_argument("--list-tools", action="store_true",
                       help="List the selected AutoCAD connection profile without calling any CAD tool")
+    live.add_argument("--live-documents", action="store_true",
+                      help="Check routing between two exact open DWGs without activating their tabs")
+    parser.add_argument("--document-paths", nargs=2,
+                        help="Two exact full paths of the open DWG copies for --live-documents")
     options = parser.parse_args()
+    if options.live_documents and not options.document_paths:
+        parser.error("--live-documents requires --document-paths with two full DWG paths")
     try:
         anyio.run(check, options.live_line, options.live_variable,
-                  options.inspect_variable, options.list_tools, options.server, options.target, options.dotnet)
+                  options.inspect_variable, options.list_tools, options.server, options.target, options.dotnet,
+                  options.live_documents, options.document_paths)
     except Exception as error:
         print(f"FAIL: {type(error).__name__}: {error}", file=sys.stderr)
         traceback.print_exception(error)

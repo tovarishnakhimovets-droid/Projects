@@ -17,10 +17,10 @@ namespace Bimwright.Dwg.Tests
         // Exercise the built entry point and real SDK registration/stdio handshake.
         // Only initialize and tools/list are sent: these tests never call a CAD tool.
         [Theory]
-        [InlineData("query,modify,drawing,view", false, 63)]
-        [InlineData("query,modify,drawing,view,annotation", false, 64)]
-        [InlineData("query,modify,drawing,view", true, 24)]
-        [InlineData("query", false, 17)]
+        [InlineData("query,modify,drawing,view", false, 65)]
+        [InlineData("query,modify,drawing,view,annotation", false, 66)]
+        [InlineData("query,modify,drawing,view", true, 26)]
+        [InlineData("query", false, 19)]
         [InlineData("modify", false, 32)]
         [InlineData("drawing", false, 8)]
         [InlineData("annotation", false, 4)]
@@ -81,6 +81,8 @@ namespace Bimwright.Dwg.Tests
             Assert.Equal(hasLisp, names.Contains("dwg_run_lisp", StringComparer.Ordinal));
             Assert.Equal(enabled.Contains("query"), names.Contains("dwg_get_lisp_status", StringComparer.Ordinal));
             Assert.Equal(enabled.Contains("query"), names.Contains("dwg_get_selection", StringComparer.Ordinal));
+            Assert.Equal(enabled.Contains("query"), names.Contains("dwg_list_documents", StringComparer.Ordinal));
+            Assert.Equal(enabled.Contains("query"), names.Contains("dwg_use_document", StringComparer.Ordinal));
             if (enabled.Contains("query"))
             {
                 var selection = Assert.Single(tools, value => value.ProtocolTool.Name == "dwg_get_selection").ProtocolTool;

@@ -9,6 +9,8 @@
 ;; A selected block changes its own layer and styles its editable attributes;
 ;; attribute layers are retained unless their handles are also explicitly given.
 ;; Colors, including explicit colors, are retained. No forced ByLayer conversion.
+;; MLeader base/connection points and line vertices are retained; AutoCAD derives
+;; its internal MText location from font metrics, height and attachment.
 ;; Full preflight precedes writes. Unsupported objects, fields, inline font/height/
 ;; color/width/spacing overrides,
 ;; annotative/xref/nested block references/dynamic blocks, multiline/constant attributes and locked
@@ -64,11 +66,15 @@
     (progn
       (if (not (bwuc:absolute-p path)) (bwuc:fail "font_path must be an absolute path"))
       (setq found (findfile path)))
-    (setq found
-      (or (findfile base)
-          (and (getenv "WINDIR") (findfile (strcat (getenv "WINDIR") "/Fonts/" base)))
-          (and (getenv "LOCALAPPDATA")
-               (findfile (strcat (getenv "LOCALAPPDATA") "/Bimwright/Fonts/" base))))))
+    (progn
+      ;; AutoLISP OR/AND return booleans, not the matching path.
+      (setq found (findfile base))
+      (if (and (not found) (getenv "WINDIR"))
+        (setq found (findfile (strcat (getenv "WINDIR") "/Fonts/" base))))
+      (if (and (not found) (getenv "LOCALAPPDATA"))
+        (setq found (findfile (strcat (getenv "LOCALAPPDATA") "/Microsoft/Windows/Fonts/" base))))
+      (if (and (not found) (getenv "LOCALAPPDATA"))
+        (setq found (findfile (strcat (getenv "LOCALAPPDATA") "/Bimwright/Fonts/" base))))))
   (if (not found)
     (bwuc:fail "OpenSans-CondensedLight.ttf was not found; pass the existing local checkout font path"))
   (if (not (bwuc:eq (bwuc:font-base found) base))
@@ -149,7 +155,7 @@
         (setq index (1+ index))))
     (setq index (1+ index))))
 
-(defun bwuc:geometry (entity / data kind codes result item)
+(defun bwuc:geometry (entity / data kind codes result item context leader)
   (setq data (entget entity) kind (cdr (assoc 0 data)))
   ;; Compare anchor/alignment/width/rotation and leader vertices after native writes.
   ;; Calculated text extents are deliberately not geometry invariants.
@@ -159,7 +165,16 @@
           ((= kind "INSERT") '(2 10 41 42 43 50 66 70 71 210))
           (T '(10 11 41 50 51 71 72 73 74 210))))
   (foreach item data
-    (if (or (member (car item) codes) (member (car item) '(62 420 430)))
+    (if (= kind "MULTILEADER")
+      (cond ((and (= (car item) 300) (= (cdr item) "CONTEXT_DATA{")) (setq context T))
+            ((and (= (car item) 301) (= (cdr item) "}")) (setq context nil))
+            ((and (= (car item) 302) (= (cdr item) "LEADER{")) (setq leader T))
+            ((and (= (car item) 303) (= (cdr item) "}")) (setq leader nil))))
+    ;; Context code 12 is computed MText placement, not a leader control point.
+    ;; Keep code 12 inside LEADER sections: those are explicit break points.
+    ;; Autodesk MLeader Context Data: GUID-EC56D0DE-026D-46AB-87B1-9692393B0C22.
+    (if (and (or (member (car item) codes) (member (car item) '(62 420 430)))
+             (not (and (= kind "MULTILEADER") context (not leader) (= (car item) 12))))
       (setq result (cons item result))))
   (reverse result))
 
@@ -185,11 +200,20 @@
          (and (= (type (car info)) 'STR) (/= (vl-string-trim " " (car info)) ""))) 0.90)
     (T 0.82)))
 
+(defun bwuc:resolve-style-font (style / font found)
+  (setq font (vla-get-FontFile style) found (findfile font))
+  ;; SetFont normalizes an installed TrueType FontFile to its basename.
+  ;; FINDFile does not search Windows per-user Fonts on every AutoCAD setup.
+  ;; Only that exact basename may resolve through the already validated input.
+  (if (and (not found) (bwuc:eq font "OpenSans-CondensedLight.ttf") bwuc:font-path)
+    (setq found (findfile bwuc:font-path)))
+  found)
+
 (defun bwuc:target-style-compatible (style / info)
   (setq info (bwuc:font-info style))
   ;; AutoCAD may normalize charset/pitch; compare the actual font and appearance.
   (and (bwuc:eq (bwuc:font-base (vla-get-FontFile style)) "OpenSans-CondensedLight.ttf")
-       (findfile (vla-get-FontFile style))
+       (bwuc:resolve-style-font style)
        (bwuc:eq (car info) "Open Sans Condensed Light")
        (= (cadr info) :vlax-false) (= (caddr info) :vlax-false)
        (= (vla-get-Height style) 0.0) (= (vla-get-Width style) 1.0)
@@ -318,13 +342,24 @@
 (defun bwuc:ensure-resources (/ styles layers)
   (if (not (tblsearch "STYLE" "Bimwright_Unicode"))
     (progn
+      (setq bwuc:operation "TextStyles.Add")
       (setq styles (vla-get-TextStyles bwuc:doc)
             bwuc:new-style (vla-Add styles "Bimwright_Unicode"))
+      (setq bwuc:operation "TextStyle.FontFile")
       (vla-put-FontFile bwuc:new-style bwuc:font-path)
+      (setq bwuc:operation "TextStyle.SetFont")
       (vla-SetFont bwuc:new-style "Open Sans Condensed Light" :vlax-false :vlax-false 0 0)
+      (setq bwuc:operation "TextStyle.Height")
       (vla-put-Height bwuc:new-style 0.0)
+      (setq bwuc:operation "TextStyle.Readback")
       (if (not (bwuc:target-style-compatible bwuc:new-style))
-        (bwuc:fail "AutoCAD did not accept the requested Unicode style/font properties"))))
+        (bwuc:fail (strcat "AutoCAD did not accept the requested Unicode style/font properties: "
+          (vl-prin1-to-string (list
+            (vla-get-FontFile bwuc:new-style) (bwuc:font-info bwuc:new-style)
+            (vla-get-Height bwuc:new-style) (vla-get-Width bwuc:new-style)
+            (vla-get-ObliqueAngle bwuc:new-style) (vla-get-TextGenerationFlag bwuc:new-style)
+            (vla-get-BigFontFile bwuc:new-style)
+            (findfile (vla-get-FontFile bwuc:new-style)))))))))
   (if (not (tblsearch "LAYER" "layer-bimwright-dwg"))
     (progn
       (setq layers (vla-get-Layers bwuc:doc)
@@ -374,8 +409,8 @@
              (vla-Item (vla-get-TextStyles bwuc:doc) "Bimwright_Unicode")))
     (bwuc:fail "The target style changed during native updates"))
   (bwuc:layer-check "layer-bimwright-dwg")
-  (setq bwuc:resolved-font (findfile (vla-get-FontFile
-    (vla-Item (vla-get-TextStyles bwuc:doc) "Bimwright_Unicode"))))
+  (setq bwuc:resolved-font (bwuc:resolve-style-font
+    (vla-Item (vla-get-TextStyles bwuc:doc) "Bimwright_Unicode")))
   (vla-EndUndoMark bwuc:doc)
   (if (/= 0 (logand 8 (getvar "UNDOCTL"))) (bwuc:fail "AutoCAD did not close the owned Undo group"))
   (setq bwuc:undo-open nil)
@@ -434,22 +469,23 @@
 (defun bw:apply-unicode (handles font_path / bwuc:doc bwuc:failure bwuc:font-path bwuc:plans
                         bwuc:touched bwuc:new-style bwuc:new-layer bwuc:undo-open bwuc:undo-attempted
                         bwuc:style-existed bwuc:layer-existed
-                        bwuc:writes-started bwuc:resolved-font
+                        bwuc:writes-started bwuc:resolved-font bwuc:operation
                         caught requested reason restored result records entry plan reassigned)
   (vl-load-com)
   (setq bwuc:doc (vla-get-ActiveDocument (vlax-get-acad-object)))
   (setq caught (vl-catch-all-apply 'bwuc:prepare (list handles font_path)))
   (if (vl-catch-all-error-p caught)
     (setq result (list (cons 'ok nil) (cons 'phase "preflight")
-                       (cons 'error (or bwuc:failure (vl-catch-all-error-message caught)))
+                       (cons 'error (if bwuc:failure bwuc:failure (vl-catch-all-error-message caught)))
                        (cons 'partial_changes nil) (cons 'rollback_verified T)))
     (progn
       (setq requested caught caught (vl-catch-all-apply 'bwuc:write-plans nil))
       (if (vl-catch-all-error-p caught)
         (progn
-          (setq reason (or bwuc:failure (vl-catch-all-error-message caught))
+          (setq reason (if bwuc:failure bwuc:failure (vl-catch-all-error-message caught))
                 restored (bwuc:rollback))
           (setq result (list (cons 'ok nil) (cons 'phase "write") (cons 'error reason)
+                             (cons 'operation bwuc:operation)
                              (cons 'partial_changes (not restored)) (cons 'rollback_verified restored)
                              (cons 'touched_count (length bwuc:touched))
                              (cons 'note "Property restoration covers recorded objects/resources only; inspect the drawing and Undo history before retrying"))))

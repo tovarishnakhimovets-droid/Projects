@@ -8,6 +8,7 @@ namespace Bimwright.Dwg.Server
         [JsonProperty("cmd")] public string Cmd { get; set; }
         [JsonProperty("params")] public object Params { get; set; }
         [JsonProperty("auth")] public string Auth { get; set; }
+        [JsonProperty("document_id", NullValueHandling = NullValueHandling.Ignore)] public string DocumentId { get; set; }
     }
 
     public class McpResponse

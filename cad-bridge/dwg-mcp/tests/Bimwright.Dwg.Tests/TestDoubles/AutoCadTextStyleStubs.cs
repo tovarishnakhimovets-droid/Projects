@@ -68,10 +68,16 @@ namespace Autodesk.AutoCAD.DatabaseServices
         public Dictionary<ObjectId, DBObject> Objects { get; } = new Dictionary<ObjectId, DBObject>();
         public List<(ObjectId Id, OpenMode Mode)> Opens { get; } = new List<(ObjectId, OpenMode)>();
         public int StartedCount { get; private set; }
+        public int OpenCloseStartedCount { get; private set; }
         public int CommitCount { get; set; }
         public Transaction StartTransaction()
         {
             StartedCount++;
+            return new Transaction(this);
+        }
+        public Transaction StartOpenCloseTransaction()
+        {
+            OpenCloseStartedCount++;
             return new Transaction(this);
         }
     }

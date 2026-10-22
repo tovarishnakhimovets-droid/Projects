@@ -43,7 +43,7 @@ namespace Bimwright.Dwg.Plugin.Handlers
                 current_layer = GetCurrentLayerName(db),
                 current_space = db.TileMode ? "model" : "paper",
                 current_space_record = GetCurrentSpaceRecordName(db),
-                current_layout = GetCurrentLayoutName(),
+                current_layout = GetCurrentLayoutName(db),
                 tile_mode = db.TileMode,
                 insunits = db.Insunits.ToString(),
                 insunits_code = (int)db.Insunits,
@@ -57,11 +57,10 @@ namespace Bimwright.Dwg.Plugin.Handlers
         {
             try
             {
-                using (var tx = db.TransactionManager.StartTransaction())
+                using (var tx = db.TransactionManager.StartOpenCloseTransaction())
                 {
                     var layer = (LayerTableRecord)tx.GetObject(db.Clayer, OpenMode.ForRead);
                     var name = layer.Name;
-                    tx.Commit();
                     return name;
                 }
             }
@@ -75,11 +74,10 @@ namespace Bimwright.Dwg.Plugin.Handlers
         {
             try
             {
-                using (var tx = db.TransactionManager.StartTransaction())
+                using (var tx = db.TransactionManager.StartOpenCloseTransaction())
                 {
                     var currentSpace = (BlockTableRecord)tx.GetObject(db.CurrentSpaceId, OpenMode.ForRead);
                     var name = currentSpace.Name;
-                    tx.Commit();
                     return name;
                 }
             }
@@ -89,11 +87,27 @@ namespace Bimwright.Dwg.Plugin.Handlers
             }
         }
 
-        private static string GetCurrentLayoutName()
+        private static string GetCurrentLayoutName(Database db)
         {
             try
             {
-                return LayoutManager.Current?.CurrentLayout;
+                using (var tx = db.TransactionManager.StartOpenCloseTransaction())
+                {
+                    var spaceId = db.CurrentSpaceId;
+                    // MSPACE inside a paper viewport still belongs to its sheet.
+                    // Read that database's paper viewport, not the active UI manager.
+                    if (!db.TileMode)
+                    {
+                        if (db.PaperSpaceVportId.IsNull) return null;
+                        var viewport = tx.GetObject(db.PaperSpaceVportId, OpenMode.ForRead) as Viewport;
+                        if (viewport == null) return null;
+                        spaceId = viewport.OwnerId;
+                    }
+                    var space = tx.GetObject(spaceId, OpenMode.ForRead) as BlockTableRecord;
+                    if (space == null || space.LayoutId.IsNull) return null;
+                    var layout = tx.GetObject(space.LayoutId, OpenMode.ForRead) as Layout;
+                    return layout?.LayoutName;
+                }
             }
             catch
             {

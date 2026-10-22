@@ -18,7 +18,7 @@ namespace Bimwright.Dwg.Plugin.Cad
             }
 
             var layers = new List<object>();
-            using (var tx = db.TransactionManager.StartTransaction())
+            using (var tx = db.TransactionManager.StartOpenCloseTransaction())
             {
                 var layerTable = (LayerTable)tx.GetObject(db.LayerTableId, OpenMode.ForRead);
                 foreach (ObjectId layerId in layerTable)
@@ -36,7 +36,6 @@ namespace Bimwright.Dwg.Plugin.Cad
                     });
                 }
 
-                tx.Commit();
             }
 
             return layers.ToArray();

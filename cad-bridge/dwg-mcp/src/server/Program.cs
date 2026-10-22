@@ -57,10 +57,12 @@ namespace Bimwright.Dwg.Server
 
 AutoCAD routing: versions are 4-digit years 2022..2027. If multiple AutoCAD instances run, use dwg_list_available_targets then dwg_switch_target, or start the server with --target 2022|2023|2024|2025|2026|2027.
 
+Document routing: dwg_list_documents lists already open DWGs. dwg_use_document chooses a fresh opaque document_id for this MCP server process without switching the user's active tab. Null/omission follows the active tab again, including when no documents are open. Inactive targets permit only get_drawing_info, get_entity_properties, query_entities, count_entities, list_layers, list_text_styles, select_by_layer and select_by_type. Writes, Editor/selection, variables, settings, view and LISP require the target to be active. Stale IDs refuse without fallback. Never carry handles across DWGs; reread identity after selecting a target. Reset to follow-active before reading the user's selected objects.
+
 Tools use prefix dwg_:
 - Crosshair preferences: dwg_get_crosshair_settings reads the active profile, size and separate model/layout colors. dwg_set_crosshair_settings changes only explicitly supplied size/RGB fields, requires the exact current profile and verifies native readback. Pass BOTH model_color_rgb and layout_color_rgb for both spaces. Preferences persist outside DWG/Undo; finish active commands/close Options first. No UI automation or drawing save. On failure inspect rollback_verified and reread before retrying.
 - Other application preferences: dwg_list_settings is the fixed typed catalog with ranges, effect timing and read-only restrictions. Read only needed IDs using dwg_get_settings; pass its exact profile and per-ID typed values as expected_value to dwg_set_settings. Validate with dry_run first. New colors use RGB; raw OLE colors are valid expectations. Native readback verifies stored preferences, not screen refresh or future restart/plot effects. Unsupported properties have explicit per-ID availability errors. No arbitrary preference paths, security/code-loading/path/profile changes, DWG save or automatic retry.
-- query: dwg_get_drawing_info, dwg_list_layers, and dwg_get_entity_properties read the current active document. When the user refers to selected/highlighted objects, first call dwg_get_selection with include_geometry=false; use its fresh handles. Report empty/disabled/unavailable selection without substituting searches, all entities or earlier handles. type_counts describes returned rows only; selected_count is the full native selection size before limiting. dwg_get_selected_texts separately extracts and groups selected text; it is not a general selection reader. dwg_list_text_styles reads existing style/font metadata; dwg_inspect_lisp statically scans .lsp files or inline AutoLISP for known suspicious patterns (verdict clean/caution/dangerous). No verdict certifies safety or authorizes execution. dwg_get_lisp_status reads session approvals and tracked LISP job state.
+- query: dwg_get_drawing_info, dwg_list_layers, and dwg_get_entity_properties read the session target document. When the user refers to selected/highlighted objects, first call dwg_get_selection with include_geometry=false; use its fresh handles. Report empty/disabled/unavailable selection without substituting searches, all entities or earlier handles. type_counts describes returned rows only; selected_count is the full native selection size before limiting. dwg_get_selected_texts separately extracts and groups selected text; it is not a general selection reader. dwg_list_text_styles reads existing style/font metadata; dwg_inspect_lisp statically scans .lsp files or inline AutoLISP for known suspicious patterns (verdict clean/caution/dangerous). No verdict certifies safety or authorizes execution. dwg_get_lisp_status reads session approvals and tracked LISP job state.
 - modify: dwg_create_layer, dwg_create_line, dwg_create_circle, dwg_change_layer, dwg_update_texts and dwg_collapse_and_rewrite write explicit drawing/text changes without automatic formatting. Translation orchestration and BWUNICODE styling live in CAD_WORKFLOW and the standalone LISP library. dwg_set_text_style assigns an existing style; dwg_match_properties copies an explicit property list. dwg_edit_polyline_vertices edits guarded existing indices in place without erasing the Polyline. dwg_run_lisp queues a session-approved standalone file/function.
 - drawing: dwg_create_text and dwg_create_mtext create editable text using an existing style. dwg_create_leader creates one plain straight MLeader from exactly two WCS points, with a closed filled arrow and no landing/dogleg/frame. These three tools are also in annotation without duplicate registration. dwg_create_entities creates one bounded heterogeneous plan with local IDs, full document identity, all-target preflight, dry_run and one transaction. It is separate from legacy sequential dwg_batch_execute; native single-Undo behavior still needs verification. LWDISPLAY can be read and set using boolean or 0/1 values.
 - meta: dwg_batch_execute, dwg_list_available_targets, dwg_get_current_target, dwg_switch_target, dwg_send_code, dwg_run_lisp.
@@ -69,7 +71,7 @@ Tools use prefix dwg_:
 - dwg_send_code is on by default; the AutoCAD MCPDISABLECODE command disables it for the session (MCPENABLECODE re-enables).
 - dwg_run_lisp runs only exact standalone file/function versions approved through AutoCAD MCPTRUSTLISP; queued is not completed. Query tool dwg_get_lisp_status reports actual job state even while the user answers AutoCAD prompts. No inline, batch or ToolBaker LISP, no bypass through send_code. Approved scripts and C# run with full process trust, not in a sandbox.
 
-General CAD tools operate on the current AutoCAD active document. Entity arguments use AutoCAD hex handles returned by selection, creation, or property tools.
+General CAD tools follow the active AutoCAD document unless this MCP session selected an explicit target. Only the audited database readers above support an inactive target. Entity arguments use AutoCAD hex handles from the same target document.
 Read fresh selection/entity data before text writeback. Collapse/rewrite requires the current saved drawing path and fingerprint; inspect per-item outcomes/new handles. Read-only mode also permits view navigation and image file output, but no drawing edits.";
 
         private static IMcpServerBuilder RegisterToolsets(IMcpServerBuilder mcp, HashSet<string> enabled)
@@ -92,6 +94,7 @@ Read fresh selection/entity data before text writeback. Collapse/rewrite require
             if (enabled.Contains("query"))
             {
                 toolTypes.Add(typeof(QueryTools));
+                toolTypes.Add(typeof(DocumentTools));
                 toolTypes.Add(typeof(CrosshairQueryTools));
                 toolTypes.Add(typeof(GeneralSettingsQueryTools));
                 toolTypes.Add(typeof(TextQueryTools));
@@ -155,6 +158,7 @@ Read fresh selection/entity data before text writeback. Collapse/rewrite require
         private static IMcpServerBuilder RegisterToolType(IMcpServerBuilder mcp, Type toolType)
         {
             if (toolType == typeof(QueryTools)) return mcp.WithTools<QueryTools>();
+            if (toolType == typeof(DocumentTools)) return mcp.WithTools<DocumentTools>();
             if (toolType == typeof(CrosshairQueryTools)) return mcp.WithTools<CrosshairQueryTools>();
             if (toolType == typeof(CrosshairWriteTools)) return mcp.WithTools<CrosshairWriteTools>();
             if (toolType == typeof(GeneralSettingsQueryTools)) return mcp.WithTools<GeneralSettingsQueryTools>();

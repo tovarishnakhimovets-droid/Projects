@@ -31,9 +31,10 @@ namespace Bimwright.Dwg.Plugin.Drawing
                 OriginalFilename = Read(() => db.OriginalFileName),
                 Fingerprint = db.FingerprintGuid,
                 IsReadOnlyDocument = doc.IsReadOnly,
-                // This system variable is read only on the locked active document.
-                IsTitled = ReadVariable("DWGTITLED") == 1,
-                DatabaseModified = ReadVariable("DBMOD")
+                IsTitled = doc.IsNamedDrawing,
+                // Application system variables belong to the UI-active document.
+                DatabaseModified = ReferenceEquals(Application.DocumentManager.MdiActiveDocument, doc)
+                    ? ReadVariable("DBMOD") : null
             };
             snapshot.DocumentPath = DrawingIdentityPolicy.SavedDocumentPath(
                 snapshot.DocumentName, snapshot.IsTitled);
