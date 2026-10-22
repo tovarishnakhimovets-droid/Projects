@@ -4,6 +4,8 @@ using System;
 
 namespace Autodesk.AutoCAD.ApplicationServices
 {
+    public enum DocumentLockMode { Read = 0x20, Write = 4 }
+
     public class Document
     {
         private Autodesk.AutoCAD.DatabaseServices.Database database = new Autodesk.AutoCAD.DatabaseServices.Database();
@@ -28,6 +30,8 @@ namespace Autodesk.AutoCAD.ApplicationServices
         public Exception LockError;
         public int LockCount;
         public int LockDepth;
+        public DocumentLockMode? LastLockMode;
+        public bool? LastLockPrompt;
         public Action OnLockAcquired;
         public Action OnLockReleased;
         private CommandEventHandler ended, cancelled, failed;
@@ -75,6 +79,12 @@ namespace Autodesk.AutoCAD.ApplicationServices
                 LockDepth--;
                 throw;
             }
+        }
+        public IDisposable LockDocument(DocumentLockMode mode, string globalName, string localName, bool promptIfFails)
+        {
+            LastLockMode = mode;
+            LastLockPrompt = promptIfFails;
+            return LockDocument();
         }
         private sealed class DocumentLock : IDisposable
         {

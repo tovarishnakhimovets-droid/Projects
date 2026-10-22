@@ -181,17 +181,17 @@ namespace Bimwright.Dwg.Plugin.Cad
 
         private static void DescribeMLeader(IDictionary<string, object> result, MLeader mLeader)
         {
-            var mText = mLeader.MText;
-            try
+            var hasText = mLeader.ContentType == ContentType.MTextContent;
+            result["content_type"] = mLeader.ContentType.ToString();
+            result["text"] = string.Empty;
+            result["text_height"] = null;
+            // MText throws for NoneContent/BlockContent, including a valid arrow-only leader.
+            if (hasText)
             {
-                result["text"] = mText != null ? mText.Contents : string.Empty;
+                using (var mText = mLeader.MText)
+                    result["text"] = mText?.Contents ?? string.Empty;
+                result["text_height"] = mLeader.TextHeight;
             }
-            finally
-            {
-                mText?.Dispose();
-            }
-
-            result["text_height"] = mLeader.TextHeight;
             result["leader_count"] = mLeader.LeaderCount;
             result["leader_line_count"] = mLeader.LeaderLineCount;
             try

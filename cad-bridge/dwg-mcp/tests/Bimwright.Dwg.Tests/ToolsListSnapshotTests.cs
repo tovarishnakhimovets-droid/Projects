@@ -75,6 +75,7 @@ namespace Bimwright.Dwg.Tests
                 "dwg_list_bake_suggestions",
                 "dwg_list_baked_tools",
                 "dwg_list_blocks",
+                "dwg_list_documents",
                 "dwg_list_layers",
                 "dwg_list_settings",
                 "dwg_list_text_styles",
@@ -104,6 +105,7 @@ namespace Bimwright.Dwg.Tests
                 "dwg_switch_target",
                 "dwg_update_block_angles",
                 "dwg_update_texts",
+                "dwg_use_document",
                 "dwg_zoom_extents",
                 "dwg_zoom_to_entity",
                 "dwg_zoom_window"
@@ -257,6 +259,7 @@ namespace Bimwright.Dwg.Tests
                 "CodeTools",
                 "CrosshairQueryTools",
                 "CrosshairWriteTools",
+                "DocumentTools",
                 "EntityStyleTools",
                 "GeneralSettingsQueryTools",
                 "GeneralSettingsWriteTools",
@@ -280,6 +283,7 @@ namespace Bimwright.Dwg.Tests
             {
                 "BlockInspectionTools",
                 "CrosshairQueryTools",
+                "DocumentTools",
                 "GeneralSettingsQueryTools",
                 "MetaTools",
                 "ProxyTools",

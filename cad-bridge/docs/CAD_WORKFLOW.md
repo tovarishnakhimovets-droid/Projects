@@ -18,6 +18,11 @@ PID, transport, pipe_name, auth_token и время запуска. После �
 Target задаётся четырёхзначным годом. Таймаут связи — 30 секунд; он не прерывает
 зависший native-вызов и не доказывает откат записи.
 
+Для последовательного чтения нескольких открытых DWG использовать
+`dwg_list_documents` → `dwg_use_document`: цель хранится в отдельном stdio-процессе,
+вкладка пользователя не переключается. Ограничения неактивного DWG, срок действия
+ID и возврат к активной вкладке — [TOOLS.md#documents](TOOLS.md#documents).
+
 Внутренние команды явно регистрируются в `CommandDispatcher`, MCP-методы —
 отдельно с префиксом `dwg_`. Общий код — `dwg-mcp/src/shared`, обработчики —
 `shared/Handlers`, MCP-обёртки — `src/server/Tools` внутри `dwg-mcp`.
@@ -191,7 +196,11 @@ dotnet test .\dwg-mcp\tests\Bimwright.Dwg.Tests\Bimwright.Dwg.Tests.csproj -c Re
 Шрифт хранится единственным файлом `lisp/OpenSans-CondensedLight.ttf` рядом с
 командой. В аргументе передавать полный путь своей локальной копии, например
 `D:\CAD-Automation\team\Projects\cad-bridge\lisp\OpenSans-CondensedLight.ttf`.
-Команда не скачивает шрифты из сети. Происхождение и лицензия —
+Перед первым `BWUNICODE` установить этот TrueType-шрифт в Windows и перезапустить
+AutoCAD: одного TTF рядом с LISP недостаточно. Файл можно открыть в Windows и
+нажать «Установить»; LISP не устанавливает и не скачивает шрифты. Это требование
+[Autodesk к TrueType-шрифтам](https://www.autodesk.com/support/technical/article/caas/sfdcarticles/sfdcarticles/Where-to-install-font-shape-files-in-AutoCAD.html).
+Происхождение и лицензия —
 `dwg-mcp/THIRD_PARTY_NOTICES.md` и `lisp/OFL.txt`.
 
 Программная функция принимает `arguments_json` вида
@@ -205,6 +214,11 @@ dotnet test .\dwg-mcp\tests\Bimwright.Dwg.Tests\Bimwright.Dwg.Tests.csproj -c Re
 xref, неподдержанных блоков и закрытых/замороженных/заблокированных слоёв;
 чужой несовместимый стиль или слой не перезаписываются. При отказе не упрощать
 проверки автоматически; сначала разобрать конкретный объект.
+У MLeader сохраняются базовая точка, точки соединения и вершины линий.
+AutoCAD пересчитывает внутреннее положение MText по метрикам шрифта,
+высоте и типу прикрепления; равенство всех DXF-координат текста не обещается.
+Эти данные отделены от контрольных точек в
+[Autodesk MLeader Context Data](https://help.autodesk.com/cloudhelp/2023/ENU/AutoCAD-DXF/files/GUID-EC56D0DE-026D-46AB-87B1-9692393B0C22.htm).
 Явные handles текстов в обычном определении блока поддержаны: оформление,
 как и переписывание, затронет все ссылки на это определение. Анонимные и
 динамические определения и вложенные block references отклоняются. Перед

@@ -49,6 +49,7 @@
     <Compile Include="..\shared\Security\LispExecutionPolicy.cs" LinkBase="Shared\Security" />
     <Compile Include="..\shared\Cad\LineweightSpec.cs" LinkBase="Shared\Cad" />
     <Compile Include="..\shared\Cad\CadWire.cs" LinkBase="Shared\Cad" />
+    <Compile Include="..\shared\Infrastructure\DocumentRoutingPolicy.cs" LinkBase="Shared\Infrastructure" />
     <Compile Include="..\shared\Cad\SelectionReadInput.cs" LinkBase="Shared\Cad" />
     <Compile Include="..\shared\Cad\PropertyStyleInput.cs" LinkBase="Shared\Cad" />
     <Compile Include="..\shared\Annotation\AnnotationRequestValidation.cs" LinkBase="Shared\Annotation" />

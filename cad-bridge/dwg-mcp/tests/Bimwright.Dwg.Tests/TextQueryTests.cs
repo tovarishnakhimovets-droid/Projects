@@ -96,7 +96,9 @@ namespace Bimwright.Dwg.Tests
             var manager = doc.Database.TransactionManager;
             Assert.Equal(Math.Min(total, limit) + 1, manager.Opens.Count); // table plus returned records
             Assert.All(manager.Opens, entry => Assert.Equal(OpenMode.ForRead, entry.Mode));
-            Assert.Equal(1, manager.CommitCount);
+            Assert.Equal(0, manager.StartedCount);
+            Assert.Equal(1, manager.OpenCloseStartedCount);
+            Assert.Equal(0, manager.CommitCount);
             if (total > 0)
             {
                 Assert.True(json["styles"][0].Value<bool>("is_current"));

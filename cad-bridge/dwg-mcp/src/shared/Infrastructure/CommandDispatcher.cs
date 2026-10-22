@@ -23,8 +23,11 @@ namespace Bimwright.Dwg.Plugin
         public CommandDispatcher(string authToken)
         {
             _authToken = authToken;
+            DocumentRouting.BeginSession();
             _commands = new Dictionary<string, IAcadCommand>
             {
+                { "list_documents",          new DocumentRouting.ListCommand() },
+                { "use_document",            new DocumentRouting.UseCommand() },
                 { "get_drawing_info",        new GetDrawingInfoHandler() },
                 { "get_crosshair_settings",  new GetCrosshairSettingsHandler() },
                 { "set_crosshair_settings",  new SetCrosshairSettingsHandler() },
@@ -137,9 +140,19 @@ namespace Bimwright.Dwg.Plugin
                     return SerializeResponse(id, cmd, preflight);
                 }
 
-                var result = cmd == "get_lisp_status"
-                    ? ExecuteCommand(null, cmd, parameters)
-                    : DocumentInvoker.Invoke(doc => ExecuteCommand(doc, cmd, parameters));
+                string documentId = null;
+                if (cmd != "list_documents" && cmd != "get_lisp_status" &&
+                    !DocumentRoutingPolicy.TryParseDocumentId(request["document_id"], out documentId, out var targetError))
+                    return ErrorJson(id, targetError);
+
+                CommandResult result;
+                if (cmd == "get_lisp_status") result = ExecuteCommand(null, cmd, parameters);
+                else if (cmd == "list_documents")
+                    result = DocumentInvoker.InvokeApplication(() => ExecuteCommand(null, cmd, parameters));
+                else if (cmd == "use_document")
+                    result = DocumentInvoker.InvokeApplication(() => ExecuteCommand(
+                        DocumentRouting.Resolve(documentId, allowMissingActive: true), cmd, parameters));
+                else result = DocumentInvoker.Invoke(cmd, documentId, doc => ExecuteCommand(doc, cmd, parameters));
 
                 string resultJson = null;
                 if (result.Ok)

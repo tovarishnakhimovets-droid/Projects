@@ -68,9 +68,19 @@ and work log. Commit, push and conflict resolution remain human-controlled.
 - Verify the connected server's tools/list; source availability and old counts
   do not prove installed capabilities. Standard team toolsets: query,modify,drawing,view.
 
+For several open DWGs, use dwg_list_documents and dwg_use_document with a fresh
+document_id. This selects a target in this stdio server process without switching
+the user's tab; separate server processes keep separate targets. Only the eight
+database readers listed in docs/TOOLS.md support an inactive target. Other CAD
+operations require that target to be the active tab; never switch or fall back
+silently. Closed/reopened documents or listener restarts invalidate IDs. Omit the
+ID or pass null to follow the active tab again. Keep handles and identity with
+their own DWG; reread identity after changing the target.
+
 Before drawing edits read dwg_get_drawing_info and only the necessary objects.
 When the user refers to selected/highlighted objects, first call dwg_get_selection
-with include_geometry=false. Use its fresh handles for further reading/writing.
+with include_geometry=false in the user's active tab; reset an inactive target
+with dwg_use_document(null) first. Use its fresh handles for further reading/writing.
 Report empty/disabled/unavailable selection; do not substitute all objects, a search
 or an earlier selection. A truncated or incomplete response describes only a subset;
 never present its type counts as the entire selection. dwg_get_selected_texts is

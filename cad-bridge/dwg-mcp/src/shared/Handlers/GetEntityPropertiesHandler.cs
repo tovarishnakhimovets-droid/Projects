@@ -26,7 +26,7 @@ namespace Bimwright.Dwg.Plugin.Handlers
             var results = new List<object>();
             var db = doc.Database;
 
-            using (var tx = db.TransactionManager.StartTransaction())
+            using (var tx = db.TransactionManager.StartOpenCloseTransaction())
             {
                 foreach (var handleToken in handleTokens)
                 {
@@ -72,7 +72,6 @@ namespace Bimwright.Dwg.Plugin.Handlers
                     }
                 }
 
-                tx.Commit();
             }
 
             var identity = DocumentGuard.Capture(doc);

@@ -118,6 +118,7 @@ namespace Bimwright.Dwg.Plugin.Handlers
                     break;
 
                 case MLeader mLeader:
+                    if (mLeader.ContentType != ContentType.MTextContent) break;
                     string mlText;
                     using (var text = mLeader.MText)
                         mlText = text?.Contents ?? string.Empty;
