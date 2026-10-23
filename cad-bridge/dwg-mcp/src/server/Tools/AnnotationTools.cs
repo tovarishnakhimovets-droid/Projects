@@ -36,87 +36,58 @@ namespace Bimwright.Dwg.Server.Tools
             string layer = null, int? color_index = null)
             => TextCreationTools.CreateLeader(points, text, layer, color_index);
 
-        [McpServerTool(Name = "dwg_create_table"), Description(
-            "Create a table in the current AutoCAD space. insertion_point is a JSON point object, " +
-            "and cells is a JSON array of row arrays.")]
+        [McpServerTool(Name = "dwg_create_table", ReadOnly = false, Idempotent = false), Description(
+            "Create one native AutoCAD TABLE in the active drawing, in one guarded transaction. " +
+            "Explicit row heights/column widths in drawing units, plain string cells, zero-based rectangular merges and cell formatting. " +
+            "Existing local unlocked layer and local horizontal non-annotative text style only. " +
+            "1-256 rows, 1-128 columns, at most 10000 cells/200000 characters. Fields, formulas and inline MText controls are rejected. " +
+            "Merged non-anchor cells must be empty. No links, commands, new styles, implicit shrinking or saving. " +
+            "dry_run checks input and native dependencies without constructing a TABLE. " +
+            "Read back dimensions and cells after creation and inspect the view for clipping. Never retry an uncertain timed-out write.")]
         public static Task<string> CreateTable(
-            [Description("JSON point object, e.g. {\"x\":0,\"y\":0,\"z\":0}.")] string insertion_point,
-            [Description("Number of table rows.")] int rows,
-            [Description("Number of table columns.")] int columns,
-            [Description("JSON array of row arrays, e.g. [[\"A\",\"B\"],[\"C\",\"D\"]].")] string cells,
-            [Description("Optional target layer name.")] string layer = null)
+            string expected_document, string expected_fingerprint,
+            TablePoint insertion_point, string[][] cells, double[] column_widths, double[] row_heights,
+            string layer, string text_style, TableMergeRequest[] merges = null,
+            TableCellFormatRequest[] cell_formats = null, double text_height = 2.5,
+            double horizontal_margin = 0.4, double vertical_margin = 0.2,
+            double rotation = 0, bool dry_run = false)
         {
-            if (!TryParseJsonObject(insertion_point, "insertion_point", out var insertionPointObject, out var insertionPointError))
-            {
-                return ToolInputError(insertionPointError);
-            }
-
-            if (!TryParseJsonArray(cells, "cells", out var cellsArray, out var cellsError))
-            {
-                return ToolInputError(cellsError);
-            }
-
-            var request = new JObject
-            {
-                ["insertion_point"] = insertionPointObject,
-                ["rows"] = rows,
-                ["columns"] = columns,
-                ["cells"] = cellsArray
-            };
-            if (layer != null) request["layer"] = layer;
-
-            return ToolGateway.LoggedCall("create_table", request, request);
-        }
-
-        private static bool TryParseJsonObject(string json, string fieldName, out JObject obj, out string error)
-        {
-            obj = null;
-            error = null;
-
-            if (string.IsNullOrWhiteSpace(json))
-            {
-                error = fieldName + " must be a JSON object";
-                return false;
-            }
-
+            var options = new System.Text.Json.JsonSerializerOptions {
+                DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull };
             try
             {
-                obj = JObject.Parse(json);
-                return true;
+                var request = JObject.Parse(System.Text.Json.JsonSerializer.Serialize(new {
+                    expected_document, expected_fingerprint, insertion_point, cells, column_widths, row_heights,
+                    layer, text_style, merges, cell_formats, text_height, horizontal_margin, vertical_margin, rotation, dry_run
+                }, options));
+                if (!Bimwright.Dwg.Plugin.Tables.TableInput.TryParse(request, out _, out var error))
+                    return Task.FromResult(JsonConvert.SerializeObject(new { ok = false, error }));
+                return ToolGateway.LoggedCall("create_table", request, request);
             }
-            catch (JsonException ex)
-            {
-                error = fieldName + " must be a JSON object: " + ex.Message;
-                return false;
-            }
+            catch (System.Exception ex) when (ex is System.ArgumentException || ex is System.Text.Json.JsonException)
+            { return Task.FromResult(JsonConvert.SerializeObject(new { ok = false, error = "invalid table input: " + ex.Message })); }
         }
+    }
 
-        private static bool TryParseJsonArray(string json, string fieldName, out JArray array, out string error)
-        {
-            array = null;
-            error = null;
-
-            if (string.IsNullOrWhiteSpace(json))
-            {
-                error = fieldName + " must be a JSON array";
-                return false;
-            }
-
-            try
-            {
-                array = JArray.Parse(json);
-                return true;
-            }
-            catch (JsonException ex)
-            {
-                error = fieldName + " must be a JSON array: " + ex.Message;
-                return false;
-            }
-        }
-
-        private static Task<string> ToolInputError(string error)
-        {
-            return Task.FromResult(JsonConvert.SerializeObject(new { ok = false, error }));
-        }
+    public sealed class TablePoint
+    {
+        [System.Text.Json.Serialization.JsonRequired] public double x { get; set; }
+        [System.Text.Json.Serialization.JsonRequired] public double y { get; set; }
+        public double z { get; set; }
+    }
+    public sealed class TableMergeRequest
+    {
+        [System.Text.Json.Serialization.JsonRequired] public int top { get; set; }
+        [System.Text.Json.Serialization.JsonRequired] public int left { get; set; }
+        [System.Text.Json.Serialization.JsonRequired] public int bottom { get; set; }
+        [System.Text.Json.Serialization.JsonRequired] public int right { get; set; }
+    }
+    public sealed class TableCellFormatRequest
+    {
+        [System.Text.Json.Serialization.JsonRequired] public int row { get; set; }
+        [System.Text.Json.Serialization.JsonRequired] public int column { get; set; }
+        public double? text_height { get; set; }
+        [Description("Text angle in degrees: 0, 90, 180 or 270.")] public double? rotation { get; set; }
+        [Description("middle_center, middle_left or middle_right.")] public string alignment { get; set; }
     }
 }

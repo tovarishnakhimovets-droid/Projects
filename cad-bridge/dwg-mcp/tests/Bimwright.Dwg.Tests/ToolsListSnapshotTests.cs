@@ -86,6 +86,7 @@ namespace Bimwright.Dwg.Tests
                 "dwg_offset_entities",
                 "dwg_purge_drawing",
                 "dwg_query_entities",
+                "dwg_read_table",
                 "dwg_restore_view",
                 "dwg_rotate_entities",
                 "dwg_run_baked_tool",
@@ -271,6 +272,7 @@ namespace Bimwright.Dwg.Tests
                 "ProxyTools",
                 "ProxyWriteTools",
                 "QueryTools",
+                "TableQueryTools",
                 "TextQueryTools",
                 "ViewTools"
             }, defaultTypeNames);
@@ -288,6 +290,7 @@ namespace Bimwright.Dwg.Tests
                 "MetaTools",
                 "ProxyTools",
                 "QueryTools",
+                "TableQueryTools",
                 "TextQueryTools",
                 "ViewTools"
             }, defaultReadOnlyTypeNames);
@@ -314,8 +317,8 @@ namespace Bimwright.Dwg.Tests
 
             var annotationWriteTypeNames = InvokeToolTypeResolver(method, new[] { "annotation" }, readOnly: false);
             var annotationReadOnlyTypeNames = InvokeToolTypeResolver(method, new[] { "annotation" }, readOnly: true);
-            Assert.Equal(new[] { "AnnotationTools", "TextCreationTools" }, annotationWriteTypeNames);
-            Assert.Equal(Array.Empty<string>(), annotationReadOnlyTypeNames);
+            Assert.Equal(new[] { "AnnotationTools", "TableQueryTools", "TextCreationTools" }, annotationWriteTypeNames);
+            Assert.Equal(new[] { "TableQueryTools" }, annotationReadOnlyTypeNames);
 
             var dimensionWriteTypeNames = InvokeToolTypeResolver(method, new[] { "dimension" }, readOnly: false);
             var dimensionReadOnlyTypeNames = InvokeToolTypeResolver(method, new[] { "dimension" }, readOnly: true);
@@ -347,8 +350,8 @@ namespace Bimwright.Dwg.Tests
 
             var drawingWriteTypeNames = InvokeToolTypeResolver(method, new[] { "drawing" }, readOnly: false);
             var drawingReadOnlyTypeNames = InvokeToolTypeResolver(method, new[] { "drawing" }, readOnly: true);
-            Assert.Equal(new[] { "DrawingTools", "DrawingWriteTools", "EntityBatchTools", "TextCreationTools" }, drawingWriteTypeNames);
-            Assert.Equal(new[] { "DrawingTools" }, drawingReadOnlyTypeNames);
+            Assert.Equal(new[] { "AnnotationTools", "DrawingTools", "DrawingWriteTools", "EntityBatchTools", "TableQueryTools", "TextCreationTools" }, drawingWriteTypeNames);
+            Assert.Equal(new[] { "DrawingTools", "TableQueryTools" }, drawingReadOnlyTypeNames);
         }
 
         private static string[] GetMcpToolNames(Type type)

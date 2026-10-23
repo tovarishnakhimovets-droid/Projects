@@ -63,6 +63,7 @@ namespace Bimwright.Dwg.Plugin
                 { "create_mtext",            new CreateMTextHandler() },
                 { "create_leader",           new CreateLeaderHandler() },
                 { "create_table",            new CreateTableHandler() },
+                { "read_table",              new ReadTableHandler() },
                 { "list_blocks",             new ListBlocksHandler() },
                 { "get_block_attributes",    new GetBlockAttributesHandler() },
                 { "insert_block",            new InsertBlockHandler() },

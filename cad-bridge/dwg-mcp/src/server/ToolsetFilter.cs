@@ -8,8 +8,9 @@ namespace Bimwright.Dwg.Server
         public static readonly string[] KnownToolsets = { "query", "modify", "code", "meta", "toolbaker", "annotation", "block", "dimension", "view", "export", "drawing" };
         public static readonly string[] DefaultOn = { "query", "modify", "meta", "view" };
 
+        // Mixed annotation/drawing profiles retain their readers; Program strips write classes.
         private static readonly HashSet<string> WriteCapable = new HashSet<string>(
-            new[] { "modify", "code", "annotation", "dimension", "export" },
+            new[] { "modify", "code", "dimension", "export" },
             StringComparer.OrdinalIgnoreCase);
 
         public static HashSet<string> Resolve(DwgMcpConfig config)

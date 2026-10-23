@@ -45,7 +45,7 @@ namespace Bimwright.Dwg.Plugin
         }
 
         internal static bool UsesReadLock(string command)
-            => IsInactiveReadCommand(command) || command == "get_selection" || command == "get_selected_texts";
+            => IsInactiveReadCommand(command) || command == "get_selection" || command == "get_selected_texts" || command == "read_table";
 
         internal static string ValidateCommandTarget(string command, bool isActive)
             => isActive || IsInactiveReadCommand(command) || command == "use_document"

@@ -16,17 +16,27 @@ namespace Bimwright.Dwg.Tests
     {
         // Exercise the built entry point and real SDK registration/stdio handshake.
         // Only initialize and tools/list are sent: these tests never call a CAD tool.
+        public static IEnumerable<object[]> Profiles()
+        {
+            var profiles = new[]
+            {
+                ("query,modify,drawing,view", false, 67),
+                ("query,modify,drawing,view,annotation", false, 67),
+                ("query,modify,drawing,view", true, 27),
+                ("query", false, 20), ("modify", false, 32),
+                ("drawing", false, 10), ("annotation", false, 5),
+                ("drawing,annotation", false, 10),
+                ("drawing", true, 2), ("annotation", true, 1)
+            };
+            foreach (string target in new[] { "2026", "2027" })
+                foreach (var profile in profiles)
+                    yield return new object[] { target, profile.Item1, profile.Item2, profile.Item3 };
+        }
+
         [Theory]
-        [InlineData("query,modify,drawing,view", false, 65)]
-        [InlineData("query,modify,drawing,view,annotation", false, 66)]
-        [InlineData("query,modify,drawing,view", true, 26)]
-        [InlineData("query", false, 19)]
-        [InlineData("modify", false, 32)]
-        [InlineData("drawing", false, 8)]
-        [InlineData("annotation", false, 4)]
-        [InlineData("drawing,annotation", false, 9)]
+        [MemberData(nameof(Profiles))]
         public async Task Built_server_initializes_and_advertises_the_exact_profile(
-            string profile, bool readOnly, int expectedCount)
+            string target, string profile, bool readOnly, int expectedCount)
         {
             string server = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,
                 "..", "..", "..", "..", "..", "src", "server", "bin", "Release", "net8.0",
@@ -39,14 +49,14 @@ namespace Bimwright.Dwg.Tests
             {
                 Name = "dwg-offline-profile-" + profile,
                 Command = dotnet,
-                Arguments = new[] { server, "--target", "2026", "--toolsets", profile, "--disable-toolbaker",
+                Arguments = new[] { server, "--target", target, "--toolsets", profile, "--disable-toolbaker",
                     // A unique missing path isolates this test from the installed user's config.
                     "--config", Path.Combine(Path.GetDirectoryName(server), "offline-profile-" + Guid.NewGuid().ToString("N") + ".json") },
                 WorkingDirectory = Path.GetDirectoryName(server),
                 ShutdownTimeout = TimeSpan.FromSeconds(2),
                 EnvironmentVariables = new Dictionary<string, string>
                 {
-                    ["BIMWRIGHT_DWG_TARGET"] = "2026",
+                    ["BIMWRIGHT_DWG_TARGET"] = target,
                     ["BIMWRIGHT_DWG_TOOLSETS"] = profile,
                     ["BIMWRIGHT_DWG_ENABLE_TOOLBAKER"] = "false",
                     ["BIMWRIGHT_DWG_READ_ONLY"] = readOnly ? "true" : "false"
@@ -103,6 +113,27 @@ namespace Bimwright.Dwg.Tests
             Assert.Equal(hasTextCreation ? 1 : 0, names.Count(name => name == "dwg_create_mtext"));
             Assert.Equal(hasTextCreation ? 1 : 0, names.Count(name => name == "dwg_create_text"));
             Assert.Equal(hasTextCreation ? 1 : 0, names.Count(name => name == "dwg_create_leader"));
+            Assert.Equal(hasTextCreation, names.Contains("dwg_create_table", StringComparer.Ordinal));
+            bool hasTableReader = enabled.Contains("query") || enabled.Contains("drawing") || enabled.Contains("annotation");
+            Assert.Equal(hasTableReader, names.Contains("dwg_read_table", StringComparer.Ordinal));
+            if (hasTableReader)
+            {
+                var reader = Assert.Single(tools, t => t.ProtocolTool.Name == "dwg_read_table").ProtocolTool;
+                Assert.True(reader.Annotations.ReadOnlyHint);
+                Assert.True(reader.Annotations.IdempotentHint);
+                AssertRequired(reader.InputSchema, "expected_document", "expected_fingerprint", "handle");
+            }
+            if (hasTextCreation)
+            {
+                var table = Assert.Single(tools, t => t.ProtocolTool.Name == "dwg_create_table").ProtocolTool;
+                AssertRequired(table.InputSchema, "expected_document", "expected_fingerprint", "insertion_point",
+                    "cells", "column_widths", "row_heights", "layer", "text_style");
+                var merge = TypedArrayItem(table.InputSchema, table.InputSchema, "merges");
+                AssertRequired(merge, "top", "left", "bottom", "right");
+                var format = TypedArrayItem(table.InputSchema, table.InputSchema, "cell_formats");
+                AssertRequired(format, "row", "column");
+            }
+
 
             if (!readOnly && enabled.Contains("drawing"))
             {
@@ -152,7 +183,7 @@ namespace Bimwright.Dwg.Tests
             }
             if (readOnly)
                 foreach (string mutation in new[] { "dwg_create_entities", "dwg_edit_polyline_vertices",
-                    "dwg_create_text", "dwg_create_mtext", "dwg_create_leader", "dwg_set_text_style", "dwg_match_properties",
+                    "dwg_create_text", "dwg_create_mtext", "dwg_create_leader", "dwg_create_table", "dwg_set_text_style", "dwg_match_properties",
                     "dwg_create_block_variant", "dwg_update_block_angles", "dwg_set_system_variable", "dwg_run_lisp", "dwg_set_crosshair_settings", "dwg_set_settings" })
                     Assert.DoesNotContain(mutation, names);
         }
