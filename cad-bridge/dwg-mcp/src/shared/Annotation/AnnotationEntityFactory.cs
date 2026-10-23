@@ -10,8 +10,6 @@ namespace Bimwright.Dwg.Plugin.Annotation
 {
     internal static class AnnotationEntityFactory
     {
-        private const double DefaultTableRowHeight = 8d;
-        private const double DefaultTableColumnWidth = 35d;
 
         internal static bool TryCreateText(JObject obj, out DBText entity, out string error,
             Database database = null, Transaction transaction = null)
@@ -217,84 +215,8 @@ namespace Bimwright.Dwg.Plugin.Annotation
             }
         }
 
-        internal static bool TryCreateTable(JObject obj, out Table entity, out string error)
-        {
-            entity = null;
-            error = null;
-
-            if (!CadWire.TryParsePoint(obj["insertion_point"], out var insertionPoint, out var pointError))
-            {
-                error = "insertion_point " + pointError;
-                return false;
-            }
-
-            if (!TryReadPositiveInt(obj, "rows", out var rows, out error) ||
-                !TryReadPositiveInt(obj, "columns", out var columns, out error))
-            {
-                return false;
-            }
-
-            var cells = obj["cells"] as JArray;
-            if (!AnnotationRequestValidation.TryValidateTableShape(rows, columns, cells, out error))
-            {
-                return false;
-            }
-
-            Table created = null;
-            var ownsEntity = false;
-            try
-            {
-                created = new Table();
-                ownsEntity = true;
-                created.SetDatabaseDefaults();
-                created.Position = ToPoint3d(insertionPoint);
-                created.SetSize(rows, columns);
-                created.SetRowHeight(DefaultTableRowHeight);
-                created.SetColumnWidth(DefaultTableColumnWidth);
-                FillCells(created, cells);
-                created.GenerateLayout();
-                return TransferToCaller(created, out entity, ref ownsEntity);
-            }
-            catch (System.Exception ex)
-            {
-                error = "failed to create table entity: " + ex.Message;
-                return false;
-            }
-            finally
-            {
-                DisposeIfOwned(created, ownsEntity);
-            }
-        }
-
         internal static Point3d ToPoint3d(CadPointInput point)
             => new Point3d(point.X, point.Y, point.Z);
-
-        private static void FillCells(Table table, JArray cells)
-        {
-            for (var row = 0; row < cells.Count; row++)
-            {
-                var cellRow = (JArray)cells[row];
-                for (var column = 0; column < cellRow.Count; column++)
-                {
-                    table.Cells[row, column].TextString = CellToString(cellRow[column]);
-                }
-            }
-        }
-
-        private static string CellToString(JToken token)
-        {
-            if (token == null || token.Type == JTokenType.Null)
-            {
-                return string.Empty;
-            }
-
-            if (token.Type == JTokenType.String)
-            {
-                return token.Value<string>();
-            }
-
-            return token.ToString(Formatting.None);
-        }
 
         private static bool TransferToCaller<T>(T created, out T entity, ref bool ownsEntity)
             where T : DBObject
@@ -313,37 +235,6 @@ namespace Bimwright.Dwg.Plugin.Annotation
             }
         }
 
-        private static bool TryReadPositiveInt(
-            JObject obj,
-            string fieldName,
-            out int value,
-            out string error)
-        {
-            value = 0;
-            error = null;
-
-            var token = obj[fieldName];
-            if (token == null || token.Type == JTokenType.Null)
-            {
-                error = fieldName + " is required";
-                return false;
-            }
-
-            if (token.Type != JTokenType.Integer)
-            {
-                error = fieldName + " must be a positive integer";
-                return false;
-            }
-
-            value = token.Value<int>();
-            if (value <= 0)
-            {
-                error = fieldName + " must be a positive integer";
-                return false;
-            }
-
-            return true;
-        }
 
         private static bool TryReadOptionalPositiveDouble(
             JObject obj,

@@ -14,7 +14,7 @@ namespace Bimwright.Dwg.Tests
         [InlineData("CreateText", "create_text", "{\"text\":\"Т1\",\"position\":{\"x\":0,\"y\":0},\"text_style\":\"GOST TYPE A\",\"width_factor\":0.8,\"color_index\":256}")]
         [InlineData("CreateMText", "create_mtext", "{\"text\":\"General notes\",\"location\":{\"x\":1,\"y\":2},\"width\":80,\"height\":2.5,\"rotation\":15,\"layer\":\"A-NOTE\"}")]
         [InlineData("CreateLeader", "create_leader", "{\"points\":[{\"x\":0,\"y\":0},{\"x\":5,\"y\":5}],\"text\":\"Note\",\"layer\":\"A-ANNO\"}")]
-        [InlineData("CreateTable", "create_table", "{\"insertion_point\":{\"x\":0,\"y\":0},\"rows\":2,\"columns\":2,\"cells\":[[\"A\",\"B\"],[\"C\",\"D\"]],\"layer\":\"A-TABLE\"}")]
+        [InlineData("CreateTable", "create_table", "{\"expected_document\":\"D:/test.dwg\",\"expected_fingerprint\":\"11111111-1111-1111-1111-111111111111\",\"text_style\":\"Standard\",\"column_widths\":[10,10],\"row_heights\":[6,6],\"insertion_point\":{\"x\":0,\"y\":0},\"cells\":[[\"A\",\"B\"],[\"C\",\"D\"]],\"layer\":\"A-TABLE\"}")]
         public void Validate_AnnotationSchemasAcceptValidShapes(
             string schemaName,
             string commandName,
@@ -32,8 +32,12 @@ namespace Bimwright.Dwg.Tests
         [InlineData("CreateMText", "create_mtext", "location")]
         [InlineData("CreateLeader", "create_leader", "points")]
         [InlineData("CreateTable", "create_table", "insertion_point")]
-        [InlineData("CreateTable", "create_table", "rows")]
-        [InlineData("CreateTable", "create_table", "columns")]
+        [InlineData("CreateTable", "create_table", "expected_document")]
+        [InlineData("CreateTable", "create_table", "expected_fingerprint")]
+        [InlineData("CreateTable", "create_table", "column_widths")]
+        [InlineData("CreateTable", "create_table", "row_heights")]
+        [InlineData("CreateTable", "create_table", "layer")]
+        [InlineData("CreateTable", "create_table", "text_style")]
         [InlineData("CreateTable", "create_table", "cells")]
         public void Validate_AnnotationSchemasRequireContractFields(
             string schemaName,
@@ -99,7 +103,7 @@ namespace Bimwright.Dwg.Tests
                 case "create_leader":
                     return JObject.Parse("{\"points\":[{\"x\":0,\"y\":0},{\"x\":5,\"y\":5}]}");
                 case "create_table":
-                    return JObject.Parse("{\"insertion_point\":{\"x\":0,\"y\":0},\"rows\":2,\"columns\":2,\"cells\":[[\"A\",\"B\"],[\"C\",\"D\"]]}");
+                    return JObject.Parse("{\"expected_document\":\"D:/test.dwg\",\"expected_fingerprint\":\"11111111-1111-1111-1111-111111111111\",\"text_style\":\"Standard\",\"column_widths\":[10,10],\"row_heights\":[6,6],\"insertion_point\":{\"x\":0,\"y\":0},\"cells\":[[\"A\",\"B\"],[\"C\",\"D\"]],\"layer\":\"A-TABLE\"}");
                 default:
                     throw new ArgumentOutOfRangeException(nameof(commandName), commandName, "Unknown annotation command.");
             }

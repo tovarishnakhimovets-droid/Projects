@@ -1,5 +1,6 @@
+using System;
 using Autodesk.AutoCAD.ApplicationServices;
-using Bimwright.Dwg.Plugin.Annotation;
+using Bimwright.Dwg.Plugin.Tables;
 using Newtonsoft.Json.Linq;
 
 namespace Bimwright.Dwg.Plugin.Handlers
@@ -7,26 +8,14 @@ namespace Bimwright.Dwg.Plugin.Handlers
     public class CreateTableHandler : IAcadCommand
     {
         public string Name => "create_table";
-        public string Description => "Create a simple table in the current drawing space.";
+        public string Description => "Create one bounded native Table with explicit sizes, merges and text in one guarded transaction; never save.";
         public CommandSchema Schema => CommandSchemas.CreateTable;
 
         public CommandResult Execute(Document doc, JToken parameters)
         {
-            if (!(parameters is JObject obj))
-            {
-                return CommandResult.Fail("params must be an object");
-            }
-
-            if (!AnnotationEntityFactory.TryCreateTable(obj, out var entity, out var error))
-            {
-                return CommandResult.Fail(error);
-            }
-
-            return AnnotationHandlerSupport.AppendWithLayerOption(
-                doc,
-                obj,
-                entity,
-                "failed to create table");
+            if (!TableInput.TryParse(parameters, out var input, out var error)) return CommandResult.Fail(error);
+            try { return CommandResult.Success(TableService.Create(doc, input)); }
+            catch (Exception ex) { return CommandResult.Fail("table creation failed: " + ErrorSanitizer.Sanitize(ex.Message)); }
         }
     }
 }

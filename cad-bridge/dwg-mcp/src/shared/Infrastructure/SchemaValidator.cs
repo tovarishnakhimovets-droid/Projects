@@ -287,11 +287,26 @@ namespace Bimwright.Dwg.Plugin
             SchemaProperty.Optional("text_style", JTokenType.String));
 
         public static readonly CommandSchema CreateTable = CommandSchema.Object(
+            SchemaProperty.RequiredNonEmptyString("expected_document"),
+            SchemaProperty.RequiredNonEmptyString("expected_fingerprint"),
             SchemaProperty.Required("insertion_point", JTokenType.Object),
-            SchemaProperty.Required("rows", JTokenType.Integer),
-            SchemaProperty.Required("columns", JTokenType.Integer),
             SchemaProperty.Required("cells", JTokenType.Array),
-            SchemaProperty.Optional("layer", JTokenType.String));
+            SchemaProperty.Required("column_widths", JTokenType.Array),
+            SchemaProperty.Required("row_heights", JTokenType.Array),
+            SchemaProperty.RequiredNonEmptyString("layer"),
+            SchemaProperty.RequiredNonEmptyString("text_style"),
+            SchemaProperty.Optional("merges", JTokenType.Array),
+            SchemaProperty.Optional("cell_formats", JTokenType.Array),
+            SchemaProperty.Optional("text_height", JTokenType.Float, JTokenType.Integer),
+            SchemaProperty.Optional("horizontal_margin", JTokenType.Float, JTokenType.Integer),
+            SchemaProperty.Optional("vertical_margin", JTokenType.Float, JTokenType.Integer),
+            SchemaProperty.Optional("rotation", JTokenType.Float, JTokenType.Integer),
+            SchemaProperty.Optional("dry_run", JTokenType.Boolean));
+
+        public static readonly CommandSchema ReadTable = CommandSchema.Object(
+            SchemaProperty.RequiredNonEmptyString("expected_document"),
+            SchemaProperty.RequiredNonEmptyString("expected_fingerprint"),
+            SchemaProperty.RequiredNonEmptyString("handle"));
 
         public static readonly CommandSchema ChangeLayer = CommandSchema.Object(
             SchemaProperty.Required("handles", JTokenType.Array),

@@ -1,5 +1,52 @@
 # CAD bridge — состояние работы
 
+## TABLE: исходники и подготовка кандидата выпуска — 2026-10-23
+
+- Пользователь поручил добавить единый native TABLE, затем прямо поручил
+  коммит и выпуск обновления, затем merge в develop. Работа продолжена в
+  andrew после чистого старта
+  от c0abebc: обязательные fast-forward updates и ancestry-check были успешны
+  до первых правок 22 октября. Повторного pull посреди задачи не выполнялось.
+  Прежние изменения document routing/Undo/LISP сохранены.
+- Единственная реализация — shared/Tables/TableService.cs, общий TableInput
+  и обработчики create_table/read_table. Старая ограниченная фабрика TABLE
+  удалена. Typed dwg_create_table включён в drawing/annotation, dwg_read_table —
+  в query/drawing/annotation, включая read-only. Правила — docs/TOOLS.md#tables.
+- Поддержаны размеры строк/столбцов, объединения с пустыми неякорными ячейками,
+  высота/поворот/выравнивание текста. Fresh identity, активный DWG, native
+  зависимости и Undo-state проверяются до записи; один объект и transaction,
+  полный readback размеров/текста/форматов/merges/bounds до Commit. String/Unitless
+  и пустой DataFormat сохраняют буквальный текст. Fields/formulas/MText/%%
+  controls отклоняются; неизвестные и неоднозначные значения не подставляются.
+- Reader: только TABLE непосредственно в local model/paper layout, без xref,
+  block definition, numeric/formatted values, links/fields/formulas/blocks
+  и multiple contents. Read-lock и OpenCloseTransaction без Commit, setters,
+  native layout regeneration и field evaluation. Dry-run не создаёт entity;
+  native layout и text fit при этом не проверяются.
+- Offline 22 октября: сервер собран; оба плагина собраны, 2026 с compile-only
+  AutoCAD.NET 25.1.0 (UseAutoCadNuGetRefs=true), 0 errors/warnings; 2027 —
+  0 errors и прежние два Roslyn MSB3277. Полный набор: 1655 PASS, 0 failed/skipped.
+  Реальный MCP SDK initialize/tools/list проверил по 10 профилей для target
+  2026 и 2027: стандарт 67, read-only 27, query 20, drawing 10, annotation 5,
+  read-only drawing 2/annotation 1, без дублей, typed schemas/annotations верны.
+  Дополнительно проверены bounds, merges/data loss, Unicode/newlines, null/dash/0,
+  format limits и отказ до transport. Эти успешные проверки не повторялись
+  для последующей правки документации.
+- Независимое source review выявило неоднозначность block-table coordinates
+  и legacy %% controls; оба замечания исправлены. Исправлены nullable managed
+  API, явный строковый тип и native Data-class style resolver. diff --check PASS.
+- План выпуска: коммит в andrew, порученный пользователем merge в локальную
+  develop, затем кандидат 2.0.1-team.7-rc.1 из чистой develop, manifest.dirty=false,
+  оба года. Это RC до native-проверки. Push и распространение стабильной версии
+  не выполняются этим поручением.
+- Installed/loaded/live: новый runtime ещё не установлен/не загружен.
+  Native TABLE/Undo/Redo, getters merged non-anchor cells и visual fit не
+  проверены. Сетка/цвет/вес наследуются от текущего TableStyle. Чертежи и Excel
+  этой доработкой не менялись и не сохранялись. После выпуска следующий шаг —
+  локальная установка при закрытом AutoCAD/Codex и отдельная явно разрешённая
+  native-проверка; перезапуск/UI выполняет пользователь.
+
+
 ## Проверка после перезапуска MCP и публикация — 2026-10-22
 
 - Пользователь перезапустил MCP и явно поручил push/merge/тесты. Рабочая копия

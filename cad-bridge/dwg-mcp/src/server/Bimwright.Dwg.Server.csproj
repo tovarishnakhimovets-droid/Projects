@@ -65,6 +65,7 @@
     <Compile Include="..\shared\Proxy\ProxyContract.cs" LinkBase="Shared\Proxy" />
     <Compile Include="..\shared\Network\NetworkInput.cs" LinkBase="Shared\Network" />
     <Compile Include="..\shared\Network\NetworkGeometry.cs" LinkBase="Shared\Network" />
+    <Compile Include="..\shared\Tables\TableInput.cs" LinkBase="Shared\Tables" />
   </ItemGroup>
 
 </Project>

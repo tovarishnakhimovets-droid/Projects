@@ -11,10 +11,10 @@ namespace Bimwright.Dwg.Tests
         {
             var source = ReadAnnotationEntityFactorySource();
 
-            Assert.Equal(4, CountOccurrences(source, "var ownsEntity = false;"));
-            Assert.Equal(4, CountOccurrences(source, "ownsEntity = true;"));
-            Assert.Equal(4, CountOccurrences(source, "return TransferToCaller(created, out entity, ref ownsEntity);"));
-            Assert.Equal(4, CountOccurrences(source, "DisposeIfOwned(created, ownsEntity);"));
+            Assert.Equal(3, CountOccurrences(source, "var ownsEntity = false;"));
+            Assert.Equal(3, CountOccurrences(source, "ownsEntity = true;"));
+            Assert.Equal(3, CountOccurrences(source, "return TransferToCaller(created, out entity, ref ownsEntity);"));
+            Assert.Equal(3, CountOccurrences(source, "DisposeIfOwned(created, ownsEntity);"));
             Assert.Contains("Caller owns the entity after a successful factory return.", source, StringComparison.Ordinal);
             Assert.Contains("private static void DisposeIfOwned(DBObject entity, bool ownsEntity)", source, StringComparison.Ordinal);
         }

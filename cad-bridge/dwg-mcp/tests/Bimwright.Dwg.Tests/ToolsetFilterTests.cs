@@ -83,7 +83,7 @@ namespace Bimwright.Dwg.Tests
         }
 
         [Fact]
-        public void Resolve_ReadOnlyStripsAnnotationAndDimensionButKeepsBlock()
+        public void Resolve_ReadOnlyKeepsMixedAnnotationAndBlockButStripsDimension()
         {
             var set = ToolsetFilter.Resolve(new DwgMcpConfig
             {
@@ -91,7 +91,7 @@ namespace Bimwright.Dwg.Tests
                 ReadOnly = true
             });
 
-            Assert.Equal(new[] { "block", "query" }, set.OrderBy(s => s).ToArray());
+            Assert.Equal(new[] { "annotation", "block", "query" }, set.OrderBy(s => s).ToArray());
         }
 
         [Fact]
