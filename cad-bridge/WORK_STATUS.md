@@ -1,5 +1,33 @@
 # CAD bridge — состояние работы
 
+## TABLE: кандидат 2.0.1-team.7-rc.2 собран и проверен — 2026-10-23
+
+- Исправления native-теста: commit edbcc1b в andrew, merge
+  1c847b1e6dcfc2582678474f03a77b60141ba29b в develop. Из чистой develop собран
+  RC2, manifest.dirty=false, оба года. Полный набор 1683 PASS и обе сборки
+  относятся к этому коду; итоговая запись журнала их не меняет.
+- Готовый пакет releases/2.0.1-team.7-rc.2/
+  DwgMcp.Setup-v2.0.1-team.7-rc.2-win-x64.zip, 39 945 043 байта. SHA256:
+  d9a7d404c60e526f7e960e38c398b81e7d7fcf8457fdbe2e5919823c31e45f89.
+  Папка установки — stage рядом. Независимо проверены все 40 manifest payload
+  files и точный ZIP из 41 файла, bytes/hashes/sidecar, оба года, XML,
+  release.json, шесть runtime-docs и пять patch copies. Autodesk compile-only
+  DLL отсутствуют. Упакованный EXE: все 20 MCP SDK профилей PASS, TABLE schemas
+  и read/write annotations верны; CAD tools из этой проверки не вызывались.
+- После последней native-диагностики снова подтверждено: 84 model entities
+  совпадают с исходным query JSON, новых TABLE нет; DBMOD=1 после отката layout.
+  Excel saved=true, не менялся. Сохранения DWG не было.
+- Установлена/загружена пока RC1. RC2 не устанавливался поверх активного AutoCAD.
+  Для следующего теста пользователь закрывает тестовые DWG без сохранения,
+  AutoCAD/Codex, устанавливает RC2 stage (Years2027, Client none) и запускает
+  их снова. После этого проверить typed create/read на 4x4 и данных Excel,
+  сохранность значений/merges/format/bounds, затем пользовательский Undo/Redo
+  и cleanup без сохранения. Нативная проверка RC2 ещё не завершена.
+- Итоговый журнал включается в обе ветки перед ранее порученным atomic push.
+  Исходный commit/manifest и готовые байты RC2 остаются неизменными; упаковку
+  и успешные проверки для этой записи не повторять.
+
+
 ## TABLE: native-проверка RC1 и исправления для RC2 — 2026-10-23
 
 - Пользователь переустановил RC1, открыл тестовые DWG/Excel и прямо поручил
