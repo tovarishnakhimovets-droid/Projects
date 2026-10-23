@@ -1,5 +1,54 @@
 # CAD bridge — состояние работы
 
+## TABLE: native-проверка RC1 и исправления для RC2 — 2026-10-23
+
+- Пользователь переустановил RC1, открыл тестовые DWG/Excel и прямо поручил
+  native-проверки. Installed/loaded подтверждены: server/current 15/15 файлов,
+  установленный 2027 bundle 8/8 файлов совпадают с RC1; AutoCAD PID 7716 загрузил
+  штатную DLL 2027 с совпавшим SHA256, оба stdio-процесса используют current EXE.
+  Плагин 2026 не установлен; нативная проверка этого года не заявляется.
+- Цели: D:\тест acad-2027\05 ЗР-ПМ_2026-П-НК Схема НК2.dwg и ТК НК2.xlsx
+  из той же папки. Excel прочитан через существующий Office-мост: A1:AQ23,
+  43 столбца, 17 колодцев, формульных ошибок в считанных значениях нет.
+  Excel не редактировался, saved=true. Другие открытые копии плана/профиля
+  не редактировались. Исходная готовая таблица на листе не переделывалась.
+- Dry-run 4x4 прошёл, native Data style разрешён как _DATA. Создание 4x4 и
+  минимального 1x1 через RC1 отказало eInvalidInput до фиксации. Существующая
+  Table 9F043 ожидаемо отклонена reader как форматированный MText вне scope.
+- Локализация через штатный send_code: доверенные синхронные диагностические
+  фрагменты на точной тестовой identity, сначала transient Table, затем одна
+  откатываемая transaction без Commit/Save. Выявлено:
+  1. Table.FlowDirection принимает native AcDb коды 0/1, managed MText enum
+     TopToBottom имеет код 3 и вызывает eInvalidInput. Raw0 setter проходит.
+  2. Неякорные merged cells могут возвращать IsMerged=false, null style/alignment
+     и height=-1; определять их надо по диапазонам опорных ячеек.
+  3. Запись пустого TextString сбрасывает native оформление. После перестановки
+     text-before-appearance обычная пустая ячейка сохраняет ГОСТ/2.5.
+     Пустые merged nonanchors могут иметь 0 или 1 plain empty content.
+- Исправления: TableFlowDirectionValue с native0/1 mapping, TableCellMap с
+  bounds/overlap/coordinate guards; Describe возвращает nonanchor marker и
+  merge_anchor вместо отсутствующего оформления, проверяет пустое содержимое.
+  TextString назначается один раз до оформления; добавлены этапы создания
+  и координаты ошибок readback. Контракт дополнен в TOOLS#tables.
+- Native low-level контроль исправленного порядка 4x4: 16 текстов, Unicode,
+  001/7,78, пустая строка/дефис/0, два объединения, шрифт/высота, поворот90,
+  выравнивание, размер110x50 и bounds совпали, errors=[]. Это диагностический
+  прототип, не завершённая проверка нового typed handler/Commit/Undo/Redo.
+- После отката все 84 исходных model-space entities совпали с исходным снимком
+  по handles и полному query JSON; новых TABLE не осталось. Native layout
+  в откатываемой transaction всё же поднял DBMOD с0до1. DWG не сохранялся:
+  тестовую копию закрывать без сохранения. View не перемещался.
+- Перед исправлениями чистая andrew/origin186fcbd проверена по AGENTS;
+  обязательные fast-forward updates/ancestry успешны. Оба плагина собраны:
+  2026 без warnings/errors, 2027 без errors и с прежними двумя Roslyn MSB3277.
+  Полный offline набор 1683 PASS, включая 28 новых merge/flow regressions и
+  фактические SDK-профили обоих годов. diff --check PASS.
+- Следующий шаг: кандидат 2.0.1-team.7-rc.2 из чистого принятого commit,
+  оба года; затем пользовательская переустановка/перезапуск. Новый typed
+  create/read, full Excel matrix, native Commit, один Undo/Redo и visual fit
+  остаются pending до загрузки RC2. Успех прототипа их не подменяет.
+
+
 ## TABLE: commit, merge и проверенный пакет 2.0.1-team.7-rc.1 — 2026-10-23
 
 - По прямому поручению пользователя сделан commit

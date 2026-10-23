@@ -710,7 +710,14 @@ data links, block/field/formula и multiple-content ячейки отклоня�
 Чтение использует Read-lock и OpenCloseTransaction без Commit, setters,
 GenerateLayout, RecomputeTableBlock или вычисления fields. Оно не сохраняет DWG.
 Ответ описывает native состояние; полный `cell_formats` readback не является
-готовым запросом создания с форматами только опорных ячеек.
+готовым запросом создания с форматами только опорных ячеек. Для обычных и
+опорных ячеек `is_merged_non_anchor=false` и возвращается эффективное оформление.
+Неякорные ячейки объединения имеют `is_merged_non_anchor=true` и `merge_anchor`
+с индексами `{row,column}`; самостоятельное оформление для них отсутствует и
+не подставляется. Их текст обязан быть пустым, содержимое без fields/formulas.
+`flow_direction` возвращается как `top_to_bottom` или `bottom_to_top` по native
+табличным кодам 0/1: одноимённый managed enum предназначен для MText и имеет
+другие значения. Ошибка создания включает этап, а ошибка чтения — индексы ячейки.
 
 <a id="polyline-vertices"></a>
 ## Правка существующих вершин: dwg_edit_polyline_vertices
