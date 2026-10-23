@@ -33,6 +33,7 @@ namespace Bimwright.Dwg.Plugin.Tables
             var watch = Stopwatch.StartNew();
             Table created = null;
             bool resident = false, commitAttempted = false;
+            string stage = "preflight";
             try
             {
                 using (var tx = db.TransactionManager.StartTransaction())
@@ -65,6 +66,7 @@ namespace Bimwright.Dwg.Plugin.Tables
                             ["note"] = "Native layout is checked during creation; text fit requires visual review. No entities were constructed."
                         };
 
+                    stage = "new table";
                     created = new Table();
                     created.SetDatabaseDefaults(db);
                     created.TableStyle = tableStyle.ObjectId;
@@ -76,8 +78,12 @@ namespace Bimwright.Dwg.Plugin.Tables
                     created.Position = new Point3d(input.Position.X, input.Position.Y, input.Position.Z);
                     double radians = Radians(input.Rotation);
                     created.Direction = new Vector3d(Math.Cos(radians), Math.Sin(radians), 0);
-                    created.FlowDirection = FlowDirection.TopToBottom;
+                    stage = "flow";
+                    // TABLE wraps AcDb::FlowDirection (0/1), not the managed MText enum (3/4).
+                    created.FlowDirection = (FlowDirection)TableFlowDirectionValue.TopToBottom;
+                    stage = "shape";
                     created.SetSize(input.Rows, input.Columns);
+                    stage = "unmerge defaults";
                     UnmergeDefaults(created);
 
                     for (int row = 0; row < input.Rows; row++)
@@ -85,7 +91,12 @@ namespace Bimwright.Dwg.Plugin.Tables
                         Time(watch);
                         for (int column = 0; column < input.Columns; column++)
                         {
+                            stage = "cell initialization " + row + "," + column;
                             var cell = created.Cells[row, column];
+                            cell.DataType = new DataTypeParameter(DataType.String, UnitType.Unitless);
+                            cell.DataFormat = string.Empty;
+                            // Even an empty TextString can reset native appearance to the table style.
+                            cell.TextString = EncodeText(input.Cells[row][column]);
                             cell.Style = dataCellStyle;
                             cell.IsMergeAllEnabled = false;
                             cell.IsBackgroundColorNone = true;
@@ -98,22 +109,23 @@ namespace Bimwright.Dwg.Plugin.Tables
                             cell.Borders.Bottom.Margin = input.VerticalMargin;
                             cell.DataType = new DataTypeParameter(DataType.String, UnitType.Unitless);
                             cell.DataFormat = string.Empty;
-                            cell.TextString = EncodeText(input.Cells[row][column]);
                             if (cell.Contents.Count > 0)
                             {
                                 cell.Contents[0].DataType = new DataTypeParameter(DataType.String, UnitType.Unitless);
                                 cell.Contents[0].DataFormat = string.Empty;
-                                cell.Contents[0].TextString = EncodeText(input.Cells[row][column]);
                                 cell.Contents[0].TextStyleId = style.ObjectId;
                                 cell.Contents[0].TextHeight = input.TextHeight;
                                 cell.Contents[0].Rotation = 0;
                             }
                         }
                     }
+                    stage = "merges";
                     foreach (var merge in input.Merges)
                         created.MergeCells(CellRange.Create(created, merge.Top, merge.Left, merge.Bottom, merge.Right));
+                    stage = "formats";
                     foreach (var format in input.Formats)
                     {
+                        stage = "format " + format.Row + "," + format.Column;
                         var cell = created.Cells[format.Row, format.Column];
                         if (format.Alignment != null) cell.Alignment = Alignment(format.Alignment);
                         if (format.TextHeight.HasValue) cell.TextHeight = format.TextHeight.Value;
@@ -124,6 +136,7 @@ namespace Bimwright.Dwg.Plugin.Tables
                         }
                     }
                     // Apply exact sizes last: any native minimum-size growth must be detected below.
+                    stage = "sizes";
                     for (int column = 0; column < input.Columns; column++)
                         created.Columns[column].Width = input.ColumnWidths[column];
                     for (int row = 0; row < input.Rows; row++)
@@ -132,15 +145,20 @@ namespace Bimwright.Dwg.Plugin.Tables
                     Require(DocumentGuard.Validate(doc, input.ExpectedDocument, input.ExpectedFingerprint));
                     Require(EntityBatchInput.ValidateUndoState(db.UndoRecording,
                         Convert.ToInt32(Application.GetSystemVariable("UNDOCTL"))));
+                    stage = "append";
                     owner.UpgradeOpen();
                     owner.AppendEntity(created);
                     tx.AddNewlyCreatedDBObject(created, true);
                     resident = true;
+                    stage = "layout";
                     created.GenerateLayout();
                     // GenerateLayout alone does not create/update the table's display block.
+                    stage = "recompute table block";
                     created.RecomputeTableBlock(true);
                     Time(watch);
+                    stage = "describe";
                     var result = Describe(created, tx, watch);
+                    stage = "verify";
                     VerifyCreated(created, input, result, style.ObjectId, dataCellStyle);
                     Require(DocumentGuard.Validate(doc, input.ExpectedDocument, input.ExpectedFingerprint));
                     result["dry_run"] = false;
@@ -153,15 +171,17 @@ namespace Bimwright.Dwg.Plugin.Tables
                     result["text_fit_verified"] = false;
                     CheckResponse(result);
                     Time(watch);
+                    stage = "commit";
                     commitAttempted = true;
                     tx.Commit();
                     return result;
                 }
             }
-            catch (Exception ex) when (commitAttempted)
+            catch (Exception ex)
             {
-                throw new InvalidOperationException(
-                    "Commit was attempted; inspect actual drawing state before retrying: " + ex.Message, ex);
+                string error = "TABLE creation stage " + stage + ": " + ex.Message;
+                if (commitAttempted) error += "; Commit was attempted; inspect actual drawing state before retrying";
+                throw new InvalidOperationException(error, ex);
             }
             finally { if (created != null && !resident) created.Dispose(); }
         }
@@ -217,6 +237,30 @@ namespace Bimwright.Dwg.Plugin.Tables
             var formats = new JArray();
             var merges = new JArray();
             var seenMerges = new HashSet<string>(StringComparer.Ordinal);
+            var nativeMerges = new List<TableMerge>();
+            // Only anchors may report IsMerged=true. Build coverage before reading cell appearance.
+            for (int row = 0; row < rows; row++)
+            {
+                Time(watch);
+                for (int column = 0; column < columns; column++)
+                    if (NativeValue(table.Cells[row, column].IsMerged, "cell merge state"))
+                    {
+                        var range = table.Cells[row, column].GetMergeRange();
+                        Require(range != null && !range.IsNull, "native merged range is unavailable");
+                        Require(range.TopRow <= row && row <= range.BottomRow &&
+                            range.LeftColumn <= column && column <= range.RightColumn,
+                            "native merged range does not contain its reporting cell");
+                        string key = range.TopRow + ":" + range.LeftColumn + ":" + range.BottomRow + ":" + range.RightColumn;
+                        if (!seenMerges.Add(key)) continue;
+                        nativeMerges.Add(new TableMerge(range.TopRow, range.LeftColumn, range.BottomRow, range.RightColumn));
+                        merges.Add(new JObject
+                        {
+                            ["top"] = range.TopRow, ["left"] = range.LeftColumn,
+                            ["bottom"] = range.BottomRow, ["right"] = range.RightColumn
+                        });
+                    }
+            }
+            var cellMap = new TableCellMap(rows, columns, nativeMerges);
             var styleNames = new Dictionary<ObjectId, string>();
             int textCount = 0;
             for (int row = 0; row < rows; row++)
@@ -225,55 +269,67 @@ namespace Bimwright.Dwg.Plugin.Tables
                 var cellRow = new JArray();
                 for (int column = 0; column < columns; column++)
                 {
-                    var cell = table.Cells[row, column];
-                    Require(!NativeValue(cell.IsLinked, "cell link state") && cell.DataLink.IsNull,
-                        "data-linked table cells are outside the plain-text reader's scope");
-                    Require(cell.Contents.Count <= 1,
-                        "multiple-content table cells are outside the plain-text reader's scope");
-                    if (cell.Contents.Count > 0)
+                    try
                     {
-                        var content = cell.Contents[0];
-                        Require(content.ContentTypes == CellContentTypes.Value &&
-                            content.FieldId.IsNull && !content.HasFormula,
-                            "block, field and formula table cells are outside the plain-text reader's scope");
-                        Require(PlainStringType(content.DataType) && string.IsNullOrEmpty(content.DataFormat),
-                            "numeric, non-string or formatted-value table cells are outside the plain-text reader's scope");
-                    }
-                    string text = DecodeText(cell.TextString ?? string.Empty);
-                    textCount += text.Length;
-                    Require(textCount <= TableInput.MaxTextCharacters, "table text exceeds 200000 characters");
-                    cellRow.Add(text);
-                    ObjectId styleId = NativeValue(cell.TextStyleId, "cell text style");
-                    if (!styleNames.TryGetValue(styleId, out var styleName))
-                    {
-                        var style = styleId.IsNull ? null : tx.GetObject(styleId, OpenMode.ForRead) as TextStyleTableRecord;
-                        styleName = style?.Name;
-                        styleNames.Add(styleId, styleName);
-                    }
-                    double textHeight = cell.Contents.Count == 0 ? NativeValue(cell.TextHeight, "cell text height") : cell.Contents[0].TextHeight;
-                    double rotation = cell.Contents.Count == 0 ? 0 : cell.Contents[0].Rotation * 180 / Math.PI;
-                    formats.Add(new JObject
-                    {
-                        ["row"] = row, ["column"] = column, ["text_height"] = Finite(textHeight),
-                        ["rotation"] = Finite(rotation), ["alignment"] = AlignmentName(NativeValue(cell.Alignment, "cell alignment")),
-                        ["text_style"] = styleName, ["cell_style"] = cell.Style,
-                        ["horizontal_margin_left"] = NullableNumber(cell.Borders.Left.Margin),
-                        ["horizontal_margin_right"] = NullableNumber(cell.Borders.Right.Margin),
-                        ["vertical_margin_top"] = NullableNumber(cell.Borders.Top.Margin),
-                        ["vertical_margin_bottom"] = NullableNumber(cell.Borders.Bottom.Margin)
-                    });
-                    if (NativeValue(cell.IsMerged, "cell merge state"))
-                    {
-                        var range = cell.GetMergeRange();
-                        Require(range != null && !range.IsNull, "native merged range is unavailable");
-                        Require(range.TopRow >= 0 && range.LeftColumn >= 0 && range.BottomRow < rows &&
-                            range.RightColumn < columns, "native merged range is outside the table");
-                        string key = range.TopRow + ":" + range.LeftColumn + ":" + range.BottomRow + ":" + range.RightColumn;
-                        if (seenMerges.Add(key)) merges.Add(new JObject
+                        var cell = table.Cells[row, column];
+                        Require(!NativeValue(cell.IsLinked, "cell link state") && cell.DataLink.IsNull,
+                            "data-linked table cells are outside the plain-text reader's scope");
+                        Require(cell.Contents.Count <= 1,
+                            "multiple-content table cells are outside the plain-text reader's scope");
+                        if (cell.Contents.Count > 0)
                         {
-                            ["top"] = range.TopRow, ["left"] = range.LeftColumn,
-                            ["bottom"] = range.BottomRow, ["right"] = range.RightColumn
+                            var content = cell.Contents[0];
+                            Require(content.ContentTypes == CellContentTypes.Value &&
+                                content.FieldId.IsNull && !content.HasFormula,
+                                "block, field and formula table cells are outside the plain-text reader's scope");
+                            Require(PlainStringType(content.DataType) && string.IsNullOrEmpty(content.DataFormat),
+                                "numeric, non-string or formatted-value table cells are outside the plain-text reader's scope");
+                        }
+                        string text = DecodeText(cell.TextString ?? string.Empty);
+                        textCount += text.Length;
+                        Require(textCount <= TableInput.MaxTextCharacters, "table text exceeds 200000 characters");
+                        cellRow.Add(text);
+                        if (cellMap.IsNonAnchor(row, column))
+                        {
+                            Require(text.Length == 0 && (cell.Contents.Count == 0 ||
+                                string.IsNullOrEmpty(cell.Contents[0].TextString)),
+                                "merged non-anchor contains hidden text");
+                            // A non-anchor may retain one empty plain content, but has no independent appearance.
+                            formats.Add(new JObject
+                            {
+                                ["row"] = row, ["column"] = column, ["is_merged_non_anchor"] = true,
+                                ["merge_anchor"] = new JObject
+                                {
+                                    ["row"] = cellMap.AnchorRow(row, column),
+                                    ["column"] = cellMap.AnchorColumn(row, column)
+                                }
+                            });
+                            continue;
+                        }
+                        ObjectId styleId = NativeValue(cell.TextStyleId, "cell text style");
+                        if (!styleNames.TryGetValue(styleId, out var styleName))
+                        {
+                            var style = styleId.IsNull ? null : tx.GetObject(styleId, OpenMode.ForRead) as TextStyleTableRecord;
+                            styleName = style?.Name;
+                            styleNames.Add(styleId, styleName);
+                        }
+                        double textHeight = cell.Contents.Count == 0 ? NativeValue(cell.TextHeight, "cell text height") : cell.Contents[0].TextHeight;
+                        double rotation = cell.Contents.Count == 0 ? 0 : cell.Contents[0].Rotation * 180 / Math.PI;
+                        formats.Add(new JObject
+                        {
+                            ["row"] = row, ["column"] = column, ["is_merged_non_anchor"] = false,
+                            ["text_height"] = Finite(textHeight),
+                            ["rotation"] = Finite(rotation), ["alignment"] = AlignmentName(NativeValue(cell.Alignment, "cell alignment")),
+                            ["text_style"] = styleName, ["cell_style"] = cell.Style,
+                            ["horizontal_margin_left"] = NullableNumber(cell.Borders.Left.Margin),
+                            ["horizontal_margin_right"] = NullableNumber(cell.Borders.Right.Margin),
+                            ["vertical_margin_top"] = NullableNumber(cell.Borders.Top.Margin),
+                            ["vertical_margin_bottom"] = NullableNumber(cell.Borders.Bottom.Margin)
                         });
+                    }
+                    catch (Exception ex)
+                    {
+                        throw new InvalidOperationException("TABLE readback cell " + row + "," + column + ": " + ex.Message, ex);
                     }
                 }
                 cells.Add(cellRow);
@@ -284,7 +340,8 @@ namespace Bimwright.Dwg.Plugin.Tables
                 ["handle"] = table.Handle.ToString(), ["type"] = "Table",
                 ["layer"] = table.Layer, ["rows"] = rows, ["columns"] = columns,
                 ["insertion_point"] = Point(table.Position), ["direction"] = Vector(table.Direction),
-                ["normal"] = Vector(table.Normal), ["flow_direction"] = table.FlowDirection.ToString(),
+                ["normal"] = Vector(table.Normal),
+                ["flow_direction"] = TableFlowDirectionValue.Name((int)table.FlowDirection),
                 ["width"] = Finite(table.Width), ["height"] = Finite(table.Height),
                 ["column_widths"] = widths, ["row_heights"] = rowHeights,
                 ["cells"] = cells, ["cell_formats"] = formats, ["merges"] = merges,
@@ -307,18 +364,14 @@ namespace Bimwright.Dwg.Plugin.Tables
                     "native layout changed column width at column " + column + "; table was not committed");
             Require(Near(table.Width, input.ColumnWidths.Sum()) && Near(table.Height, input.RowHeights.Sum()),
                 "native layout changed the requested overall dimensions");
-            var nonAnchor = new bool[input.Rows, input.Columns];
-            foreach (var merge in input.Merges)
-                for (int row = merge.Top; row <= merge.Bottom; row++)
-                    for (int column = merge.Left; column <= merge.Right; column++)
-                        nonAnchor[row, column] = row != merge.Top || column != merge.Left;
+            var cellMap = new TableCellMap(input.Rows, input.Columns, input.Merges);
             var requestedFormats = input.Formats.ToDictionary(f => f.Row * input.Columns + f.Column);
             for (int row = 0; row < input.Rows; row++)
                 for (int column = 0; column < input.Columns; column++)
                 {
                     Require((string)result["cells"][row][column] == input.Cells[row][column],
                         "native cell text differs at " + row + "," + column);
-                    if (nonAnchor[row, column]) continue;
+                    if (cellMap.IsNonAnchor(row, column)) continue;
                     var cell = table.Cells[row, column];
                     requestedFormats.TryGetValue(row * input.Columns + column, out var format);
                     double height = format?.TextHeight ?? input.TextHeight;
@@ -355,7 +408,7 @@ namespace Bimwright.Dwg.Plugin.Tables
                 "native table origin or plane differs from the request");
             double radians = Radians(input.Rotation);
             Require(table.Direction.IsEqualTo(new Vector3d(Math.Cos(radians), Math.Sin(radians), 0),
-                new Tolerance(1e-9, 1e-9)) && table.FlowDirection == FlowDirection.TopToBottom,
+                new Tolerance(1e-9, 1e-9)) && (int)table.FlowDirection == TableFlowDirectionValue.TopToBottom,
                 "native table direction differs from the request");
             double width = input.ColumnWidths.Sum(), totalHeight = input.RowHeights.Sum();
             var x = table.Direction;

@@ -70,5 +70,6 @@
     <Compile Include="..\..\src\shared\Handlers\ListTextStylesHandler.cs" LinkBase="Shared\Handlers" />
     <Compile Include="..\..\src\shared\Cad\CadTextStyleMetadata.cs" LinkBase="Shared\Cad" />
     <Compile Include="..\..\src\shared\Infrastructure\IAcadCommand.cs" LinkBase="Shared\Infrastructure" />
+    <Compile Include="..\..\src\shared\Tables\TableCellMap.cs" LinkBase="Shared\Tables" />
   </ItemGroup>
 </Project>
