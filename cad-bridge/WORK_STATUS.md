@@ -1,5 +1,40 @@
 # CAD bridge — состояние работы
 
+## TABLE: commit, merge и проверенный пакет 2.0.1-team.7-rc.1 — 2026-10-23
+
+- По прямому поручению пользователя сделан commit
+  6f394d25e8f2f43a44562cbf3c8cec2885d6527c в andrew и merge
+  c60c3d70b0b2dd5b5e7f3c8f91c78c9dc30a9764 в локальную develop.
+  Перед merge fetch origin успешен: новых изменений develop не было, конфликтов
+  нет; merge не изменил проверенный код относительно andrew. Push не выполнялся.
+- Из чистой develop/c60c3d7 штатным tools/package-team-dwg.ps1 собран кандидат
+  2.0.1-team.7-rc.1, manifest.dirty=false, AutoCAD 2026/2027. Выход:
+  releases/2.0.1-team.7-rc.1/DwgMcp.Setup-v2.0.1-team.7-rc.1-win-x64.zip,
+  39 942 107 байт. SHA256:
+  fefb8a970ab21e9f367a64720b56c6fab9bfb6365545c2efa47b0ff0d2cb0857.
+  Готовая папка установки — stage рядом с ZIP. Упаковка успешна с первого раза;
+  оба плагина собраны, у 2027 только прежние два Roslyn MSB3277.
+- Независимая read-only проверка: все 40 payload-файлов manifest имеют верные
+  размеры/SHA256; ZIP содержит ровно эти 40 файлов и manifest, без дублей и
+  лишних файлов, bytes совпадают со stage. Sidecar SHA совпадает. XML, оба года,
+  release.json, шесть runtime-документов и patch copies проверены. Compile-only
+  Autodesk AcMgd/AcDbMgd/AcCoreMgd в поставку не попали.
+- Упакованный self-contained EXE проверен реальным Python MCP SDK: initialize
+  и tools/list, 20 профилей (10 для каждого года) PASS, без вызовов CAD tools.
+  Стандартный каталог 67, read-only 27; TABLE create/read доступны в нужных
+  профилях, typed matrix/point/merge/format schemas и read/write annotations
+  верны. Дублей нет. Ранее успешные 1655 .NET тестов того же кода не повторялись.
+- Installed/loaded/live: установка и AutoCAD UI не запускались; работающий мост
+  ещё прежний. Native TABLE/Undo/Redo/merged getters/visual fit остаются pending.
+  До такой проверки это RC, не проверенный native stable. Чертежи не менялись
+  и не сохранялись. Следующий шаг — установка готового stage при закрытом
+  AutoCAD/Codex, пользовательский перезапуск, затем отдельно разрешённая
+  native-проверка TABLE. Выпуск на NAS не копировался.
+- andrew включена в develop; рабочая копия возвращена в личную andrew.
+  Эта запись фиксирует результат уже готового неизменяемого пакета, не меняет
+  его исходный commit/manifest и не требует повторной сборки или упаковки.
+
+
 ## TABLE: исходники и подготовка кандидата выпуска — 2026-10-23
 
 - Пользователь поручил добавить единый native TABLE, затем прямо поручил
