@@ -1,3 +1,34 @@
+## Листы и печать PDF: исходники и offline-проверки – 2026-10-24
+
+- Прямой запрос из задачи ПОС: чтение штампа paperspace, правка исходных DWG и
+  печать тома. Пользователь отдельно разрешил необходимые Git-коммиты, push,
+  сборки и обновление. До правок чистая andrew/origin/andrew 0d587ef, develop
+  не занят другим worktree; три обязательных ff-only обновления и ancestry PASS.
+  Первый git pull ранее был отклонён auto-review до этого явного разрешения;
+  повтор состоялся только после разрешения пользователя.
+- Добавлены четыре typed метода профиля drawing: list_layouts,
+  get_layout_entities, select_layout, plot_pdf. Читатели используют read-lock и
+  OpenCloseTransaction, точную identity активного DWG, ограниченные результаты.
+  Прямые тексты, геометрия и атрибуты BlockReference из paperspace доступны без
+  перехода UI. SelectLayout отдельно и явно меняет существующий layout/PSPACE.
+- PlotPdf проверяет snapshot сохранённых print settings, активный layout,
+  PDF-device, отсутствие текущей печати и абсолютный выходной PDF-путь. Копия
+  PlotSettings transient; масштаб, формат, окно, CTB и исходный Layout не меняются.
+  PlotEngine печатает одну страницу; проверяется %PDF, размер и SHA256. Сначала
+  создаётся уникальный временный PDF рядом с целью; готовый файл заменяет цель
+  только с явным overwrite_existing. DWG не сохраняется.
+- Чистая политика и реальные SDK-схемы: 1709 PASS, включая 26 новых проверок.
+  Обновлены ожидаемые каталоги: стандартный writable 71, read-only 29;
+  drawing writable 14, read-only 4. Первоначальные 13 snapshot/count отказов
+  устранены только добавлением четырёх фактически новых методов в ожидания.
+- Первые builds API2026/2027 PASS; 2026 без предупреждений, 2027 с прежними двумя
+  Roslyn MSB3277. Финальная упаковка после ограничений размера reader ещё впереди.
+  Live-вызовов новых методов, переключений DWG, правок или печати не выполнялось.
+- Ограничение: синхронный native PlotEngine может пережить транспортный таймаут;
+  не повторять неизвестную печать автоматически. Очередь заданий не реализована.
+  В текущем плагине нет hot-reload: MCPSTOP/MCPSTART оставляют старую DLL.
+  Для новых методов нужны новые server/plugin и штатная загрузка при перезапуске
+  AutoCAD. Установка поверх загруженной рабочей DLL не выполнялась.
 # CAD bridge — состояние работы
 
 ## TABLE: кандидат 2.0.1-team.7-rc.2 собран и проверен — 2026-10-23
@@ -1965,3 +1996,4 @@ README.md и AGENTS.md обновлены. Heartbeat cad-mcp приостано�
   exact endpoint verification. No claim of a released reusable typed tool.
   Next bridge step remains bounded endpoint/noding API, schema/offline checks,
   separate release and user-enabled loading/live checks.
+

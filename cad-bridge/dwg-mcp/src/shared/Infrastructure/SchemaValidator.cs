@@ -519,6 +519,23 @@ namespace Bimwright.Dwg.Plugin
             SchemaProperty.Required("name", JTokenType.String),
             SchemaProperty.Required("value", JTokenType.String, JTokenType.Integer, JTokenType.Float, JTokenType.Boolean));
 
+        public static readonly CommandSchema ListLayouts = CommandSchema.Object(
+            SchemaProperty.RequiredNonEmptyString("expected_document"), SchemaProperty.RequiredNonEmptyString("expected_fingerprint"));
+        public static readonly CommandSchema GetLayoutEntities = CommandSchema.Object(
+            SchemaProperty.RequiredNonEmptyString("expected_document"), SchemaProperty.RequiredNonEmptyString("expected_fingerprint"),
+            SchemaProperty.RequiredNonEmptyString("layout_name"), SchemaProperty.Optional("entity_type", JTokenType.String),
+            SchemaProperty.Optional("layer", JTokenType.String), SchemaProperty.Optional("limit", JTokenType.Integer),
+            SchemaProperty.Optional("include_geometry", JTokenType.Boolean));
+        public static readonly CommandSchema SelectLayout = CommandSchema.Object(
+            SchemaProperty.RequiredNonEmptyString("expected_document"), SchemaProperty.RequiredNonEmptyString("expected_fingerprint"),
+            SchemaProperty.RequiredNonEmptyString("layout_name"), SchemaProperty.RequiredNonEmptyString("expected_current_layout"),
+            SchemaProperty.Optional("dry_run", JTokenType.Boolean));
+        public static readonly CommandSchema PlotPdf = CommandSchema.Object(
+            SchemaProperty.RequiredNonEmptyString("expected_document"), SchemaProperty.RequiredNonEmptyString("expected_fingerprint"),
+            SchemaProperty.RequiredNonEmptyString("layout_name"), SchemaProperty.Required("expected_plot_settings", JTokenType.Object),
+            SchemaProperty.RequiredNonEmptyString("output_path"), SchemaProperty.Optional("overwrite_existing", JTokenType.Boolean),
+            SchemaProperty.Optional("allow_repo_output", JTokenType.Boolean), SchemaProperty.Optional("dry_run", JTokenType.Boolean));
+
         public static readonly CommandSchema SaveDrawing = CommandSchema.Object(
             SchemaProperty.Optional("output_path", JTokenType.String),
             SchemaProperty.Optional("confirm", JTokenType.Boolean),

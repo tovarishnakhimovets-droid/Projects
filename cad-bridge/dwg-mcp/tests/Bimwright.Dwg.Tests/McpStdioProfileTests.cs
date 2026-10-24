@@ -20,13 +20,13 @@ namespace Bimwright.Dwg.Tests
         {
             var profiles = new[]
             {
-                ("query,modify,drawing,view", false, 67),
-                ("query,modify,drawing,view,annotation", false, 67),
-                ("query,modify,drawing,view", true, 27),
+                ("query,modify,drawing,view", false, 71),
+                ("query,modify,drawing,view,annotation", false, 71),
+                ("query,modify,drawing,view", true, 29),
                 ("query", false, 20), ("modify", false, 32),
-                ("drawing", false, 10), ("annotation", false, 5),
-                ("drawing,annotation", false, 10),
-                ("drawing", true, 2), ("annotation", true, 1)
+                ("drawing", false, 14), ("annotation", false, 5),
+                ("drawing,annotation", false, 14),
+                ("drawing", true, 4), ("annotation", true, 1)
             };
             foreach (string target in new[] { "2026", "2027" })
                 foreach (var profile in profiles)

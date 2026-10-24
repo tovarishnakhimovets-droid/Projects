@@ -10,6 +10,28 @@ namespace Bimwright.Dwg.Server.Tools
     [McpServerToolType]
     public class DrawingWriteTools
     {
+        [McpServerTool(Name = "dwg_select_layout", ReadOnly = false), Description(
+            "Explicitly select an existing layout in the active guarded DWG and enter paper space for a sheet. Requires exact current layout. dry_run defaults true. Changes editor view only; no new layout or drawing save.")]
+        public static Task<string> SelectLayout(string expected_document, string expected_fingerprint, string layout_name,
+            string expected_current_layout, bool dry_run = true)
+        {
+            var request = new { expected_document, expected_fingerprint, layout_name, expected_current_layout, dry_run };
+            return ToolGateway.LoggedCall("select_layout", request, request);
+        }
+
+        [McpServerTool(Name = "dwg_plot_pdf", ReadOnly = false), Description(
+            "Print the already-current layout to a one-page PDF using its saved PDF device, medium, scale/window and plot style. First read dwg_list_layouts and pass its exact plot_settings object. dry_run defaults true. No device substitution, implicit layout activation, settings change or DWG save. Existing output requires overwrite_existing=true. Synchronous native plot: a transport timeout is uncertain; inspect output before any retry.")]
+        public static Task<string> PlotPdf(string expected_document, string expected_fingerprint, string layout_name,
+            JsonElement expected_plot_settings, string output_path, bool overwrite_existing = false,
+            bool allow_repo_output = false, bool dry_run = true)
+        {
+            var request = new JObject { ["expected_document"] = expected_document, ["expected_fingerprint"] = expected_fingerprint,
+                ["layout_name"] = layout_name, ["expected_plot_settings"] = JToken.Parse(expected_plot_settings.GetRawText()),
+                ["output_path"] = output_path, ["overwrite_existing"] = overwrite_existing,
+                ["allow_repo_output"] = allow_repo_output, ["dry_run"] = dry_run };
+            return ToolGateway.LoggedCall("plot_pdf", request, request);
+        }
+
         [McpServerTool(Name = "dwg_set_system_variable", ReadOnly = false), Description(
             "Set the value of a drawing system variable. Rejects variable names not in the write allowlist. " +
             "LWDISPLAY accepts a boolean or exactly 0/1 and controls visible lineweights; does not save.")]
