@@ -1,3 +1,28 @@
+# CAD bridge — состояние работы
+
+## Листы и печать PDF: кандидат собран – 2026-10-24
+
+- Код commit c563409 в andrew. Штатный пакет 2.0.1-team.8-rc.1 собран из
+  чистого commit, manifest.dirty=false, оба года 2026/2027. Финальная сборка
+  включает последние ограничения reader: 2026 без warnings/errors, 2027 без
+  errors и с прежними двумя Roslyn MSB3277. 1709 offline PASS остаются актуальны;
+  повтор полного набора после этой записи документации не требуется.
+- ZIP: releases/2.0.1-team.8-rc.1/DwgMcp.Setup-v2.0.1-team.8-rc.1-win-x64.zip.
+  SHA256 4bd89c481ec30aac551e94e548f970f72c01568f211901fd3258fc9951902307.
+  Это локальный кандидат из личной ветки, не принятие в develop и не публикация
+  для коллег. Установленные и загруженные рабочие DLL не заменялись.
+- По явному поручению выполнен один read-only запрос list_layouts через новый
+  упакованный штатный stdio server/official MCP SDK к текущему СГП v6. Identity
+  подтверждена, DBMOD=0, Model. Ответ старого загруженного плагина:
+  unknown command: list_layouts. Новая читающая схема присутствует в tools/list.
+  Новая native реализация при этом не исполнялась. Результат записан в ignored
+  releases/native-tests/layout-plot-readonly-probe-20261024.json.
+- CAD не закрывался и не переключался. Следующий шаг: безопасно сохранить и
+  закрыть открытые пользовательские документы, штатно обновить через install.ps1
+  из stage, перезапустить AutoCAD и MCP. Затем прочитать layouts и штамп, выполнить
+  явное select_layout/печать по основной задаче. Не пытаться выдавать новую DLL
+  на диске за уже загруженную; hot-reload в текущем плагине отсутствует.
+
 ## Листы и печать PDF: исходники и offline-проверки – 2026-10-24
 
 - Прямой запрос из задачи ПОС: чтение штампа paperspace, правка исходных DWG и
@@ -29,8 +54,6 @@
   В текущем плагине нет hot-reload: MCPSTOP/MCPSTART оставляют старую DLL.
   Для новых методов нужны новые server/plugin и штатная загрузка при перезапуске
   AutoCAD. Установка поверх загруженной рабочей DLL не выполнялась.
-# CAD bridge — состояние работы
-
 ## TABLE: кандидат 2.0.1-team.7-rc.2 собран и проверен — 2026-10-23
 
 - Исправления native-теста: commit edbcc1b в andrew, merge
@@ -1996,4 +2019,3 @@ README.md и AGENTS.md обновлены. Heartbeat cad-mcp приостано�
   exact endpoint verification. No claim of a released reusable typed tool.
   Next bridge step remains bounded endpoint/noding API, schema/offline checks,
   separate release and user-enabled loading/live checks.
-
