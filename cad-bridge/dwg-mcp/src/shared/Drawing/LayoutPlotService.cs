@@ -156,6 +156,8 @@ namespace Bimwright.Dwg.Plugin.Drawing
                         if (error != null) throw new InvalidOperationException(error);
                         plotSettingsValidator.SetPlotConfigurationName(copy, l.PlotConfigurationName, l.CanonicalMediaName);
                         plotSettingsValidator.RefreshLists(copy);
+                        // Rebinding the device can reset units after a previous plot on another sheet.
+                        plotSettingsValidator.SetPlotPaperUnits(copy, l.PlotPaperUnits);
                         error = LayoutPlotPolicy.ValidateUnchangedSettings(settings, Settings(copy, l.LayoutName, l.Handle.ToString()));
                         if (error != null) throw new InvalidOperationException(error);
                         info.Layout = l.ObjectId;

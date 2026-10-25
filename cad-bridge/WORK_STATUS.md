@@ -1,5 +1,25 @@
 # CAD bridge — состояние работы
 
+## PlotPdf: сохранение единиц при смене листа – 2026-10-25
+
+- Перед новой правкой andrew/origin/andrew cca00a5 чистая; обязательные ff-only
+  обновления и ancestry PASS. Пользователь разрешил исходники/commit/push/сборку.
+- Загруженный RC2 после успешной Model/A4 печати отказал на СГП/A0: native plot
+  validation changed saved setting paper_units. После точной привязки PC3/media
+  и RefreshLists копия теперь получает SetPlotPaperUnits(copy, l.PlotPaperUnits).
+  Исходный Layout не меняется; оба полных snapshot guards сохранены без ослабления.
+- Основной агент подтвердил такой порядок в bounded проектном прототипе:
+  saved/ValidatedSettings DeepEquals TRUE, СГП A0 напечатан 3548343байта. Это live
+  evidence алгоритма после смены листов, отдельное от новой typed DLL.
+- Обе native сборки PASS: 2026 без warnings/errors; 2027 без errors, прежние
+  два Roslyn MSB3277. 76 affected/schema checks PASS: существующие политики
+  полного snapshot (включая paper_units), foreground и 20 реальных MCP SDK
+  stdio-профилей обоих годов. Полный набор не повторяли, API/schema не менялись.
+- Источники, контракт и журнал обновлены; готовится штатный кандидат RC3.
+  Новую DLL в работающий CAD не устанавливали, живых CAD-вызовов в этом
+  подзадании не было. После безопасного обновления ещё нужна проверка typed
+  печати Model/A4, затем СГП/A0; прототип не заменяет этот native smoke test.
+
 ## PlotPdf RC2: упакован исправленный foreground-путь – 2026-10-25
 
 - Код bc80a5b, штатный кандидат releases/2.0.1-team.8-rc.2/, manifest.dirty=false,
