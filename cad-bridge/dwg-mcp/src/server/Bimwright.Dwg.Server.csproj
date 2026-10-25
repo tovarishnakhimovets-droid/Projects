@@ -52,6 +52,7 @@
     <Compile Include="..\shared\Infrastructure\DocumentRoutingPolicy.cs" LinkBase="Shared\Infrastructure" />
     <Compile Include="..\shared\Cad\SelectionReadInput.cs" LinkBase="Shared\Cad" />
     <Compile Include="..\shared\Cad\PropertyStyleInput.cs" LinkBase="Shared\Cad" />
+    <Compile Include="..\shared\Annotation\LeaderRepositionInput.cs" LinkBase="Shared\Annotation" />
     <Compile Include="..\shared\Annotation\AnnotationRequestValidation.cs" LinkBase="Shared\Annotation" />
     <Compile Include="..\shared\EntityBatch\EntityBatchInput.cs" LinkBase="Shared\EntityBatch" />
     <Compile Include="..\shared\Geometry\PolylineVertexEditInput.cs" LinkBase="Shared\Geometry" />

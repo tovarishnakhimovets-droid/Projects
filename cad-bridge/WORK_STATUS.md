@@ -1,5 +1,37 @@
 # CAD bridge — состояние работы
 
+
+## Перестановка существующих MLeader – 2026-10-25
+
+- Перед правкой andrew/origin/andrew 9a2f870 чистая, develop не занят другим
+  worktree; три обязательных ff-only обновления и ancestry PASS. Пользователь
+  разрешил необходимые исходники, сборки, commit/push; работа делегирована root.
+- Добавлен typed `dwg_reposition_leaders` в modify: 1–100 native plain MLeader,
+  full DWG path/fingerprint, точные owner/layer, native MText.Contents, actual
+  leader/line indices, anchor/2vertices/dogleg. Новый reader возвращает готовый
+  reposition_snapshot и content bounds. Чужие исходники/ветки не менялись.
+- Только SetDogleg/restore length, TextLocation и SetLastVertex: стрелка не
+  получает setter и не двигается вместе с entity. Все targets до setters,
+  одна transaction, exact native readback стрелки/обоих заданных положений,
+  индексов и сохранённых text/graphics/XData. dry_run по умолчанию без setters;
+  нет сохранения, пересоздания, автоматической маршрутизации или обещания Undo.
+- Учтён native случай НВ: единственный leader index1, line index0. TextLocation
+  – native anchor, может быть правым краем; несовместимая с ним последняя
+  вершина отклоняется readback, а не молча сдвигает подпись.
+- 47 affected checks PASS: exact/stale snapshots включая оба индекса и
+  буквальные escapes, лимиты/hex aliases/геометрия, actual SDK schema,
+  tools-list snapshots и 20 real stdio профилей 2026/2027. Начальные ошибки
+  тестовых helpers/counts исправлены; финальные проверки успешны.
+- Native сборки 2026/2027 PASS по реальным закреплённым references, сервер
+  net8.0 собран. В первом 2027 build прежние два Roslyn MSB3277; в итоговом
+  выводе они подавлены NoWarn=MSB3277, код зависимостей не менялся.
+- Установленные/загруженные DLL не заменялись, нового RC/инсталлятора нет.
+  Typed native live-тестов в этом подзадании не было. Root отдельно подтвердил
+  одноразовым проектным прототипом перенос216/сохранение228стрелок, actual
+  пересечений линий0 и наложений текста0. Это evidence подхода, не live PASS
+  нового typed handler. Следующий шаг – штатный будущий выпуск/загрузка и
+  отдельно разрешённый bounded native smoke test dry_run/запись/Undo.
+
 ## PlotPdf: сохранение единиц при смене листа – 2026-10-25
 
 - Перед новой правкой andrew/origin/andrew cca00a5 чистая; обязательные ff-only

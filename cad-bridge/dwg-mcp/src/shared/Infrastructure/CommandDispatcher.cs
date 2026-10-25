@@ -61,6 +61,7 @@ namespace Bimwright.Dwg.Plugin
                 { "create_ellipse",          new CreateEllipseHandler() },
                 { "create_text",             new CreateTextHandler() },
                 { "create_mtext",            new CreateMTextHandler() },
+                { "reposition_leaders",       new RepositionLeadersHandler() },
                 { "create_leader",           new CreateLeaderHandler() },
                 { "create_table",            new CreateTableHandler() },
                 { "read_table",              new ReadTableHandler() },

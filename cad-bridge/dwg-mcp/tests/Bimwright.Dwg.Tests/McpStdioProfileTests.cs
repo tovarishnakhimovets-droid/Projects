@@ -20,10 +20,10 @@ namespace Bimwright.Dwg.Tests
         {
             var profiles = new[]
             {
-                ("query,modify,drawing,view", false, 71),
-                ("query,modify,drawing,view,annotation", false, 71),
+                ("query,modify,drawing,view", false, 72),
+                ("query,modify,drawing,view,annotation", false, 72),
                 ("query,modify,drawing,view", true, 29),
-                ("query", false, 20), ("modify", false, 32),
+                ("query", false, 20), ("modify", false, 33),
                 ("drawing", false, 14), ("annotation", false, 5),
                 ("drawing,annotation", false, 14),
                 ("drawing", true, 4), ("annotation", true, 1)
@@ -175,6 +175,16 @@ namespace Bimwright.Dwg.Tests
             }
             else Assert.DoesNotContain("dwg_edit_polyline_vertices", names);
 
+            if (!readOnly && enabled.Contains("modify"))
+            {
+                var reposition = Assert.Single(tools, tool => tool.ProtocolTool.Name == "dwg_reposition_leaders").ProtocolTool;
+                AssertRequired(reposition.InputSchema, "expected_document", "expected_fingerprint", "changes");
+                var change = TypedArrayItem(reposition.InputSchema, reposition.InputSchema, "changes", allowNull: true);
+                AssertRequired(change, "handle", "expected_layer", "expected_owner_handle", "expected_leader_index", "expected_line_index", "expected_text", "expected_text_location",
+                    "expected_vertices", "expected_dogleg", "new_text_location", "new_terminal", "dogleg_side");
+            }
+            else Assert.DoesNotContain("dwg_reposition_leaders", names);
+
             if (hasTextCreation)
             {
                 var mtext = Assert.Single(tools, tool => tool.ProtocolTool.Name == "dwg_create_mtext").ProtocolTool;
@@ -182,7 +192,7 @@ namespace Bimwright.Dwg.Tests
                 Assert.True(mtext.InputSchema.GetProperty("properties").TryGetProperty("text_style", out _));
             }
             if (readOnly)
-                foreach (string mutation in new[] { "dwg_create_entities", "dwg_edit_polyline_vertices",
+                foreach (string mutation in new[] { "dwg_create_entities", "dwg_edit_polyline_vertices", "dwg_reposition_leaders",
                     "dwg_create_text", "dwg_create_mtext", "dwg_create_leader", "dwg_create_table", "dwg_set_text_style", "dwg_match_properties",
                     "dwg_create_block_variant", "dwg_update_block_angles", "dwg_set_system_variable", "dwg_run_lisp", "dwg_set_crosshair_settings", "dwg_set_settings" })
                     Assert.DoesNotContain(mutation, names);

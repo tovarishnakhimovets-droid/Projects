@@ -1113,3 +1113,45 @@ Native печать синхронная. Таймаут транспорта н
 состояние AutoCAD. Очередь долговременных заданий печати пока не реализована.
 Новые методы требуют загрузки новой DLL плагина и нового серверного каталога.
 MCPSTOP/MCPSTART перезапускают listener прежней DLL и не служат hot-reload.
+
+## Перестановка текста выносок: dwg_reposition_leaders
+
+Профиль `modify`, только запись; отсутствует в read-only. Переставляет текст и
+последнюю вершину 1–100 существующих native MLeader в текущем пространстве.
+Стрелка остаётся в точных исходных координатах. Объект целиком не перемещается,
+не пересоздаётся, текст и его форматирование не переписываются. Сохранения нет.
+
+Сначала `dwg_get_drawing_info`, затем `dwg_get_entity_properties` с
+`includeGeometry=true`: для поддерживаемой выноски `reposition_snapshot` содержит
+готовые `handle`, `expected_layer`, `expected_owner_handle`, буквальный
+`expected_text` (native MText.Contents со всеми escape-кодами),
+`expected_leader_index`, `expected_line_index`, `expected_text_location`,
+`expected_vertices` из двух WCS точек и `expected_dogleg`. Индекс единственного
+leader может быть 1, а line – 0; нулевые индексы не предполагаются.
+Для неподдерживаемой формы snapshot=null, причина в `reposition_unavailable`.
+
+В `changes` к каждому свежему snapshot добавляют `new_text_location`,
+`new_terminal` и `dogleg_side` (`left`/`right`, направление доглега к тексту).
+Координаты – массивы [x,y,z], единицы чертежа. `new_text_location` – точный
+native MLeader.TextLocation: при правой посадке он может находиться на правом
+краю текста. Это не обязательно левый угол рамки. `new_terminal` – последняя
+вершина линии; она должна быть согласована с этим якорем и существующей
+посадкой. Native AutoCAD может связно менять оба положения. Инструмент требует
+точного readback обоих заданных значений и стрелки; при несовместимых целях
+транзакция откатывается. Не следует округлять ожидаемые или конечные точки.
+
+Поддерживаются горизонтальные +Z MText без полей, аннотативности или рамки:
+один leader, одна прямая line, две вершины. Все точки сохраняют точную отметку Z,
+координаты конечные в пределах ±1e12; новый отрезок длиннее 1e-9.
+Сохраняются длина/включение доглега, посадка, native handles, слои, цвета,
+стили, высота/ширина и содержимое текста, стрелки, XData и прочая графика.
+Все объекты проверяются до setters; используется одна transaction, без обещания
+единой Undo-группы. `dry_run=true` по умолчанию проверяет план без setters;
+для записи передать false. Выход: actual_snapshot, actual `text_bounds`,
+явные proposed targets, committed/saved. В dry_run actual остаётся исходным.
+Таймаут или ошибка Commit требуют чтения фактического состояния до повторения.
+
+Используются native [TextLocation](https://help.autodesk.com/cloudhelp/2026/ENU/OARX-ManagedRefGuide/files/OARX-ManagedRefGuide-Autodesk_AutoCAD_DatabaseServices_MLeader_TextLocation.html),
+[SetDogleg](https://help.autodesk.com/cloudhelp/2026/ENU/OARX-ManagedRefGuide/files/OARX-ManagedRefGuide-Autodesk_AutoCAD_DatabaseServices_MLeader_SetDogleg_int_Vector3d.html),
+[SetLastVertex](https://help.autodesk.com/cloudhelp/2026/ENU/OARX-ManagedRefGuide/files/OARX-ManagedRefGuide-Autodesk_AutoCAD_DatabaseServices_MLeader_SetLastVertex_int_Point3d.html)
+и GetContentGeomExtents; расположение и устранение пересечений выбирает вызывающий.

@@ -111,6 +111,7 @@ Read fresh selection/entity data before text writeback. Collapse/rewrite require
                 toolTypes.Add(typeof(ProxyWriteTools));
                 toolTypes.Add(typeof(NetworkTools));
                 toolTypes.Add(typeof(PolylineTools));
+                toolTypes.Add(typeof(LeaderTools));
                 toolTypes.Add(typeof(BlockVariantTools));
             }
             if (enabled.Contains("meta"))
@@ -172,6 +173,7 @@ Read fresh selection/entity data before text writeback. Collapse/rewrite require
             if (toolType == typeof(TextCreationTools)) return mcp.WithTools<TextCreationTools>();
             if (toolType == typeof(EntityBatchTools)) return mcp.WithTools<EntityBatchTools>();
             if (toolType == typeof(PolylineTools)) return mcp.WithTools<PolylineTools>();
+            if (toolType == typeof(LeaderTools)) return mcp.WithTools<LeaderTools>();
             if (toolType == typeof(ModifyTools)) return mcp.WithTools<ModifyTools>();
             if (toolType == typeof(EntityStyleTools)) return mcp.WithTools<EntityStyleTools>();
             if (toolType == typeof(ProxyTools)) return mcp.WithTools<ProxyTools>();

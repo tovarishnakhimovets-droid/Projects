@@ -277,6 +277,12 @@ namespace Bimwright.Dwg.Plugin
             SchemaProperty.Optional("layer", JTokenType.String),
             SchemaProperty.Optional("color_index", JTokenType.Integer));
 
+        public static readonly CommandSchema RepositionLeaders = CommandSchema.Object(
+            SchemaProperty.RequiredNonEmptyString("expected_document"),
+            SchemaProperty.RequiredNonEmptyString("expected_fingerprint"),
+            SchemaProperty.Required("changes", JTokenType.Array),
+            SchemaProperty.Optional("dry_run", JTokenType.Boolean));
+
         public static readonly CommandSchema CreateLeader = CommandSchema.Object(
             SchemaProperty.Required("points", JTokenType.Array),
             SchemaProperty.Optional("text", JTokenType.String),
