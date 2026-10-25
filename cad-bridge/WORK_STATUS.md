@@ -1,5 +1,26 @@
 # CAD bridge — состояние работы
 
+## PlotPdf: явная JSON-строка на входе MCP – 2026-10-25
+
+- В рабочем ПОС после пользовательской переустановки обнаружено расхождение:
+  официальный installed EXE tools/list отдаёт expected_plot_settings:true
+  (неограниченный JSON Schema), но адаптер чата представляет его строкой.
+  JSON.stringify snapshot при прежнем JsonElement-параметре доходил до native
+  как строка и отклонялся: expected_plot_settings must be object. Контракт
+  установленного EXE прочитан официальным MCP SDK; CAD из этой проверки не вызывался.
+- Исправлен только сервер: вход PlotPdf явно string, с JSON object parsing в
+  JObject до plugin request. Предел 65536 знаков, глубина16, дубликаты и остаток
+  после объекта отклоняются локально. Числа в paper_size/origin/window/custom_scale
+  преобразуются к native double: JSON.stringify может убрать дробную часть .0.
+- Native handler, schema, plugin DLL и прочие операции не менялись. 36 целевых
+  LayoutPlotTests PASS, включая 10 новых regression cases и реальную MCP schema.
+  Server net8.0 собран. Новый сервер доступен как source bin/Release DLL для
+  отдельного официального MCP stdio вызова; установка текущего runtime не менялась.
+- По сообщению основного агента direct installed stdio с object уже преодолел
+  JSON-контракт, но native dry_run отказал eNoMatchingMedia. Это отдельный вопрос
+  PC3/media initialization, данный серверный фикс его не устраняет. Native/live
+  диагностика или печать в этом подзадании не выполнялись.
+
 ## Листы и печать PDF: кандидат собран – 2026-10-24
 
 - Код commit c563409 в andrew. Штатный пакет 2.0.1-team.8-rc.1 собран из

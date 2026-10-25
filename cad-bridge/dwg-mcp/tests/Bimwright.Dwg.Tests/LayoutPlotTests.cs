@@ -67,6 +67,38 @@ namespace Bimwright.Dwg.Tests
         }
 
         [Fact]
+        public void Plot_settings_JSON_string_has_string_MCP_schema_and_object_native_payload()
+        {
+            var tool = McpServerTool.Create(typeof(DrawingWriteTools).GetMethod(nameof(DrawingWriteTools.PlotPdf)), (object)null).ProtocolTool;
+            Assert.Equal("string", tool.InputSchema.GetProperty("properties").GetProperty("expected_plot_settings").GetProperty("type").GetString());
+            Assert.True(DrawingWriteTools.TryParsePlotSettings("{\"device\":\"DWG To PDF.pc3\",\"paper_size\":[420,297],\"custom_scale\":[1,500]}", out var parsed, out var error), error);
+            var native = new JObject { ["device"] = "DWG To PDF.pc3", ["paper_size"] = new JArray(420d, 297d), ["custom_scale"] = new JArray(1d, 500d) };
+            Assert.Null(LayoutPlotPolicy.ValidateSnapshot(parsed, native));
+            var wire = JObject.Parse(parsed.ToString());
+            Assert.Equal(JTokenType.Object, wire.Type);
+            Assert.Null(LayoutPlotPolicy.ValidateSnapshot(wire, native));
+        }
+
+        [Theory]
+        [InlineData(null)] [InlineData("")] [InlineData("[]")] [InlineData("null")] [InlineData("true")]
+        [InlineData("{bad}")] [InlineData("{} {}")]
+        [InlineData("{\"device\":\"one\",\"device\":\"two\"}")]
+        public async System.Threading.Tasks.Task Invalid_plot_settings_are_rejected_before_contacting_CAD(string json)
+        {
+            var response = JObject.Parse(await DrawingWriteTools.PlotPdf(@"D:\a.dwg", "fingerprint", "Лист1", json, @"D:\a.pdf"));
+            Assert.False(response.Value<bool>("ok"));
+            Assert.Contains("expected_plot_settings", response.Value<string>("error"));
+        }
+
+        [Fact]
+        public void Oversized_or_excessively_nested_settings_are_rejected_locally()
+        {
+            Assert.False(DrawingWriteTools.TryParsePlotSettings(new string('x', 65537), out _, out _));
+            string deep = string.Concat(System.Linq.Enumerable.Repeat("{\"a\":", 18)) + "{}" + new string('}', 18);
+            Assert.False(DrawingWriteTools.TryParsePlotSettings(deep, out _, out _));
+        }
+
+        [Fact]
         public void Plugin_schema_refuses_missing_identity_and_stale_expected_settings_shape()
         {
             var p = JObject.Parse("{\"expected_document\":\"D:\\\\a.dwg\",\"expected_fingerprint\":\"a\",\"layout_name\":\"Лист1\",\"expected_plot_settings\":{},\"output_path\":\"D:\\\\a.pdf\"}");

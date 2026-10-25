@@ -1076,8 +1076,12 @@ dwg_plot_pdf(expected_document, expected_fingerprint, layout_name,
              overwrite_existing=false, allow_repo_output=false, dry_run=true)
 ```
 
-`expected_plot_settings` передаётся целиком из свежего чтения, включая устройство,
-размер бумаги, масштаб, окно, поворот и таблицу стилей. `output_path` задаёт
+`expected_plot_settings` передаётся строкой JSON (`JSON.stringify(plot_settings)`)
+целиком из свежего чтения, включая устройство,
+размер бумаги, масштаб, окно, поворот и таблицу стилей. Сервер разбирает её в
+объект для native-контракта; предел 65536 знаков/16 уровней, дубли полей и JSON
+вне объекта отклоняются до CAD. Целые значения в числовых массивах нормализуются
+к double для сохранения native snapshot после JSON.stringify. `output_path` задаёт
 абсолютный путь PDF в существующей папке. `overwrite_existing=true` явно разрешает
 замену этого файла; `allow_repo_output=true` отдельно разрешает вывод в каталог
 исходников моста. По умолчанию `dry_run=true`: путь/identity/настройки и native
