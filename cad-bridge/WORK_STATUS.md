@@ -1,5 +1,33 @@
 # CAD bridge — состояние работы
 
+## PlotPdf: exact media, foreground и локальный вывод – 2026-10-25
+
+- До новой native правки чистая andrew/origin/andrew d844062; обязательные
+  ff-only обновления и ancestry PASS. Пользователь разрешил необходимые
+  исходники/коммиты/push/сборки. Другие компоненты и таблицы не менялись.
+- Native теперь обновляет списки transient PlotSettings, проверяет точное наличие
+  сохранённых устройства и canonical media, задаёт те же имена. MatchDisabled
+  заменён на MatchEnabled только с полным exact guard ValidatedSettings до
+  BeginPlot. Подмена любого сохранённого поля отклоняется до создания PDF.
+- По фактической диагностике основного агента MatchDisabled отказывал
+  eNoMatchingMedia даже при существующем exact media, тогда как MatchEnabled
+  вернул полный snapshot без отличий. Первый прототип с BACKGROUNDPLOT2 не
+  создал PDF. Затем foreground0, стандартный невидимый ProgressDialog и localTemp
+  дали PDF 3540622 байта и восстановили BACKGROUNDPLOT2. Это проверка одноразового
+  проектного прототипа, не live-тест нового typed handler.
+- В shared service перенесён foreground scope с finally-restore/readback,
+  невидимые OnBeginPlot/OnBeginSheet/OnEndSheet/OnEndPlot, локальный временный PDF.
+  Готовый файл копируется в уникальный staging рядом с целью, затем rename с
+  overwrite guard. Оба собственных temp очищаются; cleanup_warnings отдельно.
+  Нет автосохранения или обнуления DBMOD: при native печати наблюдался DBMOD5.
+- 76 affected checks PASS: политики exact device/media/полного snapshot,
+  восстановление BACKGROUNDPLOT при успехе/ошибке, отказы setter/restore и реальные
+  MCP SDK схемы/20 stdio-профилей обоих годов. Полный 1709-набор не повторяли.
+  Обе сборки PASS: 2026 без warnings/errors, 2027 без errors и с прежними двумя
+  Roslyn MSB3277. Новый typed handler не вызывался живьём, CAD не переключался,
+  не печатался и не сохранялся этим подзаданием. Кандидат RC2 готовится отдельно;
+  установленные рабочие DLL не заменялись.
+
 ## PlotPdf: явная JSON-строка на входе MCP – 2026-10-25
 
 - В рабочем ПОС после пользовательской переустановки обнаружено расхождение:

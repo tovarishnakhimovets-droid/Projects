@@ -3,6 +3,40 @@ using Newtonsoft.Json.Linq;
 
 namespace Bimwright.Dwg.Plugin.Drawing
 {
+    // Only BACKGROUNDPLOT uses this scope in the native service; delegates make restoration testable without AutoCAD.
+    internal sealed class ForegroundPlotScope : IDisposable
+    {
+        private readonly Func<int> read;
+        private readonly Action<int> write;
+        private readonly int original;
+        private bool disposed;
+
+        internal ForegroundPlotScope(Func<int> read, Action<int> write)
+        {
+            this.read = read;
+            this.write = write;
+            original = read();
+            try
+            {
+                write(0);
+                if (read() != 0) throw new InvalidOperationException("BACKGROUNDPLOT did not enter foreground mode");
+            }
+            catch
+            {
+                write(original);
+                throw;
+            }
+        }
+
+        public void Dispose()
+        {
+            if (disposed) return;
+            disposed = true;
+            write(original);
+            if (read() != original) throw new InvalidOperationException("BACKGROUNDPLOT restoration was not verified");
+        }
+    }
+
     // Host-free validation shared by the native handlers and offline tests.
     public static class LayoutPlotPolicy
     {
@@ -25,6 +59,23 @@ namespace Bimwright.Dwg.Plugin.Drawing
         public static string ValidateSnapshot(JObject expected, JObject actual)
             => expected == null || !JToken.DeepEquals(expected, actual)
                 ? "plot settings changed; reread dwg_list_layouts before printing" : null;
+
+        public static string ValidateSavedDevice(string saved, string[] available)
+            => Array.Exists(available ?? Array.Empty<string>(), name => string.Equals(name, saved, StringComparison.Ordinal))
+                ? null : "saved PDF device is not available exactly: " + saved;
+
+        public static string ValidateSavedMedia(string saved, string[] available)
+            => Array.Exists(available ?? Array.Empty<string>(), name => string.Equals(name, saved, StringComparison.Ordinal))
+                ? null : "saved canonical media is not available exactly on the PDF device: " + saved;
+
+        public static string ValidateUnchangedSettings(JObject saved, JObject prepared)
+        {
+            if (saved == null || prepared == null) return "native plot settings are unavailable; printing refused";
+            foreach (var property in saved.Properties())
+                if (!prepared.TryGetValue(property.Name, out var value) || !JToken.DeepEquals(property.Value, value))
+                    return "native plot validation changed saved setting '" + property.Name + "'; printing refused";
+            return saved.Count == prepared.Count ? null : "native plot validation changed setting fields; printing refused";
+        }
 
         public static bool IsPdfDevice(string device)
             => !string.IsNullOrWhiteSpace(device) && device.IndexOf("PDF", StringComparison.OrdinalIgnoreCase) >= 0;

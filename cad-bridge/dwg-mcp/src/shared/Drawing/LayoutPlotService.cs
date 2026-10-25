@@ -24,9 +24,11 @@ namespace Bimwright.Dwg.Plugin.Drawing
             return (Layout)tx.GetObject(layouts.GetAt(name), OpenMode.ForRead);
         }
 
-        internal static JObject Settings(Layout l) => new JObject
+        internal static JObject Settings(Layout l) => Settings(l, l.LayoutName, l.Handle.ToString());
+
+        private static JObject Settings(PlotSettings l, string layoutName, string layoutHandle) => new JObject
         {
-            ["layout_name"] = l.LayoutName, ["layout_handle"] = l.Handle.ToString(),
+            ["layout_name"] = layoutName, ["layout_handle"] = layoutHandle,
             ["model_type"] = l.ModelType, ["device"] = l.PlotConfigurationName,
             ["media"] = l.CanonicalMediaName, ["style_sheet"] = l.CurrentStyleSheet,
             ["paper_units"] = l.PlotPaperUnits.ToString(), ["rotation"] = l.PlotRotation.ToString(),
@@ -117,7 +119,13 @@ namespace Bimwright.Dwg.Plugin.Drawing
             if (PlotFactory.ProcessPlotState != ProcessPlotState.NotPlotting) throw new InvalidOperationException("AutoCAD is already plotting");
             if (!string.Equals(LayoutManager.Current.CurrentLayout, name, StringComparison.Ordinal))
                 throw new InvalidOperationException("requested layout must already be current; call dwg_select_layout explicitly");
-            string temporary = Path.Combine(Path.GetDirectoryName(path), ".dwg-plot-" + Guid.NewGuid().ToString("N") + ".pdf");
+            string temporaryDirectory = Path.GetTempPath();
+            if (temporaryDirectory.StartsWith(@"\\", StringComparison.Ordinal) ||
+                new DriveInfo(Path.GetPathRoot(temporaryDirectory)).DriveType == DriveType.Network)
+                throw new IOException("the configured OS temporary directory must be local for PDF plotting");
+            string temporary = Path.Combine(temporaryDirectory, ".dwg-plot-" + Guid.NewGuid().ToString("N") + ".pdf");
+            string staged = Path.Combine(Path.GetDirectoryName(path), ".dwg-publish-" + Guid.NewGuid().ToString("N") + ".pdf");
+            var cleanupWarnings = new List<string>();
             try
             {
                 using (var tx = doc.Database.TransactionManager.StartOpenCloseTransaction())
@@ -138,22 +146,58 @@ namespace Bimwright.Dwg.Plugin.Drawing
                     using (var validator = new PlotInfoValidator())
                     {
                         copy.CopyFrom(l);
+                        var plotSettingsValidator = PlotSettingsValidator.Current;
+                        plotSettingsValidator.RefreshLists(copy);
+                        error = LayoutPlotPolicy.ValidateSavedDevice(l.PlotConfigurationName,
+                            plotSettingsValidator.GetPlotDeviceList().Cast<string>().ToArray());
+                        if (error != null) throw new InvalidOperationException(error);
+                        error = LayoutPlotPolicy.ValidateSavedMedia(l.CanonicalMediaName,
+                            plotSettingsValidator.GetCanonicalMediaNameList(copy).Cast<string>().ToArray());
+                        if (error != null) throw new InvalidOperationException(error);
+                        plotSettingsValidator.SetPlotConfigurationName(copy, l.PlotConfigurationName, l.CanonicalMediaName);
+                        plotSettingsValidator.RefreshLists(copy);
+                        error = LayoutPlotPolicy.ValidateUnchangedSettings(settings, Settings(copy, l.LayoutName, l.Handle.ToString()));
+                        if (error != null) throw new InvalidOperationException(error);
                         info.Layout = l.ObjectId;
                         info.OverrideSettings = copy;
-                        validator.MediaMatchingPolicy = MatchingPolicy.MatchDisabled;
+                        // MatchDisabled can reject a present exact medium. Matching is allowed only if every saved value remains exact.
+                        validator.MediaMatchingPolicy = MatchingPolicy.MatchEnabled;
                         validator.Validate(info);
-                        if (dryRun) return new { dry_run = true, output_path = path, plot_settings = settings };
+                        if (info.ValidatedSettings == null) throw new InvalidOperationException("native plot validation returned no settings");
+                        error = LayoutPlotPolicy.ValidateUnchangedSettings(settings,
+                            Settings(info.ValidatedSettings, l.LayoutName, l.Handle.ToString()));
+                        if (error != null) throw new InvalidOperationException(error);
+                        if (dryRun) return new { dry_run = true, output_path = path, plot_settings = settings,
+                            background_plot_before = Convert.ToInt32(Application.GetSystemVariable("BACKGROUNDPLOT")), foreground_during_print = true };
+                        using (var foreground = new ForegroundPlotScope(
+                            () => Convert.ToInt32(Application.GetSystemVariable("BACKGROUNDPLOT")),
+                            value => Application.SetSystemVariable("BACKGROUNDPLOT", value)))
                         using (var engine = PlotFactory.CreatePublishEngine())
                         using (var page = new PlotPageInfo())
+                        using (var progress = new PlotProgressDialog(false, 1, true))
                         {
-                            engine.BeginPlot(null, null);
-                            engine.BeginDocument(info, doc.Name, null, 1, true, temporary);
-                            engine.BeginPage(page, info, true, null);
-                            engine.BeginGenerateGraphics(null);
-                            engine.EndGenerateGraphics(null);
-                            engine.EndPage(null);
-                            engine.EndDocument(null);
-                            engine.EndPlot(null);
+                            bool progressEnded = false;
+                            try
+                            {
+                                progress.OnBeginPlot();
+                                progress.IsVisible = false;
+                                progress.OnBeginSheet();
+                                engine.BeginPlot(progress, null);
+                                engine.BeginDocument(info, doc.Name, null, 1, true, temporary);
+                                engine.BeginPage(page, info, true, null);
+                                engine.BeginGenerateGraphics(null);
+                                engine.EndGenerateGraphics(null);
+                                engine.EndPage(null);
+                                progress.OnEndSheet();
+                                engine.EndDocument(null);
+                                progress.OnEndPlot();
+                                progressEnded = true;
+                                engine.EndPlot(null);
+                            }
+                            finally
+                            {
+                                if (!progressEnded) progress.OnEndPlot();
+                            }
                         }
                     }
                 }
@@ -162,17 +206,31 @@ namespace Bimwright.Dwg.Plugin.Drawing
                 using (var stream = File.OpenRead(temporary))
                     if (stream.Read(header, 0, header.Length) != header.Length || !LayoutPlotPolicy.HasPdfHeader(header))
                         throw new IOException("plot output is not a PDF");
-                File.Move(temporary, path, overwrite);
-                using (var stream = File.OpenRead(path))
+                long bytes; string hash;
+                using (var stream = File.OpenRead(temporary))
                 using (var sha = SHA256.Create())
-                    return new { dry_run = false, output_path = path, bytes = stream.Length,
-                        sha256 = BitConverter.ToString(sha.ComputeHash(stream)).Replace("-", "").ToLowerInvariant(), layout_name = name, pages = 1 };
+                {
+                    bytes = stream.Length;
+                    hash = BitConverter.ToString(sha.ComputeHash(stream)).Replace("-", "").ToLowerInvariant();
+                }
+                File.Copy(temporary, staged, false);
+                File.Move(staged, path, overwrite);
+                return new { dry_run = false, output_path = path, bytes, sha256 = hash, layout_name = name,
+                    pages = 1, background_plot_restored = true, cleanup_warnings = cleanupWarnings };
             }
             finally
             {
-                // This unique file belongs only to this operation. The existing destination is never deleted first.
-                if (File.Exists(temporary)) File.Delete(temporary);
+                // Both unique files belong only to this operation. Never delete the existing destination first.
+                DeleteTemporary(temporary, cleanupWarnings);
+                DeleteTemporary(staged, cleanupWarnings);
             }
+        }
+
+        private static void DeleteTemporary(string path, List<string> warnings)
+        {
+            try { if (File.Exists(path)) File.Delete(path); }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+            { warnings.Add("temporary PDF cleanup failed: " + path + ": " + ex.Message); }
         }
     }
 }

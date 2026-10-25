@@ -47,6 +47,65 @@ namespace Bimwright.Dwg.Tests
             => Assert.Equal(expected, LayoutPlotPolicy.IsPdfDevice(device));
 
         [Fact]
+        public void Saved_device_and_canonical_media_require_exact_available_names()
+        {
+            Assert.Null(LayoutPlotPolicy.ValidateSavedDevice("DWG To PDF.pc3", new[] { "DWG To PDF.pc3" }));
+            Assert.NotNull(LayoutPlotPolicy.ValidateSavedDevice("DWG To PDF.pc3", new[] { "Other PDF.pc3" }));
+            Assert.NotNull(LayoutPlotPolicy.ValidateSavedDevice("DWG To PDF.pc3", null));
+            Assert.Null(LayoutPlotPolicy.ValidateSavedMedia("ISO_full_bleed_A0", new[] { "ISO_full_bleed_A0" }));
+            Assert.NotNull(LayoutPlotPolicy.ValidateSavedMedia("ISO_full_bleed_A0", new[] { "iso_full_bleed_A0" }));
+            Assert.NotNull(LayoutPlotPolicy.ValidateSavedMedia("ISO_full_bleed_A0", new[] { "ISO_A0" }));
+        }
+
+        [Theory]
+        [InlineData("device")] [InlineData("media")] [InlineData("style_sheet")] [InlineData("paper_units")]
+        [InlineData("rotation")] [InlineData("plot_type")] [InlineData("paper_size")] [InlineData("origin")]
+        [InlineData("window")] [InlineData("use_standard_scale")] [InlineData("standard_scale")]
+        [InlineData("custom_scale")] [InlineData("centered")] [InlineData("plot_with_styles")]
+        [InlineData("print_lineweights")] [InlineData("scale_lineweights")]
+        public void Prepared_and_validated_settings_must_never_substitute_any_saved_value(string field)
+        {
+            var saved = JObject.Parse("{\"device\":\"PDF.pc3\",\"media\":\"A0\",\"style_sheet\":\"monochrome.ctb\",\"paper_units\":\"Millimeters\",\"rotation\":\"Degrees090\",\"plot_type\":\"Window\",\"paper_size\":[841.0,1189.0],\"origin\":[0.0,0.0],\"window\":[-300.0,-254.0,888.0,586.0],\"use_standard_scale\":false,\"standard_scale\":\"Scale1To1\",\"custom_scale\":[1.0,1.0],\"centered\":false,\"plot_with_styles\":true,\"print_lineweights\":true,\"scale_lineweights\":false}");
+            Assert.Null(LayoutPlotPolicy.ValidateUnchangedSettings(saved, (JObject)saved.DeepClone()));
+            var changed = (JObject)saved.DeepClone(); changed[field] = "substituted";
+            string error = LayoutPlotPolicy.ValidateUnchangedSettings(saved, changed);
+            Assert.Contains(field, error);
+            Assert.NotNull(LayoutPlotPolicy.ValidateUnchangedSettings(saved, new JObject()));
+        }
+
+        [Fact]
+        public void Foreground_scope_restores_previous_background_value_after_success()
+        {
+            int value = 2;
+            using (new ForegroundPlotScope(() => value, v => value = v)) Assert.Equal(0, value);
+            Assert.Equal(2, value);
+        }
+
+        [Fact]
+        public void Foreground_scope_restores_previous_background_value_after_plot_exception()
+        {
+            int value = 3;
+            Action failingPlot = () =>
+            {
+                using var scope = new ForegroundPlotScope(() => value, v => value = v);
+                throw new InvalidOperationException("plot failure");
+            };
+            Assert.Throws<InvalidOperationException>(failingPlot);
+            Assert.Equal(3, value);
+        }
+
+        [Fact]
+        public void Foreground_scope_refuses_an_unverified_setter_and_reports_failed_restore()
+        {
+            int value = 2;
+            Assert.Throws<InvalidOperationException>(() => new ForegroundPlotScope(() => value, _ => { }));
+            Assert.Equal(2, value);
+            var scope = new ForegroundPlotScope(() => value, v => { if (v == 0) value = 0; });
+            var error = Assert.Throws<InvalidOperationException>(() => scope.Dispose());
+            Assert.Contains("restoration", error.Message);
+        }
+
+        [Fact]
         public void Output_must_have_the_PDF_magic_header()
         {
             Assert.True(LayoutPlotPolicy.HasPdfHeader(System.Text.Encoding.ASCII.GetBytes("%PDF-1.7")));

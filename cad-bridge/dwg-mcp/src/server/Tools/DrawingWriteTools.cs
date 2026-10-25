@@ -20,7 +20,7 @@ namespace Bimwright.Dwg.Server.Tools
         }
 
         [McpServerTool(Name = "dwg_plot_pdf", ReadOnly = false), Description(
-            "Print the already-current layout to a one-page PDF using its saved PDF device, medium, scale/window and plot style. First read dwg_list_layouts and pass JSON.stringify(plot_settings) as the expected_plot_settings JSON string. dry_run defaults true. No device substitution, implicit layout activation, settings change or DWG save. Existing output requires overwrite_existing=true. Synchronous native plot: a transport timeout is uncertain; inspect output before any retry.")]
+            "Print the already-current layout to a one-page PDF using its saved PDF device, medium, scale/window and plot style. First read dwg_list_layouts and pass JSON.stringify(plot_settings) as the expected_plot_settings JSON string. dry_run defaults true. No device/media substitution or implicit layout activation. Uses foreground plotting with BACKGROUNDPLOT temporarily 0 and verified restoration, plus a hidden native progress object. Produces PDF in local Temp then publishes to the target. Does not clear DBMOD or save DWG. Existing output requires overwrite_existing=true. Synchronous native plot: a transport timeout is uncertain; inspect output before any retry.")]
         public static Task<string> PlotPdf(string expected_document, string expected_fingerprint, string layout_name,
             [Description("JSON object string copied from fresh dwg_list_layouts.plot_settings, at most 65536 characters.")] string expected_plot_settings, string output_path, bool overwrite_existing = false,
             bool allow_repo_output = false, bool dry_run = true)
