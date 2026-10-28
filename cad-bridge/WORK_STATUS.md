@@ -1,5 +1,37 @@
 # CAD bridge — состояние работы
 
+## Диагностический v3.2 собран и проверен — 2026-10-28
+
+- По явному поручению пользователя диагностический патч зафиксирован в andrew:
+  c51cdee20d5fb57a6fae9c3f0c15da198f22843c. Только согласованные 12 файлов;
+  перед упаковкой исходник чистый. Logic/unit проверки1824PASS не повторялись.
+- tools/package-team-dwg.ps1 -Version 3.2 создал releases/3.2/stage и
+  DwgMcp.Setup-v3.2-win-x64.zip: 40 054 901 байт, SHA256
+  7e14c9d417c021c76a35f3860356ce026c2f15a287601ff6c5feaabf3f57d38f.
+  Manifest: version3.2, commit c51cdee..., dirty=false, годы2026/2027.
+  Предыдущие выпуски не перезаписывались, новый пакет не переиздавался.
+- Проверены bytes/SHA256 всех40файлов manifest, полный набор и байты ZIP,
+  sidecarSHA, release.json, точные копии канонических bridge-docs.
+  Обе plugin DLL имеют PE-version3.2.0.0, Autodesk PackageContents AppVersion3.2.0,
+  ровно два компонента2026(R25.1)/2027(R26.0), Win64, AutoCAD|Civil3D.
+- Упакованный EXE проверен official MCP SDK: только initialize/tools-list,
+  version3.2; для обоих годов standard76/query22/read-only31, всего6profilesPASS,
+  новые readers/writers/annotations/identity/dry_run-schema корректны.
+  Ни одного CAD-вызова, runtime-install или DWG-save в этой проверке не было.
+- Независимая проверка подтвердила PE/XML/release metadata и неизменность
+  установленного3.1 по прежним SHA256 сервера, release.json и Acad27 DLL.
+  Native-сборки успешны, у2027 только прежние2Roslyn MSB3277. Intermediate
+  plugin-build удалён после проверки точного пути и загруженных модулей;
+  stage,ZIP,SHA сохранены. Пакет не пересобирается ради записи этого итога.
+- Служебная QA-реализация в НК2 обобщена и переименована из
+  check_release_3_1.py в check_release.py: версия — positional argument,
+  --commit задаёт ожидаемый коммит manifest. Результат — release_3_2_check.json;
+  прежний JSON3.1 сохранён. Второй реализации проверок не создано.
+- Source-ready/offline-package verified; установлен/загружен по-прежнему3.1.
+  Push,merge,установка и production-очистка не выполнялись. Причина +3native
+  lock-events ещё не установлена. Следующий шаг пользователя — установить3.2,
+  затем получить diagnostic trace при одном защищённом рабочем вызове;
+  неизвестные события всё ещё вызывают отказ, а не подавляются.
 ## Подготовка диагностического v3.2 — 2026-10-28
 
 - Пользователь явно поручил «Сделай коммит и v3.2» после описания результата
