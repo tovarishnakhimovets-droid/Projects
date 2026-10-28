@@ -1,5 +1,61 @@
 # CAD bridge — состояние работы
 
+## Подготовка выпуска v3.3 — 2026-10-28
+
+- Пользователь отдельно поручил «Сделай коммит и v3.3»: согласованные12файлов
+  фиксируются в текущей andrew; push, merge и установка не входят в поручение.
+- Код после1940PASS и двух native-сборок не меняется. Проверки не повторяются;
+  официальный упаковщик задаст версии3.3/3.3.0, предыдущие выпуски не меняются.
+- Перед фиксацией сверены все12путей, matching upstream, одинworktree,
+  unfinished Git operations нет. FF-проверки уже выполнены до этой доработки;
+  в середине задачи новые pull/fetch не запускаются.
+- После коммита: package-team-dwg.ps1 -Version 3.3 из чистого снимка, проверка
+  manifest/ZIP/metadata и packaged MCP initialize/tools-list без CAD calls.
+  Результат и состояние installed/loaded/live будут записаны отдельно.
+
+## Native v3.2 и проверка сохраняемого состояния network — 2026-10-28
+
+- Пользователь сообщил «обновил». Установленные release.json и EXE подтверждают
+  3.2/c51cdee; native reader возвращает новую revision_diagnostics, сессия новая.
+  Активен прежний Поверхности.dwg, fingerprint739091b3..., DBMOD16.
+- Dry-run Bind газона4 (3273CB) PASS, revision0. Один разрешённый production
+  вызов отказал до handler: acquire +1, dispose +2, всего revision3.
+  Все события modified точного managed AssocNetwork3A8732, шесть false-флагов;
+  trace полный, unrecorded/capture failures0. После отказа те же30rootxref,
+  graph/reference hashes и DBMOD16. Bind/Explode/Erase/Save не выполнялись.
+  Диагностика сохранена в существующем НК2/cleanup_attempt.json.
+- Native событие связано с автоматической associative evaluation на смене lock.
+  Флаги сами по себе не доказательство no-op. Подготовлен узкий gate:
+  rawcounter прежний, strict guard до acquisition; только полный all-false
+  exactnetwork trace может быть проверен полным DwgOut(FileFiler) сравнением
+  сохраняемых данных default hierarchy до/после. Набор/root/nativeclass/bytes
+  должны совпасть. Любые child/structural/unknown events, ошибки и лимиты —
+  отказ. Чужие/unlinked networks не объявляются проверенными.
+- Только после доказанного равенства меняется revision в приватной копии входа;
+  handler повторяет все прежние object guards. События release не подавляются.
+  Пределы capture128networks/10000actions/2MiB/3s, без файловой записи.
+- Перед исходными правками: чистая andrew2a6a5b6, matching upstream,
+  develop свободна, unfinished operations нет. Разрешённые FF-команды выполнены,
+  обновлений нет, ancestry PASS. Другая работа не затронута.
+- Итог: 1940 .NET tests PASS, 0 FAIL, 0 SKIP, включая 20 actual MCP SDK
+  stdio/schema profiles без CAD calls. 158 targeted gate/routing tests PASS.
+  Native2026 с pinned25.1.0: 0 warnings/errors; native2027 installed refs:
+  0 errors, прежние2Roslyn MSB3277. Server net8.0 собран в полном наборе.
+  Independent review всех4productionfiles и tests: no actionable issues.
+- Первые12 routing tests упали из-за test double, который не обновлял
+  LastLockMode после нового read-lock capture. Модель явного Write исправлена;
+  проверки восстановления исключений/строгого отказа сохранены, финал PASS.
+  Native helper компилировался с реальными Autodesk refs; unitrouting использует
+  snapshot double. Реальные callbacks/успешность и равенство DwgOut hashes
+  пока НЕ проверены на живом DWG.
+- Технический контракт TOOLS обновлён. Временный проектный patch script удалён
+  после применения; единственный исходник остаётся в общем CAD-мосте.
+- Установленный/загруженный runtime остаётся3.2. Новый коммит, пакет, установка,
+  повторный live writer и сохранение не выполнялись. Следующий шаг после offline
+  итогов — отдельное поручение коммита и пакета, затем загрузка пользователем.
+  DwgOut callbacks/hashes на этом DWG и production Bind пока live не проверены.
+
+
 ## Диагностический v3.2 собран и проверен — 2026-10-28
 
 - По явному поручению пользователя диагностический патч зафиксирован в andrew:

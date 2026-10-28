@@ -29,6 +29,7 @@
     <Compile Include="..\..\src\shared\Infrastructure\MainThreadExecutor.cs" LinkBase="Shared\Infrastructure" />
     <Compile Include="..\..\src\plugin-acad24\App.cs" LinkBase="Shared\Startup" />
     <Compile Include="..\..\src\shared\Infrastructure\DocumentInvoker.cs" LinkBase="Shared\Infrastructure" />
+    <Compile Include="..\..\src\shared\Infrastructure\LockBoundaryProof.cs" LinkBase="Shared\Infrastructure" />
     <Compile Include="..\..\src\shared\Infrastructure\PluginTarget.cs" LinkBase="Shared\Infrastructure" />
     <Compile Include="..\..\src\shared\Transport\ITransportServer.cs" LinkBase="Shared\Transport" />
     <Compile Include="..\..\src\shared\Infrastructure\SchemaValidator.cs" LinkBase="Shared\Infrastructure" />

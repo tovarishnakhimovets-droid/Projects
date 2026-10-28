@@ -17,6 +17,7 @@ namespace Autodesk.AutoCAD.DatabaseServices
         public virtual bool IsUndoing { get; set; }
         public virtual bool IsEraseStatusToggled { get; set; }
     }
+    public class AssocNetwork : DBObject { }
     public class Entity : DBObject { }
     public class BlockReference : Entity
     {

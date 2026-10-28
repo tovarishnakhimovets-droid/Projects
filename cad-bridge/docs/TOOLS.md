@@ -1230,33 +1230,65 @@ plan/write инструменты.
 Первичные API: [BindXrefs](https://help.autodesk.com/cloudhelp/2026/ENU/OARX-ManagedRefGuide/files/OARX-ManagedRefGuide-Autodesk_AutoCAD_DatabaseServices_Database_BindXrefs_ObjectIdCollection__MarshalAsUnmanagedType_U1__bool.html),
 [native Explode](https://help.autodesk.com/cloudhelp/2027/ENU/OARX-DevGuide-Managed/files/GUID-A853CD73-58A9-4380-B8E2-B3451C94C46B.htm),
 [ограничения EXPLODE](https://help.autodesk.com/cloudhelp/2027/ENU/AutoCAD-Core/files/GUID-E98BCEF4-DED6-48A6-87EB-10FE87188083.htm).
-### Блокировка dry-run и диагностика ревизии
+### Блокировка dry-run и проверка associative network
 
-В подготовленном исправлении после v3.1 dispatcher передаёт параметры вызова
-в DocumentInvoker. Только manage_xrefs и explode_blocks с dry_run=true
-(включая значение по умолчанию) получают read lock. Реальная запись получает
-write lock лишь при явном native boolean false и после полного разбора входа.
-Активная вкладка по-прежнему обязательна; остальные команды не меняют режима.
+Только manage_xrefs и explode_blocks с dry_run=true (включая значение по
+умолчанию) получают read lock. Реальная запись получает write lock лишь
+при явном boolean false и после полного разбора входа. Активная вкладка
+обязательна; остальные команды сохраняют прежний режим.
 
-Для реальной записи session/revision проверяются до получения write lock
-и сразу после него. Если блокировка сама порождает события изменения, handler
-не вызывается: ошибка содержит фазу, ожидаемый и текущий счётчики, а также
-ограниченную диагностику событий. Эти события не объявляются безвредными,
-счётчик не компенсируется и защитное ожидание не заменяется текущим.
+Перед реальной записью session/revision должны точно совпасть с внешним
+снимком. Они проверяются снова после ограниченного чтения associative network
+под read lock и непосредственно перед получением write lock. Ошибка захвата
+или освобождения read lock останавливает вызов.
 
-DrawingRevision сохраняет прежние правила инвалидации. Диагностические записи
-содержат class/handle, вид события, доступные native flags и фазу. Чтение
-диагностики не открывает объекты и не меняет счётчики. Сбор сведений ограничен
-диагностическими фазами и бюджетом; пропуски обозначены явно. list_xrefs
-возвращает revision_diagnostics, а mismatch-error перечисляет changed_fields.
+Native v3.2 показал три modified-уведомления AssocNetwork на переходах
+write_lock_acquire/dispose со всеми шестью false-флагами. Самих флагов
+недостаточно: смена режима блокировки автоматически запускает
+[оценку associative network](https://help.autodesk.com/cloudhelp/2022/ENU/OARX-ManagedRefGuide/files/OARX-ManagedRefGuide-Autodesk_AutoCAD_DatabaseServices_AssocManager_EvaluateTopLevelNetwork_Database_AssocEvaluationCallback_int.html).
 
-Следующий native-прогон должен установить классы и флаги событий на фазах
-write_lock_acquire/write_command/write_lock_dispose. До этих данных нельзя
-игнорировать весь поток событий блокировки или прибавлять к ожиданию число
-из наблюдения. В v3.1 это изменение не внедрено; установленный пакет сам по
-себе не меняется от редактирования исходника.
+Подготовленный после v3.2 gate не подавляет события и не вычитает константу
+из revision. При изменении счётчика внутри acquisition продолжение разрешено
+только при одновременном выполнении всех условий:
 
-При ошибке освобождения write lock сохраняются исходное исключение и
-ограниченный receipt обработчика. Ответ явно сообщает handler_invoked/returned,
-execution_unknown и запрет автоматического повтора; большие payload и native
-объекты не сериализуются. Ошибка release не является доказательством отката.
+- Полный непрерывный trace, не более 16 событий; та же session, без пропусков,
+  capture failures и последующих событий во время чтения/сравнения.
+- Только modified в синхронной фазе write_lock_acquire на её потоке,
+  managed AssocNetwork, полные шесть false-флагов. Любой иной объект, structural
+  event или неизвестный флаг останавливает обработчик.
+- Все затронутые handles присутствовали в pre-lock snapshot точных native
+  AcDbAssocNetwork без proxy/производных классов. До и после совпадают root,
+  полный доступный набор сетей и native FileFiler SHA256 каждой сети.
+- После доказанного равенства только приватная копия revision-ожидания
+  переносится на acquired_revision. Исходный запрос не меняется; все прежние
+  object/graph/reference/transform/definition guards обработчика обязательны.
+
+Snapshot читает default hierarchy через GetInstanceFromDatabase(false) и
+скопированные массивы GetActions. Чужие ключи/несвязанные сети не считаются
+проверенными: уведомление от отсутствующего в снимке handle вызывает отказ.
+Пределы одного capture: 128 сетей, 10000 actions, 2 МиБ typed payload, 3 секунды
+между native вызовами. Native DwgOut нельзя прервать таймером. Записываются
+только данные в память; DWG, сеть и ассоциации не редактируются и не сохраняются.
+FileFiler использует полное native filing, включая base fields и XData;
+IDs/типы/строки/двоичные данные и raw float bits различаются. Unsupported
+read/address/seek, пустой filing, non-OK status или превышение лимита дают отказ,
+даже если native code перехватил исключение callback.
+[Контракт DwgOut](https://help.autodesk.com/cloudhelp/2026/ENU/OARX-ManagedRefGuide/files/OARX-ManagedRefGuide-Autodesk_AutoCAD_DatabaseServices_DBObject_DwgOut_DwgFiler.html),
+[native dwgOutFields](https://help.autodesk.com/cloudhelp/2027/ENU/OARX-RefGuide/files/OARX-RefGuide-AcDbObject__dwgOutFields_AcDbDwgFiler__const.html).
+
+Результат может содержать lock_boundary_validation: source/acquired revisions,
+число уведомлений, persisted_network_state_equal, число сетей и объём снимка.
+Это доказательство равенства сохраняемых данных проверенных сетей, а не всей БД.
+Все события write_command и write_lock_dispose продолжают увеличивать raw
+revision; после записи нужен свежий внешний снимок.
+
+DrawingRevision сохраняет прежние правила инвалидации. Диагностика содержит
+class/handle, вид события, доступные native flags и фазу. Чтение диагностики
+не открывает объекты и не меняет счётчики; пропуски явно обозначены.
+list_xrefs возвращает revision_diagnostics, mismatch-error — changed_fields.
+
+При ошибке освобождения write lock сохраняются исходное исключение,
+ограниченный receipt обработчика и доказательство границы, если оно было.
+handler_invoked/returned, execution_unknown и запрет автоматического повтора
+обязательны. Ошибка release не доказывает откат. Native работа нового gate,
+самого Bind и Explode требует проверки после загрузки; offline PASS её не заменяет.

@@ -43,24 +43,31 @@ namespace Bimwright.Dwg.Plugin
         }
 
         internal static T Invoke<T>(string command, string documentId, Func<Document, T> action, JToken parameters = null)
+            => InvokeWithParameters(command, documentId, (doc, _) => action(doc), parameters);
+
+        internal static T InvokeWithParameters<T>(string command, string documentId,
+            Func<Document, JToken, T> action, JToken parameters = null)
             => InvokeApplication(() =>
             {
+                // A verified lock boundary may refresh only the private revision
+                // expectation. Caller input and all object expectations stay intact.
+                var effectiveParameters = parameters?.DeepClone();
                 var doc = DocumentRouting.Resolve(documentId);
                 var isActive = ReferenceEquals(Application.DocumentManager.MdiActiveDocument, doc);
                 var error = DocumentRoutingPolicy.ValidateCommandTarget(command, isActive);
                 if (error != null) throw new InvalidOperationException(error);
-                if (DocumentRoutingPolicy.UsesReadLock(command, parameters))
+                if (DocumentRoutingPolicy.UsesReadLock(command, effectiveParameters))
                 {
                     // Protect the inspected database without taking a write lock
                     // or prompting the user to activate/finish another drawing.
-                    using (doc.LockDocument(DocumentLockMode.Read, null, null, false)) return action(doc);
+                    using (doc.LockDocument(DocumentLockMode.Read, null, null, false)) return action(doc, effectiveParameters);
                 }
-                var expected = ReadWriteExpectation(command, parameters);
+                var expected = ReadWriteExpectation(command, effectiveParameters);
                 if (expected.HasValue)
-                    return InvokeGuardedWrite(doc, action, expected.Value.Session, expected.Value.Revision);
+                    return InvokeGuardedWrite(doc, action, command, effectiveParameters, expected.Value.Session, expected.Value.Revision);
                 using (doc.LockDocument())
                 {
-                    return action(doc);
+                    return action(doc, effectiveParameters);
                 }
             });
 
@@ -83,10 +90,24 @@ namespace Bimwright.Dwg.Plugin
             return null;
         }
 
-        private static T InvokeGuardedWrite<T>(Document doc, Func<Document, T> action, string expectedSession, long expectedRevision)
+        private static T InvokeGuardedWrite<T>(Document doc, Func<Document, JToken, T> action, string command,
+            JToken effectiveParameters, string expectedSession, long expectedRevision)
         {
             var state = DrawingRevision.For(doc);
             RequireRevision(state, expectedSession, expectedRevision, "before_write_lock");
+            AssocNetworkSnapshot beforeNetworks = null;
+            string snapshotError = null;
+            // Acquisition/release failures are not snapshot unavailability: they
+            // must stop the request before attempting another native lock.
+            using (doc.LockDocument(DocumentLockMode.Read, null, null, false))
+            {
+                try { beforeNetworks = AssocNetworkSnapshot.Capture(doc); }
+                catch (Exception error) { snapshotError = Bounded(error.Message, 512); }
+            }
+            // Snapshot reads and read-lock release are not allowed to invalidate
+            // the request either. Unknown capture affects only the exceptional path.
+            RequireRevision(state, expectedSession, expectedRevision, "before_write_lock");
+            JObject boundaryReceipt = null;
             IDisposable writeLock = null;
             Exception primaryFailure = null;
             Exception releaseFailure = null;
@@ -105,14 +126,38 @@ namespace Bimwright.Dwg.Plugin
                     RequireRevision(state, expectedSession, expectedRevision, "write_lock_acquire_failed", error);
                     throw;
                 }
-                // Lock-mode reactors are not assumed harmless. Preserve the
-                // unchanged guard even when the native lock itself fires events.
-                RequireRevision(state, expectedSession, expectedRevision, "after_write_lock");
+                long acquiredRevision = state.Revision;
+                if (state.SessionId != expectedSession || acquiredRevision != expectedRevision)
+                {
+                    var diagnostic = state.DiagnosticsSince(expectedRevision);
+                    string proofError = snapshotError;
+                    bool verified = state.SessionId == expectedSession && beforeNetworks != null &&
+                        LockBoundaryProof.TryValidate(diagnostic, expectedSession, expectedRevision, acquiredRevision,
+                            out var affectedHandles, out proofError) &&
+                        beforeNetworks.Matches(doc, affectedHandles, out proofError);
+                    // Native filing is a read, but reactors and getter failures are
+                    // still unknown. Check again immediately before refreshing input.
+                    if (!verified || state.SessionId != expectedSession || state.Revision != acquiredRevision)
+                        RequireRevision(state, expectedSession, expectedRevision, "after_write_lock",
+                            proofError == null ? null : new InvalidOperationException(Bounded(proofError, 512)));
+                    if (command == "manage_xrefs") effectiveParameters["expected_xref"]["document_revision"] = acquiredRevision;
+                    else effectiveParameters["expected_revision"] = acquiredRevision;
+                    boundaryReceipt = new JObject
+                    {
+                        ["source_revision"] = expectedRevision, ["acquired_revision"] = acquiredRevision,
+                        ["notification_count"] = acquiredRevision - expectedRevision,
+                        ["persisted_network_state_equal"] = true, ["network_count"] = beforeNetworks.NetworkCount,
+                        ["snapshot_bytes"] = beforeNetworks.TotalBytes,
+                        ["object_expectations_rechecked"] = true
+                    };
+                }
                 using (state.BeginPhase("write_command"))
                 {
                     handlerInvoked = true;
-                    result = action(doc);
+                    result = action(doc, effectiveParameters);
                     handlerReturned = true;
+                    if (boundaryReceipt != null && result is CommandResult receipt && receipt.Result is JObject payload)
+                        payload["lock_boundary_validation"] = boundaryReceipt.DeepClone();
                 }
             }
             catch (Exception error) { primaryFailure = error; }
@@ -133,6 +178,7 @@ namespace Bimwright.Dwg.Plugin
                     ["retry_forbidden"] = true, ["primary_error"] = Bounded(primaryFailure?.Message, 1024),
                     ["release_error"] = Bounded(releaseFailure.Message, 512),
                     ["handler_receipt"] = handlerReturned ? Receipt(result) : null,
+                    ["lock_boundary_validation"] = boundaryReceipt,
                     ["revision_diagnostics"] = ReleaseDiagnostics(state, expectedRevision),
                     ["next_step"] = "Inspect current drawing and the handler receipt; do not automatically repeat this mutation."
                 };

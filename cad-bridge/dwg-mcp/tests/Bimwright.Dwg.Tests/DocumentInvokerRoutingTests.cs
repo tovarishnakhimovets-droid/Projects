@@ -17,6 +17,7 @@ namespace Bimwright.Dwg.Tests
 
         public DocumentInvokerRoutingTests()
         {
+            AssocNetworkSnapshot.Reset();
             DrawingRevision.Shutdown();
             Application.DocumentManagerReadError = null;
             Application.DocumentManager.ResetDocuments();
@@ -30,6 +31,7 @@ namespace Bimwright.Dwg.Tests
         public void Dispose()
         {
             DocumentInvoker.Shutdown();
+            AssocNetworkSnapshot.Reset();
             DrawingRevision.Shutdown();
             DocumentRouting.ResolveOverride = null;
             Application.DocumentManager.ResetDocuments();
@@ -176,9 +178,10 @@ namespace Bimwright.Dwg.Tests
             var parameters = GuardedRequest(command, state);
             active.OnLockAcquired = () =>
             {
+                if (active.LastLockMode == DocumentLockMode.Read) return;
                 for (int i = 0; i < 3; i++) active.Database.Raise("modified", new Entity());
             };
-            active.OnLockReleased = () => active.Database.Raise("modified", new Entity());
+            active.OnLockReleased = () => { if (active.LastLockMode != DocumentLockMode.Read) active.Database.Raise("modified", new Entity()); };
             var calls = 0;
             var error = Assert.Throws<InvalidOperationException>(() =>
                 DocumentInvoker.Invoke(command, null, doc => ++calls, parameters));
@@ -256,6 +259,7 @@ namespace Bimwright.Dwg.Tests
             var parameters = GuardedRequest(command, state);
             active.OnLockAcquired = () =>
             {
+                if (active.LastLockMode == DocumentLockMode.Read) return;
                 active.Database.Raise("modified", new Entity());
                 throw new InvalidOperationException("native lock failed");
             };
@@ -276,8 +280,8 @@ namespace Bimwright.Dwg.Tests
         {
             var state = DrawingRevision.For(active);
             var parameters = GuardedRequest(command, state);
-            active.OnLockAcquired = () => active.Database.Raise("modified", new Entity());
-            active.OnLockReleased = () => throw new InvalidOperationException("release failed");
+            active.OnLockAcquired = () => { if (active.LastLockMode != DocumentLockMode.Read) active.Database.Raise("modified", new Entity()); };
+            active.OnLockReleased = () => { if (active.LastLockMode != DocumentLockMode.Read) throw new InvalidOperationException("release failed"); };
             var calls = 0;
             var error = Assert.Throws<InvalidOperationException>(() =>
                 DocumentInvoker.Invoke(command, null, doc => ++calls, parameters));
@@ -298,7 +302,7 @@ namespace Bimwright.Dwg.Tests
         {
             var state = DrawingRevision.For(active);
             var parameters = GuardedRequest(command, state);
-            active.OnLockReleased = () => throw new InvalidOperationException("release failed after commit");
+            active.OnLockReleased = () => { if (active.LastLockMode != DocumentLockMode.Read) throw new InvalidOperationException("release failed after commit"); };
             var calls = 0;
             var error = Assert.Throws<InvalidOperationException>(() => DocumentInvoker.Invoke(command, null, doc =>
             {
@@ -332,7 +336,7 @@ namespace Bimwright.Dwg.Tests
             var state = DrawingRevision.For(active);
             var parameters = GuardedRequest(command, state);
             var primary = new InvalidOperationException("native handler failed");
-            active.OnLockReleased = () => throw new InvalidOperationException("release also failed");
+            active.OnLockReleased = () => { if (active.LastLockMode != DocumentLockMode.Read) throw new InvalidOperationException("release also failed"); };
             var error = Assert.Throws<InvalidOperationException>(() =>
                 DocumentInvoker.Invoke<CommandResult>(command, null, doc => throw primary, parameters));
             var diagnostic = ReleaseDiagnostic(error);
@@ -350,7 +354,7 @@ namespace Bimwright.Dwg.Tests
         {
             var state = DrawingRevision.For(active);
             var parameters = GuardedRequest(command, state);
-            active.OnLockReleased = () => throw new InvalidOperationException("release failed");
+            active.OnLockReleased = () => { if (active.LastLockMode != DocumentLockMode.Read) throw new InvalidOperationException("release failed"); };
             var error = Assert.Throws<InvalidOperationException>(() => DocumentInvoker.Invoke(command, null, doc =>
                 new CommandResult { Ok = false, Error = "preflight failed", Result = active }, parameters));
             var diagnostic = ReleaseDiagnostic(error);
@@ -360,6 +364,160 @@ namespace Bimwright.Dwg.Tests
             Assert.True(diagnostic.Value<bool>("handler_returned")); Assert.True(diagnostic.Value<bool>("execution_unknown"));
             Assert.Equal(0, active.NativeGetterReads); Assert.Equal(0, active.LockDepth);
         }
+
+        [Theory]
+        [InlineData("manage_xrefs")]
+        [InlineData("explode_blocks")]
+        public void EqualNativeNetworkRefreshesOnlyPrivateRevisionAndKeepsRawCounter(string command)
+        {
+            var state = DrawingRevision.For(active);
+            var parameters = GuardedRequest(command, state);
+            var original = parameters.DeepClone();
+            SetNetworkLockNotifications();
+            AssocNetworkSnapshot.OnMatches = (doc, handles) =>
+            {
+                Assert.Equal(new[] { "A1" }, handles);
+                Assert.Equal(DocumentLockMode.Write, doc.LastLockMode);
+                return null;
+            };
+            var result = DocumentInvoker.InvokeWithParameters(command, null, (doc, effective) =>
+            {
+                Assert.NotSame(parameters, effective);
+                var expected = original.DeepClone();
+                if (command == "manage_xrefs") expected["expected_xref"]["document_revision"] = 1;
+                else expected["expected_revision"] = 1;
+                Assert.True(JToken.DeepEquals(expected, effective));
+                Assert.Equal(1, state.Revision);
+                Assert.Equal(1, doc.LockDepth);
+                return CommandResult.Success(new JObject { ["completed"] = true });
+            }, parameters);
+            Assert.True(JToken.DeepEquals(original, parameters));
+            Assert.Equal(3, state.Revision);
+            Assert.Equal(0, active.LockDepth);
+            var proof = ((JObject)result.Result)["lock_boundary_validation"];
+            Assert.True(proof.Value<bool>("persisted_network_state_equal"));
+            Assert.Equal(0, proof.Value<long>("source_revision"));
+            Assert.Equal(1, proof.Value<long>("acquired_revision"));
+            Assert.Equal(3, ((JArray)state.DiagnosticsSince(0)["events"]).Count);
+        }
+
+        [Theory]
+        [InlineData("hash_changed")]
+        [InlineData("snapshot_missing")]
+        [InlineData("after_capture_event")]
+        [InlineData("child_changed")]
+        public void UnprovenNetworkBoundaryNeverRefreshesInputOrInvokesHandler(string failure)
+        {
+            var state = DrawingRevision.For(active);
+            var parameters = GuardedRequest("manage_xrefs", state);
+            var original = parameters.DeepClone();
+            SetNetworkLockNotifications();
+            if (failure == "hash_changed") AssocNetworkSnapshot.OnMatches = (_, __) => "network bytes changed";
+            if (failure == "snapshot_missing") AssocNetworkSnapshot.OnCapture = _ => throw new InvalidOperationException("unsupported filer operation");
+            if (failure == "after_capture_event") AssocNetworkSnapshot.OnMatches = (_, __) =>
+            { active.Database.Raise("modified", new AssocNetwork { Handle = new Handle(0xA1), IsModified = false }); return null; };
+            if (failure == "child_changed") active.OnLockAcquired = () =>
+            {
+                if (active.LastLockMode == DocumentLockMode.Read) return;
+                NetworkModified();
+                active.Database.Raise("modified", new Entity());
+            };
+            int calls = 0;
+            var error = Assert.Throws<InvalidOperationException>(() => DocumentInvoker.InvokeWithParameters("manage_xrefs", null,
+                (doc, effective) => ++calls, parameters));
+            Assert.Contains("after_write_lock", error.Message);
+            Assert.Equal(0, calls);
+            Assert.True(JToken.DeepEquals(original, parameters));
+            Assert.Equal(0, active.LockDepth);
+        }
+
+        [Fact]
+        public void SnapshotReadEventsInvalidateBeforeAnyWriteLock()
+        {
+            var state = DrawingRevision.For(active);
+            var parameters = GuardedRequest("manage_xrefs", state);
+            AssocNetworkSnapshot.OnCapture = doc => doc.Database.Raise("modified", new Entity());
+            int calls = 0;
+            var error = Assert.Throws<InvalidOperationException>(() => DocumentInvoker.InvokeWithParameters("manage_xrefs", null,
+                (doc, effective) => ++calls, parameters));
+            Assert.Contains("before_write_lock", error.Message);
+            Assert.Equal(DocumentLockMode.Read, active.LastLockMode);
+            Assert.Equal(1, active.LockCount);
+            Assert.Equal(0, calls);
+            Assert.Equal(0, active.LockDepth);
+        }
+
+        [Fact]
+        public void VerifiedBoundaryStillRunsAllHandlerObjectExpectations()
+        {
+            var state = DrawingRevision.For(active);
+            var parameters = GuardedRequest("manage_xrefs", state);
+            SetNetworkLockNotifications();
+            var result = DocumentInvoker.InvokeWithParameters("manage_xrefs", null,
+                (doc, effective) => CommandResult.Fail("xref placement changed"), parameters);
+            Assert.False(result.Ok);
+            Assert.Equal("xref placement changed", result.Error);
+            Assert.Equal(3, state.Revision);
+        }
+
+        [Fact]
+        public void VerifiedBoundaryReleaseFailureRetainsProofAndNativeOutcome()
+        {
+            var state = DrawingRevision.For(active);
+            var parameters = GuardedRequest("manage_xrefs", state);
+            SetNetworkLockNotifications();
+            active.OnLockReleased = () =>
+            {
+                if (active.LastLockMode == DocumentLockMode.Read) return;
+                NetworkModified();
+                throw new InvalidOperationException("release failed");
+            };
+            var error = Assert.Throws<InvalidOperationException>(() => DocumentInvoker.InvokeWithParameters("manage_xrefs", null,
+                (doc, effective) => CommandResult.Success(new JObject { ["completed"] = true }), parameters));
+            var diagnostic = ReleaseDiagnostic(error);
+            Assert.True(diagnostic.Value<bool>("handler_returned"));
+            Assert.True(diagnostic["handler_receipt"]["result"].Value<bool>("completed"));
+            Assert.True(diagnostic["lock_boundary_validation"].Value<bool>("persisted_network_state_equal"));
+            Assert.Equal(0, active.LockDepth);
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void SnapshotReadLockFailureNeverAttemptsWriter(bool failRelease)
+        {
+            var state = DrawingRevision.For(active);
+            var parameters = GuardedRequest("manage_xrefs", state);
+            int writeLocks = 0;
+            active.OnLockAcquired = () =>
+            {
+                if (active.LastLockMode != DocumentLockMode.Read) { writeLocks++; return; }
+                if (!failRelease) throw new InvalidOperationException("read acquire failed");
+            };
+            active.OnLockReleased = () =>
+            {
+                if (failRelease && active.LastLockMode == DocumentLockMode.Read)
+                    throw new InvalidOperationException("read release failed");
+            };
+            int calls = 0;
+            Assert.Throws<InvalidOperationException>(() => DocumentInvoker.InvokeWithParameters("manage_xrefs", null,
+                (doc, effective) => ++calls, parameters));
+            Assert.Equal(0, calls);
+            Assert.Equal(0, writeLocks);
+            Assert.Equal(0, active.LockDepth);
+        }
+
+        private void SetNetworkLockNotifications()
+        {
+            active.OnLockAcquired = () => { if (active.LastLockMode != DocumentLockMode.Read) NetworkModified(); };
+            active.OnLockReleased = () =>
+            {
+                if (active.LastLockMode == DocumentLockMode.Read) return;
+                NetworkModified(); NetworkModified();
+            };
+        }
+        private void NetworkModified() => active.Database.Raise("modified",
+            new AssocNetwork { Handle = new Handle(0xA1), IsModified = false });
 
         private static JObject ReleaseDiagnostic(InvalidOperationException error)
         {

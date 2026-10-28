@@ -66,6 +66,12 @@ namespace Autodesk.AutoCAD.ApplicationServices
         }
         public IDisposable LockDocument()
         {
+            LastLockMode = DocumentLockMode.Write;
+            LastLockPrompt = null;
+            return AcquireLock();
+        }
+        private IDisposable AcquireLock()
+        {
             if (LockError != null) throw LockError;
             LockCount++;
             LockDepth++;
@@ -84,7 +90,7 @@ namespace Autodesk.AutoCAD.ApplicationServices
         {
             LastLockMode = mode;
             LastLockPrompt = promptIfFails;
-            return LockDocument();
+            return AcquireLock();
         }
         private sealed class DocumentLock : IDisposable
         {
