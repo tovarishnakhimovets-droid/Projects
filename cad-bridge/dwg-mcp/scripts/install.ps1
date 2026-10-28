@@ -131,7 +131,7 @@ if ($manifestPath -and (Test-Path $manifestPath)) {
         throw ("[setup] could not parse manifest.json: {0}" -f $_.Exception.Message)
     }
 }
-if ($setupVersion -notmatch '^v?\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?$' -and $setupVersion -ne 'dev') {
+if ($setupVersion -notmatch '^v?\d+(?:\.\d+){0,2}(?:[-+][A-Za-z0-9.-]+)?$' -and $setupVersion -ne 'dev') {
     throw '[setup] Invalid version in manifest.json.'
 }
 

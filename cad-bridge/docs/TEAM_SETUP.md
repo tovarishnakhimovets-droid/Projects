@@ -177,17 +177,20 @@ git pull --ff-only origin develop
 того же кода не повторяем без причины. Для одной правки документации новый
 установщик не нужен.
 
-**2. Собрать новую версию.** Пример номера — `2.0.1-team.4`; если он уже
-использован, выбрать следующий. Нужны SDK 8/10 и установленный AutoCAD 2027
+**2. Собрать новую версию.** Текущий выпуск — **v3**. Мелкие изменения —
+**v3.1, v3.2**, крупные — **v4, v5**. Метки team/rc не используем;
+готовый выпуск не перезаписываем. Нужны SDK 8/10 и установленный AutoCAD 2027
 для ссылок при сборке плагина. Можно поручить саму сборку Codex:
 
 ```powershell
 Set-Location 'D:\CAD-Automation\team\Projects\cad-bridge'
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\package-team-dwg.ps1 -Version 2.0.1-team.4
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\package-team-dwg.ps1 -Version 3
 ```
 
-`-Version` задаёт новый номер. Готовый ZIP появится в
-`cad-bridge/releases/2.0.1-team.4/`; он содержит сервер и оба плагина.
+`-Version` задаёт номер, например `3` или `3.1`. Готовый ZIP
+`DwgMcp.Setup-v3-win-x64.zip` появится в `cad-bridge/releases/3/`;
+он содержит сервер и оба плагина. Внутреннее числовое поле Autodesk/.NET
+может показывать `3.0.0`; это тот же v3.
 
 **3. Разместить на NAS.** Один раз распаковать ZIP в **новую папку версии**.
 Внутри должны быть `install.ps1`, `setup-codex.ps1`, `manifest.json`, `bundle/`

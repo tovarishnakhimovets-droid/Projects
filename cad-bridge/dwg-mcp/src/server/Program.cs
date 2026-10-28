@@ -45,11 +45,19 @@ namespace Bimwright.Dwg.Server
             {
                 Name = "dwg-mcp",
                 Title = "DWG MCP",
-                Version = "2.0.1",
+                Version = ReleaseVersion(),
                 Description = "Model Context Protocol gateway for Autodesk AutoCAD DWG workflows",
                 WebsiteUrl = "https://github.com/bimwright/dwg-mcp"
             };
             opts.ServerInstructions = ServerInstructionsText;
+        }
+
+        private static string ReleaseVersion()
+        {
+            var version = typeof(Program).Assembly.GetName().Version;
+            return version.Minor == 0
+                ? version.Major.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                : version.ToString(2);
         }
 
         private const string ServerInstructionsText =

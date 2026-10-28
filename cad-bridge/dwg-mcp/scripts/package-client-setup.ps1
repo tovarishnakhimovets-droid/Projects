@@ -54,6 +54,13 @@ if (-not $Version) {
     $Version = ((Get-Content -Raw -Path $serverJsonPath) | ConvertFrom-Json).version
 }
 if (-not $Version) { throw 'Pass -Version or set server.json version.' }
+if ($Version -notmatch '^v?\d+(?:\.\d+){0,2}(?:[-+][A-Za-z0-9.-]+)?$') {
+    throw 'Invalid package version.'
+}
+# Keep the short package name; Autodesk/MSBuild use its three-part numeric form.
+# Legacy package suffixes remain readable but do not become assembly metadata.
+$assemblyVersion = (($Version -replace '^v', '') -split '[-+]')[0]
+while ($assemblyVersion.Split('.').Count -lt 3) { $assemblyVersion += '.0' }
 
 $displayVersion = if ($Version.StartsWith('v')) { $Version } else { "v$Version" }
 $stageRoot = Join-Path $OutputDir 'stage'
@@ -75,7 +82,7 @@ New-Item -ItemType Directory -Path $serverStage, $contentsStage -Force | Out-Nul
 Write-Host "=== dwg-mcp package-client-setup ($displayVersion) ==="
 
 $serverProject = Join-Path $RepoRoot 'src\server\Bimwright.Dwg.Server.csproj'
-& dotnet publish $serverProject -c $Config -r win-x64 --self-contained true /p:PublishSingleFile=true -o $serverStage
+& dotnet publish $serverProject -c $Config -r win-x64 --self-contained true /p:PublishSingleFile=true "-p:Version=$assemblyVersion" -o $serverStage
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed: $LASTEXITCODE" }
 
 $published = Join-Path $serverStage 'Bimwright.Dwg.Server.exe'
@@ -101,7 +108,7 @@ foreach ($y in $yearSpecs) {
     $outDir = Join-Path $OutputDir ("plugin-build\{0}" -f $y.Year)
     $referenceArgs = @()
     if ($y.Year -eq 2026 -and $UseAutoCad2026NuGetRefs) { $referenceArgs = @('-p:UseAutoCadNuGetRefs=true') }
-    & dotnet build $csproj -c $Config --nologo -v q "-p:OutputPath=$outDir\" -p:CopyLocalLockFileAssemblies=true @referenceArgs
+    & dotnet build $csproj -c $Config --nologo -v q "-p:OutputPath=$outDir\" -p:CopyLocalLockFileAssemblies=true "-p:Version=$assemblyVersion" @referenceArgs
     if ($LASTEXITCODE -ne 0) {
         if ($Years) { throw "Requested AutoCAD $($y.Year) plugin build failed: $LASTEXITCODE" }
         Write-Warning "Skipping AutoCAD $($y.Year) (SDK/refs missing or build failed)."
@@ -124,7 +131,7 @@ if ($packedYears.Count -eq 0) { throw 'No AutoCAD plugin years compiled. Cannot 
 
 $templatePath = Join-Path $RepoRoot 'scripts\PackageContents.xml'
 [xml]$manifestXml = Get-Content -Raw $templatePath
-$manifestXml.ApplicationPackage.AppVersion = (($Version -replace '^v', '') -split '[-+]')[0]
+$manifestXml.ApplicationPackage.AppVersion = $assemblyVersion
 $toRemove = @()
 foreach ($comp in @($manifestXml.ApplicationPackage.Components)) {
     $mod = [string]$comp.ComponentEntry.ModuleName

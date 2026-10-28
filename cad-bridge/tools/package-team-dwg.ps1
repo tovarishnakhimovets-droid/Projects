@@ -1,8 +1,9 @@
 #Requires -Version 5.1
 [CmdletBinding()]
-param([Parameter(Mandatory = $true)][ValidatePattern('^\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?$')][string]$Version, [string]$OutputDir,
+param([Parameter(Mandatory = $true)][ValidatePattern('^v?[1-9]\d*(?:\.(?:0|[1-9]\d*))?$')][string]$Version, [string]$OutputDir,
       [ValidateSet(2026, 2027)][int[]]$Years = @(2026, 2027), [switch]$FinalizeOnly, [switch]$AllowDirty)
 $ErrorActionPreference = 'Stop'
+$Version = $Version -replace '^v', ''
 $root = [IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
 $repo = Join-Path $root 'dwg-mcp'
 if (-not $OutputDir) { $OutputDir = Join-Path $root "releases\$Version" }
@@ -62,7 +63,7 @@ $manifest.dirty = [bool]$packageDirty
 Copy-Item -LiteralPath (Join-Path $extras 'INSTALL-RU.md'), (Join-Path $extras 'setup-codex.ps1') -Destination $stage
 Copy-Item -LiteralPath (Join-Path $repo 'LICENSE') -Destination (Join-Path $stage 'LICENSE')
 @"
-# DWG MCP - team release $Version
+# DWG MCP v$Version
 
 Start with [INSTALL-RU.md](INSTALL-RU.md).
 Package contents, AutoCAD years, source commit and file SHA256 hashes: [manifest.json](manifest.json).
@@ -76,11 +77,8 @@ Copy-Item -LiteralPath $runtimeDocPaths -Destination $runtimeDocs -Force
 $changes = Join-Path $runtimeDocs 'changes'
 New-Item -ItemType Directory -Path $changes -Force | Out-Null
 Get-ChildItem -LiteralPath (Join-Path $root 'patches') -Filter 'dwg-mcp-*.patch' -File | Copy-Item -Destination $changes
-[ordered]@{ version = $Version; packedAutocadYears = @($manifest.packedAutocadYears); mcpVersion = '2.0.1' } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $stage 'server\bridge-docs\release.json') -Encoding UTF8
-[xml]$bundleXml = Get-Content -LiteralPath (Join-Path $stage 'bundle\PackageContents.xml') -Raw
-$bundleXml.ApplicationPackage.AppVersion = ($Version -split '[-+]')[0]
-$bundleXml.Save((Join-Path $stage 'bundle\PackageContents.xml'))
-$manifest | Add-Member -NotePropertyName distribution -NotePropertyValue 'CAD team; upstream MCP version remains 2.0.1' -Force
+[ordered]@{ version = $Version; packedAutocadYears = @($manifest.packedAutocadYears); mcpVersion = $Version } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $stage 'server\bridge-docs\release.json') -Encoding UTF8
+$manifest | Add-Member -NotePropertyName distribution -NotePropertyValue 'CAD bridge' -Force
 $manifest.files = @(Get-ChildItem -LiteralPath $stage -Recurse -File | Where-Object { $_.FullName -ne $manifestPath } | Sort-Object FullName | ForEach-Object {
     [ordered]@{ path = $_.FullName.Substring($stage.Length).TrimStart('\').Replace('\', '/'); sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant(); bytes = $_.Length }
 })
