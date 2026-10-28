@@ -60,6 +60,8 @@
     <Compile Include="..\shared\Cad\CreateHatchInput.cs" LinkBase="Shared\Cad" />
     <Compile Include="..\shared\Drawing\DrawingIdentityPolicy.cs" LinkBase="Shared\Drawing" />
     <Compile Include="..\shared\Blocks\BlockInspectionInput.cs" LinkBase="Shared\Blocks" />
+    <Compile Include="..\shared\Blocks\BlockExplodeInput.cs" LinkBase="Shared\Blocks" />
+    <Compile Include="..\shared\Xrefs\XrefInput.cs" LinkBase="Shared\Xrefs" />
     <Compile Include="..\shared\Blocks\BlockVariantInput.cs" LinkBase="Shared\Blocks" />
     <Compile Include="..\shared\Blocks\BlockAngleInput.cs" LinkBase="Shared\Blocks" />
     <Compile Include="..\shared\Blocks\NumericAngleTextPolicy.cs" LinkBase="Shared\Blocks" />

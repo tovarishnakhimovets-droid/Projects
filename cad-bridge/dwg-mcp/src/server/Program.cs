@@ -108,6 +108,8 @@ Read fresh selection/entity data before text writeback. Collapse/rewrite require
                 toolTypes.Add(typeof(GeneralSettingsQueryTools));
                 toolTypes.Add(typeof(TextQueryTools));
                 toolTypes.Add(typeof(BlockInspectionTools));
+                toolTypes.Add(typeof(XrefQueryTools));
+                toolTypes.Add(typeof(BlockExplodeQueryTools));
                 toolTypes.Add(typeof(ProxyTools));
             }
             if (enabled.Contains("modify") && !readOnly)
@@ -121,6 +123,8 @@ Read fresh selection/entity data before text writeback. Collapse/rewrite require
                 toolTypes.Add(typeof(PolylineTools));
                 toolTypes.Add(typeof(LeaderTools));
                 toolTypes.Add(typeof(BlockVariantTools));
+                toolTypes.Add(typeof(XrefWriteTools));
+                toolTypes.Add(typeof(BlockExplodeWriteTools));
             }
             if (enabled.Contains("meta"))
             {
@@ -177,6 +181,10 @@ Read fresh selection/entity data before text writeback. Collapse/rewrite require
             if (toolType == typeof(GeneralSettingsWriteTools)) return mcp.WithTools<GeneralSettingsWriteTools>();
             if (toolType == typeof(TextQueryTools)) return mcp.WithTools<TextQueryTools>();
             if (toolType == typeof(BlockInspectionTools)) return mcp.WithTools<BlockInspectionTools>();
+            if (toolType == typeof(XrefQueryTools)) return mcp.WithTools<XrefQueryTools>();
+            if (toolType == typeof(XrefWriteTools)) return mcp.WithTools<XrefWriteTools>();
+            if (toolType == typeof(BlockExplodeQueryTools)) return mcp.WithTools<BlockExplodeQueryTools>();
+            if (toolType == typeof(BlockExplodeWriteTools)) return mcp.WithTools<BlockExplodeWriteTools>();
             if (toolType == typeof(BlockVariantTools)) return mcp.WithTools<BlockVariantTools>();
             if (toolType == typeof(TextCreationTools)) return mcp.WithTools<TextCreationTools>();
             if (toolType == typeof(EntityBatchTools)) return mcp.WithTools<EntityBatchTools>();

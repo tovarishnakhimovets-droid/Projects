@@ -20,10 +20,10 @@ namespace Bimwright.Dwg.Tests
         {
             var profiles = new[]
             {
-                ("query,modify,drawing,view", false, 72),
-                ("query,modify,drawing,view,annotation", false, 72),
-                ("query,modify,drawing,view", true, 29),
-                ("query", false, 20), ("modify", false, 33),
+                ("query,modify,drawing,view", false, 76),
+                ("query,modify,drawing,view,annotation", false, 76),
+                ("query,modify,drawing,view", true, 31),
+                ("query", false, 22), ("modify", false, 35),
                 ("drawing", false, 14), ("annotation", false, 5),
                 ("drawing,annotation", false, 14),
                 ("drawing", true, 4), ("annotation", true, 1)
@@ -93,6 +93,10 @@ namespace Bimwright.Dwg.Tests
             Assert.Equal(enabled.Contains("query"), names.Contains("dwg_get_selection", StringComparer.Ordinal));
             Assert.Equal(enabled.Contains("query"), names.Contains("dwg_list_documents", StringComparer.Ordinal));
             Assert.Equal(enabled.Contains("query"), names.Contains("dwg_use_document", StringComparer.Ordinal));
+            Assert.Equal(enabled.Contains("query"), names.Contains("dwg_list_xrefs", StringComparer.Ordinal));
+            Assert.Equal(enabled.Contains("query"), names.Contains("dwg_plan_block_explode", StringComparer.Ordinal));
+            Assert.Equal(!readOnly && enabled.Contains("modify"), names.Contains("dwg_manage_xrefs", StringComparer.Ordinal));
+            Assert.Equal(!readOnly && enabled.Contains("modify"), names.Contains("dwg_explode_blocks", StringComparer.Ordinal));
             if (enabled.Contains("query"))
             {
                 var selection = Assert.Single(tools, value => value.ProtocolTool.Name == "dwg_get_selection").ProtocolTool;

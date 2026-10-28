@@ -42,12 +42,14 @@ namespace Bimwright.Dwg.Tests
         [Fact]
         public void ExplodeBlockHandlerKeepsCleanupOwnershipUntilTransactionOwnsEntity()
         {
-            var source = ReadSharedSource("Handlers", "Blocks", "BlockHandlers.cs");
+            var legacy = ReadSharedSource("Handlers", "Blocks", "BlockHandlers.cs");
+            Assert.Contains("=> BlockExplodeService.AppendExploded(tx, blockReference);", legacy, StringComparison.Ordinal);
+            var source = ReadSharedSource("Blocks", "BlockExplodeService.cs");
 
             var appendIndex = source.IndexOf("owner.AppendEntity(entity);", StringComparison.Ordinal);
             var addNewIndex = source.IndexOf("tx.AddNewlyCreatedDBObject(entity, true);", StringComparison.Ordinal);
-            var cleanupReleaseIndex = source.IndexOf("unappended.Remove(entity);", StringComparison.Ordinal);
-            var handleIndex = source.IndexOf("createdHandles.Add(entity.Handle.ToString());", StringComparison.Ordinal);
+            var cleanupReleaseIndex = source.IndexOf("resident.Add(entity);", StringComparison.Ordinal);
+            var handleIndex = source.IndexOf("handles.Add(entity.Handle.ToString());", StringComparison.Ordinal);
 
             Assert.True(appendIndex >= 0, "ExplodeBlockHandler must append exploded entities to the source owner.");
             Assert.True(addNewIndex > appendIndex, "ExplodeBlockHandler must register the appended entity with the transaction after append.");

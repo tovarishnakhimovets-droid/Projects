@@ -1157,3 +1157,76 @@ native MLeader.TextLocation: при правой посадке он может 
 [SetDogleg](https://help.autodesk.com/cloudhelp/2026/ENU/OARX-ManagedRefGuide/files/OARX-ManagedRefGuide-Autodesk_AutoCAD_DatabaseServices_MLeader_SetDogleg_int_Vector3d.html),
 [SetLastVertex](https://help.autodesk.com/cloudhelp/2026/ENU/OARX-ManagedRefGuide/files/OARX-ManagedRefGuide-Autodesk_AutoCAD_DatabaseServices_MLeader_SetLastVertex_int_Point3d.html)
 и GetContentGeomExtents; расположение и устранение пересечений выбирает вызывающий.
+
+## Внешние ссылки и раскрытие блоков
+
+Общие typed-операции доступны в `query` (`dwg_list_xrefs`,
+`dwg_plan_block_explode`) и `modify` (`dwg_manage_xrefs`,
+`dwg_explode_blocks`). Все четыре требуют активной вкладки; reader работает
+под read lock. Ни одна операция не сохраняет DWG и не меняет исходные файлы
+внешних ссылок. Установка и загрузка нового плагина выполняются по TEAM_SETUP.
+
+### Инвентаризация и управление Xref
+
+`dwg_list_xrefs` читает native-граф внешних ссылок, их определения, пути,
+состояния, родителей и прямые вставки с преобразованиями и подрезками.
+Пара `expected_document`/`expected_fingerprint` необязательна, но передаётся
+только совместно. `max_xrefs` ограничен 1–512, `max_entities` — 0–100000;
+ноль отключает сводку содержимого для быстрого повторного чтения metadata.
+Общий предел — 10000 описаний вставок, 10 секунд между native-вызовами и
+2 MiB ответа. Проверять `metadata_complete`, `counts_complete`, `complete`
+и ошибки отдельно. Сводка считает прямые объекты определений: отсутствие
+прямого HATCH не доказывает отсутствие поверхностей во вложенных блоках.
+Недоступные записи графа приводят к неполному metadata-ответу и запрещают
+запись; инструмент не загружает и не исправляет отсутствующие источники.
+
+`dwg_manage_xrefs` принимает полный путь/fingerprint DWG, `action` (`bind`
+или `detach`) и typed `expected_xref` из свежей инвентаризации. Одна корневая
+ссылка за вызов. Snapshot включает имя/путь/состояние и hashes полного графа,
+вставок, преобразований и подрезок, а также session/revision DWG. Любая правка
+чертежа требует нового чтения. Вложенную ссылку напрямую менять нельзя;
+вставки должны находиться в местных model/paper layout и на открытых для
+изменения слоях. Завершить активную команду AutoCAD до вызова.
+
+По умолчанию `dry_run=true`: выполняется только проверка. Для внедрения
+нужны resolved/loaded узлы всего текущего графа (включая посторонние); native `BindXrefs(..., false)` сохраняет
+различия имён зависимых символов, insert-style слияние имён не предлагается.
+Для `detach` проверяется удаление определения и всех его исходных вставок;
+для `bind` — местное определение и сохранение размещения/подрезок вставок.
+Не обещаются общая атомарность native binding, отмена его по таймауту или
+проверенное single-Undo. При неопределённом результате сначала прочитать
+текущее состояние; автоматический повтор записи запрещён.
+
+### Раскрытие местных блоков на один уровень
+
+`dwg_plan_block_explode` принимает обязательные `expected_document`,
+`expected_fingerprint`, `handles` (1–100) и необязательный `max_entities`
+(1–20000, по умолчанию 20000). Возвращает `drawing_session`,
+`drawing_revision`, точные `snapshots`, число и типы прямых объектов.
+Геометрия не конструируется и не выгружается целиком.
+
+`dwg_explode_blocks` принимает те же identity и limit, session/revision как
+`expected_session`/`expected_revision`, snapshots как `expected_snapshots`.
+По умолчанию `dry_run=true`, без вызова `Entity.Explode` и write-open.
+Реальная запись раскрывает только переданные обычные model-space вставки
+на один уровень; HATCH сохраняются как HATCH, вложенные вставки остаются
+блоками. Для следующего уровня требуется новый явный план.
+
+Первая версия отклоняет внешние/зависимые определения, dynamic/annotative,
+атрибуты, extension dictionaries/XCLIP, XData/reactors, заблокированные слои,
+запрещённое раскрытие и неположительный/неравномерный масштаб. Не удалять
+эти данные ради прохождения проверки. Число и типы native-выхода сверяются
+с планом; все новые объекты сначала добавляются владельцу и транзакции,
+затем удаляются исходные вставки. Используется одна транзакция и 15-секундный
+кооперативный бюджет; один native Explode нельзя жёстко прервать.
+
+Native-положение, площади и отверстия штриховок, их ассоциативность,
+отображение ByBlock/слоя 0 и Undo проверяются после установки на отдельном
+тестовом DWG с явным разрешением. Офлайн-сборка и tools/list этого не доказывают.
+Старый opt-in `dwg_explode_block` сохраняет прежний контракт и использует
+тот же helper добавления native-выхода; для guarded-процесса применять новые
+plan/write инструменты.
+
+Первичные API: [BindXrefs](https://help.autodesk.com/cloudhelp/2026/ENU/OARX-ManagedRefGuide/files/OARX-ManagedRefGuide-Autodesk_AutoCAD_DatabaseServices_Database_BindXrefs_ObjectIdCollection__MarshalAsUnmanagedType_U1__bool.html),
+[native Explode](https://help.autodesk.com/cloudhelp/2027/ENU/OARX-DevGuide-Managed/files/GUID-A853CD73-58A9-4380-B8E2-B3451C94C46B.htm),
+[ограничения EXPLODE](https://help.autodesk.com/cloudhelp/2027/ENU/AutoCAD-Core/files/GUID-E98BCEF4-DED6-48A6-87EB-10FE87188083.htm).

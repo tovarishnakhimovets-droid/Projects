@@ -55,6 +55,7 @@ namespace Bimwright.Dwg.Tests
                 "dwg_erase_entities",
                 "dwg_erase_proxy_objects",
                 "dwg_explode_block",
+                "dwg_explode_blocks",
                 "dwg_export_dxf",
                 "dwg_get_block_attributes",
                 "dwg_get_crosshair_settings",
@@ -81,11 +82,14 @@ namespace Bimwright.Dwg.Tests
                 "dwg_list_layouts",
                 "dwg_list_settings",
                 "dwg_list_text_styles",
+                "dwg_list_xrefs",
+                "dwg_manage_xrefs",
                 "dwg_match_properties",
                 "dwg_move_entities",
                 "dwg_move_network_endpoint",
                 "dwg_node_network",
                 "dwg_offset_entities",
+                "dwg_plan_block_explode",
                 "dwg_plot_pdf",
                 "dwg_purge_drawing",
                 "dwg_query_entities",
@@ -260,6 +264,8 @@ namespace Bimwright.Dwg.Tests
             Assert.Equal(new[]
             {
                 "BatchTools",
+                "BlockExplodeQueryTools",
+                "BlockExplodeWriteTools",
                 "BlockInspectionTools",
                 "BlockVariantTools",
                 "CodeTools",
@@ -280,7 +286,9 @@ namespace Bimwright.Dwg.Tests
                 "QueryTools",
                 "TableQueryTools",
                 "TextQueryTools",
-                "ViewTools"
+                "ViewTools",
+                "XrefQueryTools",
+                "XrefWriteTools"
             }, defaultTypeNames);
 
             var defaultReadOnlyTypeNames = InvokeToolTypeResolver(
@@ -289,6 +297,7 @@ namespace Bimwright.Dwg.Tests
                 readOnly: true);
             Assert.Equal(new[]
             {
+                "BlockExplodeQueryTools",
                 "BlockInspectionTools",
                 "CrosshairQueryTools",
                 "DocumentTools",
@@ -298,7 +307,8 @@ namespace Bimwright.Dwg.Tests
                 "QueryTools",
                 "TableQueryTools",
                 "TextQueryTools",
-                "ViewTools"
+                "ViewTools",
+                "XrefQueryTools"
             }, defaultReadOnlyTypeNames);
 
             var codeWriteTypeNames = InvokeToolTypeResolver(method, new[] { "code" }, readOnly: false);
