@@ -202,12 +202,14 @@ namespace Bimwright.Dwg.Plugin.Blocks
 
         private static void OnIdle(object sender, EventArgs args)
         {
-            HandleEvent("angle idle", () =>
+            RefreshContext attempted = null;
+            try
             {
                 if (busy || LispJobStore.Session.IsBusy) return;
                 var doc = documentManager?.MdiActiveDocument;
                 if (doc == null || !Documents.TryGetValue(doc, out var context) || context.Modified.Count == 0)
                 { UnhookIdle(); return; }
+                attempted = context;
                 if (context.Database.IsDisposed || doc.IsReadOnly)
                 { context.Before.Clear(); context.Modified.Clear(); UnhookIdle(); return; }
                 if (!doc.Editor.IsQuiescent) return;
@@ -244,7 +246,15 @@ namespace Bimwright.Dwg.Plugin.Blocks
                     }
                 }
                 finally { context.OwnWrites.Clear(); busy = false; }
-            });
+            }
+            catch (Exception error)
+            {
+                // Failed native preflight is also one attempt, not an Idle loop.
+                UnhookIdle();
+                attempted?.Before.Clear();
+                attempted?.Modified.Clear();
+                PluginLog.Error("angle idle", error);
+            }
         }
 
         private static void HandleEvent(string phase, Action work)

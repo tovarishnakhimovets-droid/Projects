@@ -134,6 +134,36 @@ namespace Bimwright.Dwg.Tests
             Assert.Equal(0, doc.LockCount);
         }
 
+        [Theory]
+        [InlineData("active")]
+        [InlineData("readonly")]
+        [InlineData("quiescent")]
+        public void Native_preflight_exception_unhooks_idle_until_a_new_object_event(string phase)
+        {
+            var doc = ActiveDocument();
+            BlockAngleBindingService.Initialize();
+            var reference = Reference(doc);
+            Rotate(doc, reference);
+            var error = new InvalidOperationException("native preflight unavailable");
+            if (phase == "active") Documents.ActiveDocumentReadError = error;
+            if (phase == "readonly") doc.IsReadOnlyReadError = error;
+            if (phase == "quiescent") doc.Editor.QuiescenceReadError = error;
+            try { Assert.Null(Record.Exception(Application.RaiseIdle)); }
+            finally
+            {
+                Documents.ActiveDocumentReadError = null;
+                doc.IsReadOnlyReadError = null;
+                doc.Editor.QuiescenceReadError = null;
+            }
+            Assert.Equal(0, Application.IdleSubscribers);
+            for (var i = 0; i < 10; i++) Application.RaiseIdle();
+            Assert.Empty(BlockAngleBindingService.LifecycleRefreshedDocuments);
+            Rotate(doc, reference, 2);
+            Application.RaiseIdle();
+            Assert.Single(BlockAngleBindingService.LifecycleRefreshedDocuments);
+            Assert.Equal(0, Application.IdleSubscribers);
+        }
+
         [Fact]
         public void Initialize_attach_detach_and_shutdown_are_idempotent()
         {

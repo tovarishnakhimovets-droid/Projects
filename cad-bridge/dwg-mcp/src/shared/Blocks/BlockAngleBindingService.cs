@@ -188,10 +188,16 @@ namespace Bimwright.Dwg.Plugin.Blocks
                 RequireRefreshBudget(plan);
                 // Real derived writes still need native grip/Undo/Redo verification.
                 // Database Undo is never disabled; UpgradeOpen itself may start filing.
+                // Attribute setters can synchronously notify their parent too.
+                // Suppress every target before the first native write/open.
+                foreach (var update in updates)
+                {
+                    context.OwnWrites.Add(update.Item1.ObjectId);
+                    context.OwnWrites.Add(update.Item3.ObjectId);
+                }
                 foreach (var update in updates)
                 {
                     var attribute = update.Item1;
-                    context.OwnWrites.Add(attribute.ObjectId);
                     attribute.UpgradeOpen();
                     attribute.DisableUndoRecording(true);
                     try { attribute.TextString = update.Item2; }
@@ -201,7 +207,6 @@ namespace Bimwright.Dwg.Plugin.Blocks
                 }
                 foreach (var parent in updates.Select(u => u.Item3).GroupBy(r => r.ObjectId).Select(g => g.First()))
                 {
-                    context.OwnWrites.Add(parent.ObjectId);
                     parent.UpgradeOpen();
                     parent.DisableUndoRecording(true);
                     try { parent.RecordGraphicsModified(true); }
