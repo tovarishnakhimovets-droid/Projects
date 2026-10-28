@@ -109,7 +109,9 @@ namespace Bimwright.Dwg.Plugin.Xrefs
                 ["metadata_complete"] = metadataComplete, ["counts_requested"] = maxEntities != 0,
                 ["counts_complete"] = maxEntities != 0 && state.CountsComplete,
                 ["complete"] = metadataComplete && (maxEntities == 0 || state.CountsComplete),
-                ["document_unchanged_during_read"] = unchanged, ["errors"] = state.Errors,
+                ["document_unchanged_during_read"] = unchanged,
+                ["revision_diagnostics"] = revision.DiagnosticsSince(Math.Max(0, startingRevision - 16)),
+                ["errors"] = state.Errors,
                 ["stop_reason"] = state.StopReason, ["max_xrefs"] = maxXrefs, ["max_entities"] = maxEntities,
                 ["references_scanned"] = state.ReferenceCount, ["entities_scanned"] = state.EntityCount,
                 ["budget_ms"] = XrefContract.BudgetMilliseconds, ["elapsed_ms"] = state.Watch.ElapsedMilliseconds,
@@ -234,7 +236,17 @@ namespace Bimwright.Dwg.Plugin.Xrefs
             if (!before.Value<bool>("metadata_complete")) return CommandResult.Fail("xref preflight inventory is incomplete (including any ghost/unavailable host records); inspect dwg_list_xrefs errors; no mutation was attempted");
             var row = ((JArray)before["xrefs"]).Cast<JObject>().SingleOrDefault(r => r.Value<string>("handle") == input.Handle);
             if (row == null || !XrefManageInput.Matches(input.ExpectedXref, row["expected_xref"] as JObject))
-                return CommandResult.Fail("expected xref metadata, graph, inserts, clipping or document revision changed; reread dwg_list_xrefs");
+            {
+                var actual = row?["expected_xref"] as JObject;
+                var changed = new JArray();
+                foreach (var field in input.ExpectedXref.Properties())
+                    if (!JToken.DeepEquals(field.Value, actual?[field.Name])) changed.Add(field.Name);
+                var details = new JObject { ["changed_fields"] = changed,
+                    ["expected_revision"] = input.ExpectedXref["document_revision"],
+                    ["actual_revision"] = actual?["document_revision"],
+                    ["revision_diagnostics"] = before["revision_diagnostics"] };
+                return CommandResult.Fail("expected xref guard changed; reread dwg_list_xrefs. " + details.ToString(Formatting.None));
+            }
             if (row.Value<bool>("is_nested")) return CommandResult.Fail("nested xrefs cannot be managed directly; select one root definition");
             var inserts = (JArray)row["inserts"];
             foreach (JObject insert in inserts)

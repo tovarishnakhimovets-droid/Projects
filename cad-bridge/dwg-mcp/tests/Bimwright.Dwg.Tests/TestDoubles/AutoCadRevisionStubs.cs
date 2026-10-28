@@ -9,12 +9,13 @@ namespace Autodesk.AutoCAD.DatabaseServices
     {
         public ObjectId ObjectId { get; set; }
         public ObjectId OwnerId { get; set; }
-        public bool IsModified { get; set; } = true;
-        public bool IsModifiedGraphics { get; set; }
-        public bool IsModifiedXData { get; set; }
-        public bool IsNewObject { get; set; }
-        public bool IsUndoing { get; set; }
-        public bool IsEraseStatusToggled { get; set; }
+        public virtual Handle Handle { get; set; }
+        public virtual bool IsModified { get; set; } = true;
+        public virtual bool IsModifiedGraphics { get; set; }
+        public virtual bool IsModifiedXData { get; set; }
+        public virtual bool IsNewObject { get; set; }
+        public virtual bool IsUndoing { get; set; }
+        public virtual bool IsEraseStatusToggled { get; set; }
     }
     public class Entity : DBObject { }
     public class BlockReference : Entity

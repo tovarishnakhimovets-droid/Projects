@@ -162,7 +162,7 @@ namespace Bimwright.Dwg.Plugin
                 else if (cmd == "use_document")
                     result = DocumentInvoker.InvokeApplication(() => ExecuteCommand(
                         DocumentRouting.Resolve(documentId, allowMissingActive: true), cmd, parameters));
-                else result = DocumentInvoker.Invoke(cmd, documentId, doc => ExecuteCommand(doc, cmd, parameters));
+                else result = DocumentInvoker.Invoke(cmd, documentId, doc => ExecuteCommand(doc, cmd, parameters), parameters);
 
                 string resultJson = null;
                 if (result.Ok)

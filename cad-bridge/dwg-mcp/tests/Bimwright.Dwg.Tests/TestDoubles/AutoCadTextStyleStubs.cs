@@ -38,7 +38,7 @@ namespace Autodesk.AutoCAD.DatabaseServices
     public class TextStyleTableRecord : DBObject
     {
         public string Name { get; set; }
-        public Handle Handle { get; set; }
+        public override Handle Handle { get; set; }
         public string FileName { get; set; }
         public string BigFontFileName { get; set; }
         public double TextSize { get; set; }

@@ -1230,3 +1230,33 @@ plan/write инструменты.
 Первичные API: [BindXrefs](https://help.autodesk.com/cloudhelp/2026/ENU/OARX-ManagedRefGuide/files/OARX-ManagedRefGuide-Autodesk_AutoCAD_DatabaseServices_Database_BindXrefs_ObjectIdCollection__MarshalAsUnmanagedType_U1__bool.html),
 [native Explode](https://help.autodesk.com/cloudhelp/2027/ENU/OARX-DevGuide-Managed/files/GUID-A853CD73-58A9-4380-B8E2-B3451C94C46B.htm),
 [ограничения EXPLODE](https://help.autodesk.com/cloudhelp/2027/ENU/AutoCAD-Core/files/GUID-E98BCEF4-DED6-48A6-87EB-10FE87188083.htm).
+### Блокировка dry-run и диагностика ревизии
+
+В подготовленном исправлении после v3.1 dispatcher передаёт параметры вызова
+в DocumentInvoker. Только manage_xrefs и explode_blocks с dry_run=true
+(включая значение по умолчанию) получают read lock. Реальная запись получает
+write lock лишь при явном native boolean false и после полного разбора входа.
+Активная вкладка по-прежнему обязательна; остальные команды не меняют режима.
+
+Для реальной записи session/revision проверяются до получения write lock
+и сразу после него. Если блокировка сама порождает события изменения, handler
+не вызывается: ошибка содержит фазу, ожидаемый и текущий счётчики, а также
+ограниченную диагностику событий. Эти события не объявляются безвредными,
+счётчик не компенсируется и защитное ожидание не заменяется текущим.
+
+DrawingRevision сохраняет прежние правила инвалидации. Диагностические записи
+содержат class/handle, вид события, доступные native flags и фазу. Чтение
+диагностики не открывает объекты и не меняет счётчики. Сбор сведений ограничен
+диагностическими фазами и бюджетом; пропуски обозначены явно. list_xrefs
+возвращает revision_diagnostics, а mismatch-error перечисляет changed_fields.
+
+Следующий native-прогон должен установить классы и флаги событий на фазах
+write_lock_acquire/write_command/write_lock_dispose. До этих данных нельзя
+игнорировать весь поток событий блокировки или прибавлять к ожиданию число
+из наблюдения. В v3.1 это изменение не внедрено; установленный пакет сам по
+себе не меняется от редактирования исходника.
+
+При ошибке освобождения write lock сохраняются исходное исключение и
+ограниченный receipt обработчика. Ответ явно сообщает handler_invoked/returned,
+execution_unknown и запрет автоматического повтора; большие payload и native
+объекты не сериализуются. Ошибка release не является доказательством отката.
