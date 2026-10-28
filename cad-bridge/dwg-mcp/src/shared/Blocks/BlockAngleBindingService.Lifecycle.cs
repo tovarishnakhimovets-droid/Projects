@@ -14,63 +14,75 @@ namespace Bimwright.Dwg.Plugin.Blocks
         private static readonly Stopwatch Clock = Stopwatch.StartNew();
         private const int RefreshBudgetMilliseconds = 500;
         private static DocumentCollection documentManager;
-        private static bool initialized, busy;
+        private static bool initialized, busy, idleHooked;
+
+        internal sealed class AngleSnapshot
+        {
+            internal double Rotation;
+            internal Dictionary<string, double> Angles;
+
+            internal bool SameAs(AngleSnapshot other) => other != null &&
+                Math.Abs(Rotation - other.Rotation) < 1e-9 && Angles.Count == other.Angles.Count &&
+                Angles.All(p => other.Angles.TryGetValue(p.Key, out var value) && Math.Abs(p.Value - value) < 1e-9);
+        }
 
         private sealed class RefreshContext
         {
             internal readonly Document Document;
-            // Retain the exact wrapper on which native handlers were registered.
             internal readonly Database Database;
-            internal readonly DeferredAngleRefreshState Queue = new DeferredAngleRefreshState();
-            internal HashSet<ObjectId> BoundReferences = new HashSet<ObjectId>();
-            internal HashSet<ObjectId> EvaluatedDefinitions = new HashSet<ObjectId>();
+            internal readonly Dictionary<ObjectId, AngleSnapshot> Before = new Dictionary<ObjectId, AngleSnapshot>();
+            internal readonly HashSet<ObjectId> Modified = new HashSet<ObjectId>();
             internal readonly HashSet<ObjectId> OwnWrites = new HashSet<ObjectId>();
-            private long revision;
+            internal string LastReportedReason;
+            private bool capturing;
 
             internal RefreshContext(Document document, Database database)
-            {
-                Document = document;
-                Database = database;
-            }
+            { Document = document; Database = database; }
 
-            internal void Notify(DeferredAngleRefreshNotification kind) => Queue.Notify(++revision, kind);
+            internal void ObjectOpened(object sender, ObjectEventArgs args)
+            {
+                HandleEvent("angle block opened", () =>
+                {
+                    var reference = args?.DBObject as BlockReference;
+                    if (reference == null || reference.ObjectId.IsNull || capturing ||
+                        OwnWrites.Contains(reference.ObjectId) || Before.ContainsKey(reference.ObjectId)) return;
+                    // Read only the object supplied by AutoCAD, before its write.
+                    // No transaction, owner lookup, binding scan or setter in a reactor.
+                    capturing = true;
+                    try
+                    {
+                        var snapshot = ReadAngleSnapshot(reference);
+                        if (snapshot != null) Before.Add(reference.ObjectId, snapshot);
+                    }
+                    finally { capturing = false; }
+                });
+            }
 
             internal void ObjectChanged(object sender, ObjectEventArgs args)
             {
-                HandleEvent("angle object modified", () =>
+                HandleEvent("angle block modified", () =>
                 {
-                    // Native callbacks only queue; never lock/open/write from here.
-                    var value = args?.DBObject;
-                    if (value == null || OwnWrites.Contains(value.ObjectId)) return;
-                    if (value is BlockReference && BoundReferences.Contains(value.ObjectId) ||
-                        (value is LineAngularDimension2 || value is Point3AngularDimension) &&
-                        EvaluatedDefinitions.Contains(value.OwnerId))
-                        Notify(DeferredAngleRefreshNotification.DimensionChange);
+                    var reference = args?.DBObject as BlockReference;
+                    if (reference == null || OwnWrites.Contains(reference.ObjectId) ||
+                        !Before.ContainsKey(reference.ObjectId)) return;
+                    Modified.Add(reference.ObjectId);
+                    ScheduleIdle();
                 });
             }
         }
 
-        private sealed class RefreshReadback
-        {
-            internal string Snapshot;
-            internal bool Wrote;
-        }
-
-        // Only IDs and managed values cross the read/write transaction boundary.
         private sealed class AttributeRefreshUpdate
         {
             internal ObjectId AttributeId, ReferenceId, DefinitionId;
             internal string Tag, OldText, NewText;
             internal JObject Binding, ExpectedAngles;
+            internal double ExpectedRotation;
         }
 
         private sealed class RefreshPlan
         {
             internal long StartedAt;
-            internal string Snapshot;
             internal readonly List<AttributeRefreshUpdate> Updates = new List<AttributeRefreshUpdate>();
-            internal HashSet<ObjectId> BoundReferences = new HashSet<ObjectId>();
-            internal HashSet<ObjectId> EvaluatedDefinitions = new HashSet<ObjectId>();
         }
 
         internal static void Initialize()
@@ -83,21 +95,16 @@ namespace Bimwright.Dwg.Plugin.Blocks
                 documentManager.DocumentCreated += OnCreated;
                 documentManager.DocumentActivated += OnActivated;
                 documentManager.DocumentToBeDestroyed += OnDestroyed;
-                Application.Idle += OnIdle;
                 foreach (Document doc in documentManager) Attach(doc);
                 initialized = true;
             }
-            catch
-            {
-                Shutdown();
-                throw;
-            }
+            catch { Shutdown(); throw; }
         }
 
         internal static void Shutdown()
         {
             initialized = false;
-            HandleEvent("angle idle unsubscribe", () => Application.Idle -= OnIdle);
+            UnhookIdle();
             var manager = documentManager;
             documentManager = null;
             if (manager != null)
@@ -111,7 +118,6 @@ namespace Bimwright.Dwg.Plugin.Blocks
 
         private static bool Attach(Document doc)
         {
-            // AutoCAD/Civil 3D activates the Start tab with Document == null.
             if (doc == null) return false;
             if (Documents.ContainsKey(doc)) return true;
             RefreshContext context = null;
@@ -123,9 +129,8 @@ namespace Bimwright.Dwg.Plugin.Blocks
                 doc.CommandEnded += OnCommand;
                 doc.CommandCancelled += OnCommand;
                 doc.CommandFailed += OnCommand;
+                database.ObjectOpenedForModify += context.ObjectOpened;
                 database.ObjectModified += context.ObjectChanged;
-                context.Notify(DeferredAngleRefreshNotification.ExternalChange);
-                // Publish only after every subscription succeeded.
                 Documents.Add(doc, context);
                 return true;
             }
@@ -142,6 +147,7 @@ namespace Bimwright.Dwg.Plugin.Blocks
             if (doc == null || !Documents.TryGetValue(doc, out var context)) return;
             Documents.Remove(doc);
             Unsubscribe(context);
+            if (!Documents.Values.Any(c => c.Modified.Count != 0)) UnhookIdle();
         }
 
         private static void Unsubscribe(RefreshContext context)
@@ -149,7 +155,8 @@ namespace Bimwright.Dwg.Plugin.Blocks
             HandleEvent("angle command-ended unsubscribe", () => context.Document.CommandEnded -= OnCommand);
             HandleEvent("angle command-cancelled unsubscribe", () => context.Document.CommandCancelled -= OnCommand);
             HandleEvent("angle command-failed unsubscribe", () => context.Document.CommandFailed -= OnCommand);
-            HandleEvent("angle database unsubscribe", () => context.Database.ObjectModified -= context.ObjectChanged);
+            HandleEvent("angle opened unsubscribe", () => context.Database.ObjectOpenedForModify -= context.ObjectOpened);
+            HandleEvent("angle modified unsubscribe", () => context.Database.ObjectModified -= context.ObjectChanged);
         }
 
         private static void OnCreated(object sender, DocumentCollectionEventArgs args)
@@ -160,8 +167,8 @@ namespace Bimwright.Dwg.Plugin.Blocks
             HandleEvent("angle document activated", () =>
             {
                 var doc = args?.Document;
-                if (Attach(doc) && Documents.TryGetValue(doc, out var context))
-                    context.Notify(DeferredAngleRefreshNotification.ExternalChange);
+                if (Attach(doc) && Documents.TryGetValue(doc, out var context) && context.Modified.Count != 0)
+                    ScheduleIdle();
             });
         }
 
@@ -173,82 +180,77 @@ namespace Bimwright.Dwg.Plugin.Blocks
             HandleEvent("angle command ended", () =>
             {
                 if (!(sender is Document doc) || !Documents.TryGetValue(doc, out var context)) return;
-                context.Notify(DeferredAngleRefreshNotification.ExternalChange);
-                // UNDO/REDO also raise this event. Never open a write transaction
-                // or acquire a write lock from inside their native callbacks.
+                foreach (var id in context.Before.Keys.Where(id => !context.Modified.Contains(id)).ToArray())
+                    context.Before.Remove(id);
+                if (context.Modified.Count != 0) ScheduleIdle();
             });
+        }
+
+        private static void ScheduleIdle()
+        {
+            if (idleHooked) return;
+            Application.Idle += OnIdle;
+            idleHooked = true;
+        }
+
+        private static void UnhookIdle()
+        {
+            if (!idleHooked) return;
+            HandleEvent("angle idle unsubscribe", () => Application.Idle -= OnIdle);
+            idleHooked = false;
         }
 
         private static void OnIdle(object sender, EventArgs args)
         {
             HandleEvent("angle idle", () =>
             {
+                if (busy || LispJobStore.Session.IsBusy) return;
                 var doc = documentManager?.MdiActiveDocument;
-                if (doc == null) return;
-                if (Attach(doc) && Documents.TryGetValue(doc, out var context)) RunPass(doc, context);
-            });
-        }
-
-        private static void RunPass(Document doc, RefreshContext context)
-        {
-            // Keep pending notifications while a tracked LISP owns the document.
-            if (busy || LispJobStore.Session.IsBusy) return;
-            DeferredAngleRefreshPass ticket = default;
-            bool began = false;
-            try
-            {
-                // Native getters can fail during document activation/destruction too.
-                if (doc == null || context.Database.IsDisposed || doc != documentManager?.MdiActiveDocument ||
-                    doc.IsReadOnly || !doc.Editor.IsQuiescent) return;
-                if (!context.Queue.TryBeginPass(Clock.ElapsedMilliseconds, out ticket)) return;
-                began = true;
+                if (doc == null || !Documents.TryGetValue(doc, out var context) || context.Modified.Count == 0)
+                { UnhookIdle(); return; }
+                if (context.Database.IsDisposed || doc.IsReadOnly)
+                { context.Before.Clear(); context.Modified.Clear(); UnhookIdle(); return; }
+                if (!doc.Editor.IsQuiescent) return;
+                // One deferred attempt for actual object events, never a periodic scan.
+                UnhookIdle();
+                var changed = context.Modified.ToDictionary(id => id, id => context.Before[id]);
+                context.Before.Clear();
+                context.Modified.Clear();
                 busy = true;
-                var plan = InspectRefresh(context);
-                var readback = new RefreshReadback { Snapshot = plan.Snapshot, Wrote = false };
-                if (plan.Updates.Count != 0)
+                try
                 {
-                    using (doc.LockDocument())
+                    var plan = InspectRefresh(context, changed);
+                    if (plan.Updates.Count != 0)
                     {
-                        if (context.Database.IsDisposed || doc != documentManager?.MdiActiveDocument ||
-                            doc.IsReadOnly || LispJobStore.Session.IsBusy)
-                            throw new InvalidOperationException("active drawing changed before angle attribute refresh");
-                        readback = ApplyRefresh(context, plan);
+                        using (doc.LockDocument())
+                        {
+                            if (context.Database.IsDisposed || doc != documentManager?.MdiActiveDocument ||
+                                doc.IsReadOnly || LispJobStore.Session.IsBusy)
+                                throw new InvalidOperationException("active drawing changed before angle attribute refresh");
+                            ApplyRefresh(context, plan);
+                        }
+                    }
+                    context.LastReportedReason = null;
+                }
+                catch (Exception error)
+                {
+                    PluginLog.Error("angle refresh", error);
+                    var reason = ErrorSanitizer.Sanitize(error.Message);
+                    if (context.LastReportedReason != reason)
+                    {
+                        context.LastReportedReason = reason;
+                        HandleEvent("angle status display", () => doc.Editor.WriteMessage(
+                            "\nBimwright: could not update rotated block attribute: " + reason));
                     }
                 }
-                context.BoundReferences = plan.BoundReferences;
-                context.EvaluatedDefinitions = plan.EvaluatedDefinitions;
-                // Complete only AFTER transactions/lock release and their native notifications.
-                var outcome = context.Queue.CompletePass(ticket, readback.Snapshot, readback.Wrote, Clock.ElapsedMilliseconds);
-                if (outcome == DeferredAngleRefreshOutcome.Exhausted || outcome == DeferredAngleRefreshOutcome.Failed)
-                    ReportStopped(doc, "native annotation did not settle within the bounded refresh passes");
-            }
-            catch (Exception error)
-            {
-                PluginLog.Error("angle refresh", error);
-                if (began && context.Queue.FailPass(ticket, true, Clock.ElapsedMilliseconds) == DeferredAngleRefreshOutcome.Exhausted)
-                    ReportStopped(doc, ErrorSanitizer.Sanitize(error.Message));
-            }
-            finally
-            {
-                if (began)
-                {
-                    context.OwnWrites.Clear();
-                    busy = false;
-                }
-            }
+                finally { context.OwnWrites.Clear(); busy = false; }
+            });
         }
 
         private static void HandleEvent(string phase, Action work)
         {
             try { work(); }
             catch (Exception error) { PluginLog.Error(phase, error); }
-        }
-
-        private static void ReportStopped(Document doc, string reason)
-        {
-            PluginLog.Debug("Angle attribute refresh stopped: " + reason);
-            HandleEvent("angle status display", () => doc?.Editor.WriteMessage(
-                "\nBimwright: angle attribute synchronization needs attention: " + reason));
         }
     }
 }

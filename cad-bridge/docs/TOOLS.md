@@ -475,7 +475,8 @@ The binding is a **plugin calculation**, not a native portable AutoCAD Field.
 There was no field in the source, and public managed API does not provide a
 verified mapping from a named property to the undocumented Field Parameter(n).
 Do not infer that index from the collection position. The plugin must be loaded
-for subsequent grip/command/Undo/Redo updates.
+for subsequent updates after that reference is rotated. Native grip and
+Undo/Redo event behavior still require a live check of the installed version.
 
 `dimension_display_degrees` reads exactly one supported direct angular Dimension
 from **reference.BlockTableRecord**, the CURRENT evaluated definition. The
@@ -503,30 +504,31 @@ symbol only in these legacy modes. They do NOT guarantee equality with the
 dimension's selected angular quadrant or display precision. The technical
 attribute tag is unchanged.
 
-Command-ended/cancelled/failed callbacks only queue a bounded refresh episode;
-they do not lock, open or write objects inside the native command callback.
-Idle performs all passes only for the active, quiescent, writable document.
-Database ObjectModified
-callbacks only queue watched bound references/current evaluated angular dimensions;
-they never open, evaluate or write objects. The retained database wrapper is
-unsubscribed when its document closes. Only explicitly owned attribute/parent
-writes are suppressed; a dimension event during lock release remains pending.
+The module listens only to writes of individual dynamic BlockReference objects.
+ObjectOpenedForModify captures that reference's previous rotation and named
+angular values from the event object; ObjectModified queues only that ID.
+Callbacks do not start transactions, look up owners/bindings or assign properties.
+A deferred callback runs once after the active document becomes quiescent.
+It compares the before/after angles and reads the binding only for an actually
+rotated reference. MOVE, colour and other non-angular changes stop before binding
+inspection. Only that reference's own attribute can be updated; other references
+of the same definition are not enumerated or refreshed.
 
-Each pass first scans with a read-only OpenCloseTransaction, without Commit or a
-document write lock. A current attribute therefore causes no write phase. Only
-pending changes acquire a document lock; IDs and managed values cross the
-transaction boundary. All affected objects, binding, old text, angles, layers
-and calculated output are reopened and revalidated before any UpgradeOpen.
-The apply phase also uses OpenCloseTransaction and commits actual changes.
-Completion occurs after releasing transactions/the lock and requires two identical
-read-only observations on separate callbacks. Raw angles, current evaluated
-definition/dimension identities and native measurement/display are included in a
-bounded SHA256 signature. A write or late dimension event resets stability.
-Six passes and 2000ms of active processing bound an episode; idle intervals are
-not charged. One pass has a cooperative 500 ms deadline, 10000 definitions,
-1000 references and 256 KiB snapshot bound. These do not interrupt blocked native
-calls. Native dirty notifications cannot continually renew an exhausted budget;
-a new external command starts a fresh episode. Exhaustion is reported.
+Opening/activating a document and unrelated commands do not scan anything.
+There is no BlockTable traversal, definition-count limit, startup refresh,
+dimension watcher or periodic/repeated stabilization pass. Idle is subscribed
+only while an object notification is pending, then unsubscribed after one
+attempt. Events for an inactive document wait for its activation without
+switching the user's tab. An error is logged and is not retried automatically;
+the same error message is suppressed until a successful later rotation.
+
+The deferred inspection uses a read-only OpenCloseTransaction without Commit
+or a document write lock. Only actual attribute changes acquire a write lock;
+IDs and managed values cross the transaction boundary. Binding, old attribute
+text, current angles/rotation and layers are revalidated before any UpgradeOpen.
+The apply phase uses OpenCloseTransaction and commits actual changes.
+A request is limited to 1000 changed references and a cooperative 500 ms
+deadline; these bounds do not interrupt blocked native calls.
 
 After changing an attribute, only its actual parent BlockReference is write-opened
 and RecordGraphicsModified(true) is called. This supplies AutoCAD's documented
