@@ -318,15 +318,57 @@ namespace Bimwright.Dwg.Plugin.Hatches
                 catch (Exception error) { throw new InvalidOperationException("local AppendLoop failed at loop " + i + " (" + boundaryIds[i].Count + " edges): " + error.Message, error); }
             }
             hatch.EvaluateHatch(true);
-            hatch.TransformBy(Matrix3d.Displacement(geometry.Origin - Point3d.Origin));
-            hatch.Origin = source.Origin;
-            // TransformBy transforms some XData coordinates too. This operation
-            // preserves source metadata, not metadata translated a second time.
-            using (var xdata = source.XData) if (xdata != null) hatch.XData = xdata;
-            Need(!hatch.Associative && hatch.NumberOfLoops == boundaryIds.Count, "rebuilt hatch loop count or association changed");
-            Need(JToken.DeepEquals(AppearanceSignature(source), AppearanceSignature(hatch)), "native hatch rebuild changed appearance");
+            // This local hatch only assembles/validates boundary topology.
+            // Transfer its loops into a pristine source clone. Transforming the
+            // whole hatch also changes pattern definitions and other appearance.
+            var output = resources.Own((Hatch)source.Clone());
+            while (output.NumberOfLoops > 0) output.RemoveLoopAt(output.NumberOfLoops - 1);
+            model.AppendEntity(output); tx.AddNewlyCreatedDBObject(output, true);
+            output.Associative = false;
+            CopyShiftedLoops(hatch, output, geometry, resources);
+            output.EvaluateHatch(true);
+            Need(!output.Associative && output.NumberOfLoops == boundaryIds.Count, "rebuilt hatch loop count or association changed");
+            var expected = AppearanceSignature(source); var actual = AppearanceSignature(output);
+            Need(JToken.DeepEquals(expected, actual), "native hatch rebuild changed appearance fields: " +
+                string.Join(", ", expected.Properties().Where(p => !JToken.DeepEquals(p.Value, actual[p.Name])).Select(p => p.Name)));
+            hatch.Erase();
             foreach (var ids in boundaryIds) foreach (ObjectId id in ids) ((Entity)tx.GetObject(id, OpenMode.ForWrite)).Erase();
-            return hatch;
+            return output;
+        }
+        private static void CopyShiftedLoops(Hatch local, Hatch output, HatchClipGeometry geometry, HatchClipResources resources)
+        {
+            var displacement = Matrix2d.Displacement(new Vector2d(geometry.Origin.X, geometry.Origin.Y));
+            for (int i = 0; i < local.NumberOfLoops; i++)
+            {
+                geometry.Time(); var loop = local.GetLoopAt(i); var type = local.LoopTypeAt(i);
+                if (loop.IsPolyline)
+                {
+                    var vertices = new Point2dCollection(); var bulges = new DoubleCollection();
+                    foreach (BulgeVertex vertex in loop.Polyline)
+                    {
+                        geometry.Segment();
+                        vertices.Add(new Point2d(vertex.Vertex.X + geometry.Origin.X, vertex.Vertex.Y + geometry.Origin.Y));
+                        bulges.Add(vertex.Bulge);
+                    }
+                    output.AppendLoop(type, vertices, bulges);
+                }
+                else
+                {
+                    var curves = new Curve2dCollection(); var types = new IntegerCollection();
+                    // Own all returned wrappers before inspecting any edge so
+                    // even an unsupported edge leaves no finalizer-only cleanup.
+                    var originals = loop.Curves.Cast<Curve2d>().Select(c => resources.Own(c)).ToArray();
+                    foreach (var original in originals)
+                    {
+                        geometry.Segment();
+                        int edgeType = original is LineSegment2d ? 1 : original is CircularArc2d ? 2 : original is EllipticalArc2d ? 3 : 0;
+                        Need(edgeType != 0, "unsupported assembled hatch edge; no approximation was made");
+                        var curve = resources.Own((Curve2d)original.Clone()); curve.TransformBy(displacement);
+                        curves.Add(curve); types.Add(edgeType);
+                    }
+                    output.AppendLoop(type, curves, types);
+                }
+            }
         }
         private static void CheckCoverage(HatchClipGeometry geometry, List<Region> sources, List<Region> cover, double tolerance)
         {

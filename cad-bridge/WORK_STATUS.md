@@ -1,5 +1,35 @@
 # CAD bridge — состояние работы
 
+## Native v3.10: регрессия; исправление v3.11 готово офлайн — 2026-10-29
+
+- Загруженаv3.10 +a903272, PID23860, точная CLIP-копия активна, baseline600
+  (593HATCH+7Polyline). После стартового readonly revision guard fresh plan
+  прошёл.488456 и контрольная кровля4966D8:plan/dry PASS, write дошёл до
+  проверки оформления и отказал native hatch rebuild changed appearance.
+  Оба отката подтверждены: source жив/count600. Новых объектов нет,
+  весь лёгкий inventory и7полных масок совпали с baseline; save=false.
+-4A58DF:style1/Outer, keep; площадь5248949815.268057мм² согласуется с
+  native Hatch.Area5248949815.268236. Это один простой источник, не проверка
+  всей семантики Outer/69 ранее отказавших HATCH.4A58E3 по-прежнему отказывает
+  в Region.CreateFromCurves. Budget-случай и остальные writer-тесты не запускались
+  после отказа контрольной кровли. Production-вызовов записи0; v3.10 для
+  рабочего clip остановлена. Receipts только НК2/hatch_clip_result.json/native_v310.
+- Точный изменившийся appearance field вv3.10 не сообщался; root cause на уровне
+  поля не установлен. Убран весь путь TransformBy выходного HATCH и обратной
+  правки Origin/XData. Теперь local HATCH — временный сборщик топологии;
+  только его геометрические петли копируются в WCS в pristine Clone исходника.
+  Сохраняются native loop types, bulges и аналитические Curve2d без аппроксимации.
+  Временный local HATCH стирается вместе с кривыми до общей транзакции Commit.
+  Все новые Curve2d wrappers принадлежат CAD-thread resource scope. Полный
+  appearance/двусторонняя coverage-проверка не ослаблены; отказ сообщает
+  имена различающихся полей, без значений XData.
+- Продолжение той же native-отладки: clean personal andrew/origin-andrewb7a02de
+  перед правкой, один worktree; pull/merge не выполнялись.1936/1936unit/SDK PASS,
+  обе Release DLL PASS:2027 0errors/2прежних Roslyn warnings,2026 0errors/0warnings,
+  compile-only25.1.0. Логи НК2/v3.11-*.log. Unit PASS не исполняет geometry engine.
+  Пакетv3.11 пока не собран; далее clean-commit/build без merge и повтор именно
+  контрольной кровли/первого отказа в отдельно разрешённой копии, без save.
+
 ## Кандидат v3.10 собран без merge — 2026-10-29
 
 - Из чистого andrew a9032723614b18d77381b7c52f48c11a0c38c24d собран общий
