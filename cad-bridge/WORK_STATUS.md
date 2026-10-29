@@ -1,5 +1,38 @@
 # CAD bridge — состояние работы
 
+## v3.4 загружена и проверена в НК2 — 2026-10-29
+
+- Пользователь подтвердил установку. EXE и реально loaded Acad27 DLL3.4.0.0,
+  Product3.4.0+44ccffc; серверPID21788, AutoCADPID33876. Manifest находится
+  server/current/bridge-docs/release.json.
+- По отдельному разрешению выполнен один bind-current газона4 в подготовленном
+  __MCP_TEST_BIND_NK2.dwg. completed/postcondition_verified=true, xref30→29,
+  source_revision0/preflight_revision1; вставка/placement/XCLIP сохранены.
+  В definition видны все5известныхHATCH; полный reader остановлен1MiBлимитом.
+  SHA sourcexref до/после совпал. Тест закрыт пользователем без сохранения.
+- Продолжено исходное поручение на Поверхности.dwg:13из14оставшихсяxref
+  внедрены.12имеют completed receipt/locality/placement readback и сверенный
+  decrement графа. УВК2(383219) вернула read timeout, затем connect timeout;
+  запись не повторялась. После восстановления полный reader подтвердил1xref
+  (только УВК1350); вставка УВК2 на месте с прежними owner/layer/transform.
+  Native receipt13-го bind отсутствует; readback состояния соответствует Bind.
+- УВК1350(382FCB): eNotAllowedForThisProxy, metadata readback всё ещёxref,
+  placement сохранён, complete rollback не доказан. Пользователь подтвердил
+  аналогичный ручной отказ. Нет повторного native вызова этой ссылки.
+  PID33876 жив, связь восстановилась, новых WER о падении не найдено.
+- Нынешний explode plan на уже local газоне4 отказывает до записи:
+  block XData would be lost by explode. XData readers отсутствуют; не стирать
+  данные/не менять scale ради обхода. Раскрытие/экспорт HATCH ещё не выполнены.
+  Поддержанная промежуточная очистка определений:213MTEXT удалены по свежим
+  handles (подписи посадок/МАФ),213/213ok; exact нетекстовые handles сохранены,
+  включая2HATCH и17LINE второго определения.
+- Drawing receipts и подробный текущий этап: НК2/cleanup_attempt.json и
+  НК2/WORK_STATUS.md. Никаких bridge source edits, rebuild, Git mutations,
+  saves или повторов uncertain write в этом проходе. Single Undo не проверен.
+  Следующий шаг: согласованное ручное раскрытие блоков либо bounded доработка
+  после отдельного решения пользователя; проблемную школу разбирать отдельно.
+
+
 ## v3.4 собран и проверен — 2026-10-29
 
 - По явному поручению пользователя первый локальный коммит исправления:
