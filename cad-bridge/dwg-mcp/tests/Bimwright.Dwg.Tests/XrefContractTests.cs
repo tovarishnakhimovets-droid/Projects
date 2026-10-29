@@ -87,6 +87,144 @@ namespace Bimwright.Dwg.Tests
             Assert.False(XrefManageInput.Matches(original, current));
         }
 
+        private static JObject BindCurrentRequest()
+        {
+            var request = Request();
+            request.Remove("action");
+            return request;
+        }
+
+        [Fact]
+        public void CurrentBindUsesTheSameCompleteGuardAndDefaultsToReadOnlyPreflight()
+        {
+            var request = BindCurrentRequest();
+            var original = request.DeepClone();
+            Assert.True(XrefBindCurrentInput.TryParse(request, out var input, out var error), error);
+            Assert.True(input.ManageInput.DryRun);
+            Assert.Equal("bind", input.ManageInput.Action);
+            Assert.True(JToken.DeepEquals(original, request));
+            Assert.NotSame(request["expected_xref"], input.ManageInput.ExpectedXref);
+            request["dry_run"] = false;
+            Assert.True(XrefBindCurrentInput.TryParse(request, out input, out error), error);
+            Assert.False(input.ManageInput.DryRun);
+        }
+
+        [Theory]
+        [InlineData("action")]
+        [InlineData("max_entities")]
+        [InlineData("ignore_revision")]
+        [InlineData("expected_revision")]
+        [InlineData("bind_insert_style")]
+        public void CurrentBindCannotBeExtendedToAnotherActionOrAWeakerGuard(string field)
+        {
+            var request = BindCurrentRequest();
+            request[field] = field == "action" ? new JValue("detach") : new JValue(true);
+            Assert.False(XrefBindCurrentInput.TryParse(request, out _, out _));
+        }
+
+        [Theory]
+        [InlineData("expected_document")]
+        [InlineData("expected_fingerprint")]
+        [InlineData("expected_xref")]
+        public void CurrentBindRequiresEveryIdentityAndSnapshotInput(string field)
+        {
+            var request = BindCurrentRequest();
+            request.Remove(field);
+            Assert.False(XrefBindCurrentInput.TryParse(request, out _, out _));
+        }
+
+        [Fact]
+        public void CurrentBindStillRejectsMalformedDryRunAndIncompleteGuards()
+        {
+            var request = BindCurrentRequest(); request["dry_run"] = "false";
+            Assert.False(XrefBindCurrentInput.TryParse(request, out _, out _));
+            request = BindCurrentRequest(); request["expected_xref"]["guard_complete"] = false;
+            Assert.False(XrefBindCurrentInput.TryParse(request, out _, out _));
+            request = BindCurrentRequest(); request["expected_xref"]["is_nested"] = true;
+            Assert.False(XrefBindCurrentInput.TryParse(request, out _, out _));
+        }
+
+        [Fact]
+        public void CurrentMetadataIgnoresOnlyTheLockBoundaryRevisionWithoutChangingEitherSnapshot()
+        {
+            var source = (JObject)Request()["expected_xref"];
+            var current = (JObject)source.DeepClone();
+            current["document_revision"] = 10;
+            var originalSource = source.DeepClone();
+            var originalCurrent = current.DeepClone();
+            Assert.True(XrefBindCurrentInput.MatchesCurrentMetadata(source, current));
+            Assert.False(XrefManageInput.Matches(source, current));
+            Assert.True(JToken.DeepEquals(originalSource, source));
+            Assert.True(JToken.DeepEquals(originalCurrent, current));
+        }
+
+        [Theory]
+        [InlineData("handle", "AB2")]
+        [InlineData("name", "another surface")]
+        [InlineData("path", @"..\another.dwg")]
+        [InlineData("status", "Unresolved")]
+        [InlineData("document_session", "52796c39d024444f823c8e7e271963c8")]
+        [InlineData("graph_fingerprint", "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc")]
+        [InlineData("references_fingerprint", "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc")]
+        public void CurrentMetadataStillChecksTargetGraphTransformsClippingAndSession(string field, string changed)
+        {
+            var source = (JObject)Request()["expected_xref"];
+            var current = (JObject)source.DeepClone();
+            current["document_revision"] = 10;
+            current[field] = changed;
+            Assert.False(XrefBindCurrentInput.MatchesCurrentMetadata(source, current));
+        }
+
+        [Theory]
+        [InlineData("is_overlay", true)]
+        [InlineData("is_nested", true)]
+        [InlineData("guard_complete", false)]
+        public void CurrentMetadataStillChecksRootFlagsAndCompleteness(string field, bool changed)
+        {
+            var source = (JObject)Request()["expected_xref"];
+            var current = (JObject)source.DeepClone();
+            current["document_revision"] = 10;
+            current[field] = changed;
+            Assert.False(XrefBindCurrentInput.MatchesCurrentMetadata(source, current));
+        }
+
+        [Theory]
+        [InlineData(null)]
+        [InlineData("missing")]
+        [InlineData("negative")]
+        [InlineData("string")]
+        public void CurrentMetadataDoesNotAcceptAMalformedFreshRevision(string failure)
+        {
+            var source = (JObject)Request()["expected_xref"];
+            var current = (JObject)source.DeepClone();
+            if (failure == null) current["document_revision"] = JValue.CreateNull();
+            if (failure == "missing") current.Remove("document_revision");
+            if (failure == "negative") current["document_revision"] = -1;
+            if (failure == "string") current["document_revision"] = "10";
+            Assert.False(XrefBindCurrentInput.MatchesCurrentMetadata(source, current));
+            Assert.False(XrefBindCurrentInput.MatchesCurrentMetadata(null, source));
+            Assert.False(XrefBindCurrentInput.MatchesCurrentMetadata(source, null));
+        }
+
+        [Fact]
+        public void CurrentBindUncertainReceiptKeepsItsExplicitSemanticsAndBothRevisions()
+        {
+            var plan = new JObject
+            {
+                ["action"] = "bind", ["target_handle"] = "AB1", ["native_returned"] = true,
+                ["semantics"] = "current_root_definition", ["source_revision"] = 7,
+                ["preflight_revision"] = 10, ["preflight_refreshed_under_write_lock"] = true
+            };
+            var message = XrefFailureDetails.Format(plan);
+            var details = JObject.Parse(message.Substring(message.IndexOf("details=", System.StringComparison.Ordinal) + 8));
+            Assert.Equal("current_root_definition", details.Value<string>("semantics"));
+            Assert.Equal(7, details.Value<long>("source_revision"));
+            Assert.Equal(10, details.Value<long>("preflight_revision"));
+            Assert.True(details.Value<bool>("preflight_refreshed_under_write_lock"));
+            Assert.True(details.Value<bool>("execution_unknown"));
+            Assert.DoesNotContain("persisted_network_state_equal", message);
+        }
+
         [Fact]
         public void NativeMutationRequiresAQuiescentEditorBeforeItIsMarkedAttempted()
         {

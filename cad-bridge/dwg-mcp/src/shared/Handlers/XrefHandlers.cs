@@ -24,6 +24,19 @@ namespace Bimwright.Dwg.Plugin.Handlers
         }
     }
 
+    public sealed class BindCurrentXrefHandler : IAcadCommand
+    {
+        public string Name => "bind_current_xref";
+        public string Description => "Bind the whole current loaded root definition after fresh metadata checks under the write lock; no detach, explode or save.";
+        public CommandSchema Schema => CommandSchemas.BindCurrentXref;
+        public CommandResult Execute(Document doc, JToken parameters)
+        {
+            if (!XrefBindCurrentInput.TryParse(parameters, out var input, out var error)) return CommandResult.Fail(error);
+            try { return XrefService.BindCurrent(doc, input); }
+            catch (Exception ex) { return CommandResult.Fail("current xref bind preflight failed before native mutation: " + ErrorSanitizer.Sanitize(ex.Message)); }
+        }
+    }
+
     public sealed class ManageXrefsHandler : IAcadCommand
     {
         public string Name => "manage_xrefs";

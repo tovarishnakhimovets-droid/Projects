@@ -159,6 +159,12 @@ namespace Bimwright.Dwg.Plugin
             SchemaProperty.Optional("max_xrefs", JTokenType.Integer),
             SchemaProperty.Optional("max_entities", JTokenType.Integer));
 
+        public static readonly CommandSchema BindCurrentXref = CommandSchema.Object(
+            SchemaProperty.RequiredNonEmptyString("expected_document"),
+            SchemaProperty.RequiredNonEmptyString("expected_fingerprint"),
+            SchemaProperty.Required("expected_xref", JTokenType.Object),
+            SchemaProperty.Optional("dry_run", JTokenType.Boolean));
+
         public static readonly CommandSchema ManageXrefs = CommandSchema.Object(
             SchemaProperty.RequiredNonEmptyString("expected_document"),
             SchemaProperty.RequiredNonEmptyString("expected_fingerprint"),

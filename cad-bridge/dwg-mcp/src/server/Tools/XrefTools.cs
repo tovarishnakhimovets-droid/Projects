@@ -33,6 +33,27 @@ namespace Bimwright.Dwg.Server.Tools
     [McpServerToolType]
     public sealed class XrefWriteTools
     {
+        [McpServerTool(Name = "dwg_bind_current_xref", ReadOnly = false, Idempotent = false), Description(
+            "Bind exactly one current root xref with preserved symbol identities. " +
+            "Requires the complete expected_xref from dwg_list_xrefs and exact DWG identity. Session/revision must match before acquiring the native write lock. " +
+            "Under the acquired lock, recheck the full current graph, root identity, insert transforms, clipping, ownership, layers and resolved/loaded status before binding the entire current definition. " +
+            "Lock acquisition may run associative evaluation; this contract does not promise unchanged whole-database or associative-network state across that transition. " +
+            "dry_run defaults true and checks only metadata under a read lock. One root per call; no detach, explode, reload, source-file edit or save. " +
+            "Top-level calls only; batch_execute and baked tools do not support this operation. " +
+            "Returns actual native/readback outcome; complete rollback and grouped Undo are not promised. Native calls cannot be interrupted by the cooperative deadline. " +
+            "After a timeout or uncertain result, inspect current state and never automatically retry.")]
+        public static Task<string> BindCurrentXref(
+            [Description("Exact full saved DWG path from dwg_list_xrefs.")] string expected_document,
+            [Description("Exact drawing fingerprint GUID from dwg_list_xrefs.")] string expected_fingerprint,
+            [Description("Complete expected_xref for one root from the latest reader; its session/revision is strict before lock acquisition, and all root/graph/reference metadata is rechecked under the lock.")] XrefTargetExpectation expected_xref,
+            [Description("Read and validate only; default true. Set false deliberately to bind one current root definition.")] bool dry_run = true)
+        {
+            var request = new JObject { ["expected_document"] = expected_document, ["expected_fingerprint"] = expected_fingerprint,
+                ["expected_xref"] = expected_xref == null ? JValue.CreateNull() : JObject.FromObject(expected_xref), ["dry_run"] = dry_run };
+            if (!XrefBindCurrentInput.TryParse(request, out _, out var error)) return XrefInputError.Return(error);
+            return ToolGateway.LoggedCall("bind_current_xref", request, request);
+        }
+
         [McpServerTool(Name = "dwg_manage_xrefs", ReadOnly = false, Idempotent = false), Description(
             "Bind or detach exactly one explicit root xref after matching its full reader guard, current document path/fingerprint and revision. " +
             "Every insert must be directly owned by a local model/paper layout on an unlocked layer. Bind conservatively requires every graph node resolved/loaded and preserves xref-qualified symbol identities; no insert-style name merging. " +

@@ -41,6 +41,7 @@ namespace Bimwright.Dwg.Plugin
                 { "inspect_block",           new InspectBlockHandler() },
                 { "list_xrefs",              new ListXrefsHandler() },
                 { "manage_xrefs",            new ManageXrefsHandler() },
+                { "bind_current_xref",       new BindCurrentXrefHandler() },
                 { "plan_block_explode",      new PlanBlockExplodeHandler() },
                 { "explode_blocks",          new ExplodeBlocksHandler() },
                 { "create_block_variant",    new CreateBlockVariantHandler() },
@@ -162,7 +163,7 @@ namespace Bimwright.Dwg.Plugin
                 else if (cmd == "use_document")
                     result = DocumentInvoker.InvokeApplication(() => ExecuteCommand(
                         DocumentRouting.Resolve(documentId, allowMissingActive: true), cmd, parameters));
-                else result = DocumentInvoker.InvokeWithParameters(cmd, documentId, (doc, guardedParameters) => ExecuteCommand(doc, cmd, guardedParameters), parameters);
+                else result = DocumentInvoker.Invoke(cmd, documentId, doc => ExecuteCommand(doc, cmd, parameters), parameters);
 
                 string resultJson = null;
                 if (result.Ok)

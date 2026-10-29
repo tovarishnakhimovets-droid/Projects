@@ -24,6 +24,7 @@ namespace Bimwright.Dwg.Tests
             {
                 "dwg_accept_bake_suggestion",
                 "dwg_batch_execute",
+                "dwg_bind_current_xref",
                 "dwg_capture_view_image",
                 "dwg_change_color",
                 "dwg_change_layer",

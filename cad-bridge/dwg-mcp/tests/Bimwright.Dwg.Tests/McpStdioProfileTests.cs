@@ -20,10 +20,10 @@ namespace Bimwright.Dwg.Tests
         {
             var profiles = new[]
             {
-                ("query,modify,drawing,view", false, 76),
-                ("query,modify,drawing,view,annotation", false, 76),
+                ("query,modify,drawing,view", false, 77),
+                ("query,modify,drawing,view,annotation", false, 77),
                 ("query,modify,drawing,view", true, 31),
-                ("query", false, 22), ("modify", false, 35),
+                ("query", false, 22), ("modify", false, 36),
                 ("drawing", false, 14), ("annotation", false, 5),
                 ("drawing,annotation", false, 14),
                 ("drawing", true, 4), ("annotation", true, 1)
@@ -96,6 +96,19 @@ namespace Bimwright.Dwg.Tests
             Assert.Equal(enabled.Contains("query"), names.Contains("dwg_list_xrefs", StringComparer.Ordinal));
             Assert.Equal(enabled.Contains("query"), names.Contains("dwg_plan_block_explode", StringComparer.Ordinal));
             Assert.Equal(!readOnly && enabled.Contains("modify"), names.Contains("dwg_manage_xrefs", StringComparer.Ordinal));
+            Assert.Equal(!readOnly && enabled.Contains("modify"), names.Contains("dwg_bind_current_xref", StringComparer.Ordinal));
+            if (!readOnly && enabled.Contains("modify"))
+            {
+                var bind = Assert.Single(tools, value => value.ProtocolTool.Name == "dwg_bind_current_xref").ProtocolTool;
+                Assert.False(bind.Annotations.ReadOnlyHint);
+                Assert.False(bind.Annotations.IdempotentHint);
+                AssertRequired(bind.InputSchema, "expected_document", "expected_fingerprint", "expected_xref");
+                var properties = bind.InputSchema.GetProperty("properties");
+                Assert.Equal(new[] { "dry_run", "expected_document", "expected_fingerprint", "expected_xref" },
+                    properties.EnumerateObject().Select(value => value.Name).OrderBy(value => value, StringComparer.Ordinal));
+                AssertSchemaType(properties.GetProperty("dry_run"), "boolean");
+                Assert.True(properties.GetProperty("dry_run").GetProperty("default").GetBoolean());
+            }
             Assert.Equal(!readOnly && enabled.Contains("modify"), names.Contains("dwg_explode_blocks", StringComparer.Ordinal));
             if (enabled.Contains("query"))
             {
@@ -198,7 +211,7 @@ namespace Bimwright.Dwg.Tests
             if (readOnly)
                 foreach (string mutation in new[] { "dwg_create_entities", "dwg_edit_polyline_vertices", "dwg_reposition_leaders",
                     "dwg_create_text", "dwg_create_mtext", "dwg_create_leader", "dwg_create_table", "dwg_set_text_style", "dwg_match_properties",
-                    "dwg_create_block_variant", "dwg_update_block_angles", "dwg_set_system_variable", "dwg_run_lisp", "dwg_set_crosshair_settings", "dwg_set_settings" })
+                    "dwg_create_block_variant", "dwg_update_block_angles", "dwg_set_system_variable", "dwg_run_lisp", "dwg_set_crosshair_settings", "dwg_set_settings", "dwg_bind_current_xref" })
                     Assert.DoesNotContain(mutation, names);
         }
 

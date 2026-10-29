@@ -1,5 +1,74 @@
 # CAD bridge — состояние работы
 
+## Подготовка выпуска v3.4 — 2026-10-29
+
+- Пользователь явно поручил два локальных коммита: подготовленные23файла
+  исправления, затем только итог выпуска в WORK_STATUS.md; между ними —
+  официальный пакет3.4. Push, установка и CAD-тест в поручение не входят.
+- Код после1878PASS, двух финальных native-сборок и independent review
+  не меняется; успешные проверки не повторяются. Перед фиксацией сверены
+  согласованные23пути, matching upstream и отсутствие unfinishedGitoperations.
+  FF-preflight выполнен до этой доработки, обновление в её середине не требуется.
+- Следующий шаг: пакет из чистого первого коммита, проверка bytes/manifest/PE/XML
+  и packaged MCP initialize/tools-list, затем второй documentation commit.
+  Нативная проверка нового bind_current_xref пока не выполнялась.
+
+
+## Исправление после фатала v3.3: исходник и offline готовы — 2026-10-29
+
+- По продолжению исходной задачи подготовки поверхностей НК2 убран
+  custom DwgOut/FileFiler путь. Удалены AssocNetworkSnapshot, LockBoundaryProof
+  и их test double/устаревшие tests. Удаление объявлено заранее; runtime path
+  проверен, установленная DLL3.3.0.0 не менялась. История исходника сохранена
+  в прежних Git-коммитах, параллельных реализаций/архивов не создано.
+- До правок чистая andrew0faa379, upstreamorigin/andrew, единственныйworktree,
+  local develop свободна, unfinished operations нет. Три FF-обновления
+  выполнены без изменений, ancestry develop→HEAD PASS.
+- Старые manage_xrefs/explode_blocks снова требуют строгой source revision
+  до/после write lock. Параметры не переписываются, rawcounter не подавляется.
+- Добавлен отдельный bind_current_xref: bind-only whole current root,
+  default dry_run=true/read lock. Для real — strict source session/revision
+  до acquisition, затем полный свежий graph/reference/transform/XCLIP/status/
+  layer preflight под write lock. Все guard-поля кроме source revision
+  совпадают. Свежая revision проверяется до transaction и после её старта,
+  непосредственно перед native Bind/Detach в общей реализации.
+  Нет нового serializer, callback bridge или долгоживущего lock lease.
+- Native BindXrefs(false), placement/locality readback и bounded uncertainty
+  handling остаются единственными общими реализациями. Receipt содержит
+  semantics=current_root_definition, source/preflight revisions и флаг
+  свежей проверки под lock; равенство всей network/DB не обещается.
+- Independent review нашёл два реальных обхода: вложенный batch обходит
+  Invoker, а StartTransaction вызывает reactors после прежнего finalguard.
+  Batch теперь отклоняет currentbind до любых ранних items, baked whitelist
+  проверен регрессией; повторный guard внесён внутрь native transaction.
+  Финальное independent review: no actionable issues.
+- Итог полного набора: 1878 PASS, 0 FAIL, 0 SKIP, включая20 actual MCP SDK
+  stdio profiles без CAD. Новая surface: standard77/query22/read-only31/
+  modify36. Локальные wrapper errors не доходят до CAD.
+  Два первоначальных targeted failures были неверными test-ожиданиями
+  текста ошибок document/fingerprint; исправлены, полный финал PASS.
+- Server net8.0 собран; финальные native2026(pinned25.1.0) и native2027
+  собраны после transaction-guard patch: 0 errors, у2026 0 warnings,
+  у2027 прежние2Roslyn MSB3277. Ни одна DLL не загружалась в CAD.
+- TOOLS обновлён. Единственный НК2/check_release.py сохранён и расширен
+  version-aware counts: прежние пакеты76, начиная3.4 ожидается77/currentbind.
+- Подготовлена отдельная __MCP_TEST_BIND_NK2.dwg рядом с host в НК2,
+  чтобы сохранить относительные xref-пути:3678424байт, SHA256
+  60aa92270a6fe3bbae7e54e85e024c132730789e9578af0c2e3cc6401015082d.
+  Стабильные source hash до/после чтения и copy hash совпали. Обычный
+  Get-FileHash не открыл активный DWG из-за file sharing; read-only
+  FileStream с ReadWrite/Delete sharing подтвердил точные байты.
+  Copy в AutoCAD не открывалась, в рабочем DWG ничего не менялось.
+- Временный НК2/remove_unsafe_filer.py после применения удалён.
+- Состояние: исходник/offline ready; installed/loaded остаётся3.3 с прежним
+  запретом real writers. Новых коммитов, пакета, установки, native-теста
+  и DWG-save не было. Следующий шаг — отдельное поручение фиксации изменения
+  и выпуска3.4. После установки только явно разрешённый тест на отдельной
+  копии; к рабочему DWG не переходить до подтверждённого результата.
+  Detach/explode при lock events по-прежнему могут отказывать: новая
+  bind-only семантика на них автоматически не распространена.
+
+
 ## ФАТАЛ v3.3: real writers не применять — 2026-10-28
 
 - v3.3 установлен пользователем. Активный Поверхности.dwg подтверждён

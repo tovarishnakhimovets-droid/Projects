@@ -118,6 +118,12 @@ namespace Bimwright.Dwg.Plugin.Xrefs
                 ["readback_error"] = Limited(plan.Value<string>("readback_error"), 512),
                 ["next_step"] = "Read current xref state before further writes; never automatically retry."
             };
+            if (plan["semantics"]?.Type == JTokenType.String)
+                details["semantics"] = Limited(plan.Value<string>("semantics"), 64);
+            foreach (var key in new[] { "source_revision", "preflight_revision" })
+                if (plan[key]?.Type == JTokenType.Integer) details[key] = plan[key].DeepClone();
+            if (plan["preflight_refreshed_under_write_lock"]?.Type == JTokenType.Boolean)
+                details["preflight_refreshed_under_write_lock"] = plan["preflight_refreshed_under_write_lock"].DeepClone();
             if (plan["readback"] is JObject readback)
             {
                 var summary = new JObject();
@@ -159,6 +165,43 @@ namespace Bimwright.Dwg.Plugin.Xrefs
         }
     }
 
+    // Bind is an operation on the whole current root definition, not a replay
+    // of an externally calculated geometry edit. The invoker checks the source
+    // session/revision before acquiring the lock; the native service then checks
+    // every other reader guard against a fresh inventory under that lock.
+    public sealed class XrefBindCurrentInput
+    {
+        public XrefManageInput ManageInput { get; private set; }
+
+        public static bool TryParse(JToken parameters, out XrefBindCurrentInput input, out string error)
+        {
+            input = null; error = null;
+            if (!(parameters is JObject obj)) { error = "params must be an object"; return false; }
+            var fields = new[] { "expected_document", "expected_fingerprint", "expected_xref", "dry_run" };
+            if (obj.Properties().Any(p => !fields.Contains(p.Name)))
+            { error = "bind_current_xref accepts only expected_document, expected_fingerprint, expected_xref and dry_run"; return false; }
+            var request = (JObject)obj.DeepClone();
+            request["action"] = "bind";
+            if (!XrefManageInput.TryParse(request, out var manage, out error)) return false;
+            input = new XrefBindCurrentInput { ManageInput = manage };
+            return true;
+        }
+
+        public static bool MatchesCurrentMetadata(JObject expected, JObject actual)
+        {
+            if (expected == null || actual == null ||
+                !XrefManageInput.ValidateExpectation(expected, out _) ||
+                !XrefManageInput.ValidateExpectation(actual, out _)) return false;
+            var source = (JObject)expected.DeepClone();
+            var current = (JObject)actual.DeepClone();
+            source.Remove("document_revision");
+            current.Remove("document_revision");
+            // Session, complete graph, exact target identity and every insert
+            // transform/owner/layer/clipping digest still participate.
+            return JToken.DeepEquals(source, current);
+        }
+    }
+
     public sealed class XrefManageInput
     {
         public string ExpectedDocument { get; private set; }
@@ -190,7 +233,7 @@ namespace Bimwright.Dwg.Plugin.Xrefs
 
         public static bool Matches(JObject expected, JObject actual) => expected != null && actual != null && JToken.DeepEquals(expected, actual);
 
-        private static bool ValidateExpectation(JObject expected, out string error)
+        internal static bool ValidateExpectation(JObject expected, out string error)
         {
             error = null;
             var fields = new[] { "handle", "name", "path", "status", "is_overlay", "is_nested", "graph_fingerprint",

@@ -225,6 +225,12 @@ namespace Bimwright.Dwg.Plugin.Xrefs
         }
 
         internal static CommandResult Manage(Document doc, XrefManageInput input)
+            => ManageCore(doc, input, false);
+
+        internal static CommandResult BindCurrent(Document doc, XrefBindCurrentInput input)
+            => ManageCore(doc, input.ManageInput, true);
+
+        private static CommandResult ManageCore(Document doc, XrefManageInput input, bool bindCurrent)
         {
             var error = DocumentGuard.Validate(doc, input.ExpectedDocument, input.ExpectedFingerprint);
             if (error != null) return CommandResult.Fail(error);
@@ -235,9 +241,12 @@ namespace Bimwright.Dwg.Plugin.Xrefs
             var before = Read(doc, XrefContract.MaxXrefs, 0);
             if (!before.Value<bool>("metadata_complete")) return CommandResult.Fail("xref preflight inventory is incomplete (including any ghost/unavailable host records); inspect dwg_list_xrefs errors; no mutation was attempted");
             var row = ((JArray)before["xrefs"]).Cast<JObject>().SingleOrDefault(r => r.Value<string>("handle") == input.Handle);
-            if (row == null || !XrefManageInput.Matches(input.ExpectedXref, row["expected_xref"] as JObject))
+            var actual = row?["expected_xref"] as JObject;
+            bool matches = bindCurrent && !input.DryRun
+                ? XrefBindCurrentInput.MatchesCurrentMetadata(input.ExpectedXref, actual)
+                : XrefManageInput.Matches(input.ExpectedXref, actual);
+            if (row == null || !matches)
             {
-                var actual = row?["expected_xref"] as JObject;
                 var changed = new JArray();
                 foreach (var field in input.ExpectedXref.Properties())
                     if (!JToken.DeepEquals(field.Value, actual?[field.Name])) changed.Add(field.Name);
@@ -247,6 +256,10 @@ namespace Bimwright.Dwg.Plugin.Xrefs
                     ["revision_diagnostics"] = before["revision_diagnostics"] };
                 return CommandResult.Fail("expected xref guard changed; reread dwg_list_xrefs. " + details.ToString(Formatting.None));
             }
+            // Read() marks metadata incomplete if its own revision changes.
+            // Capture its exact revision, not a substituted source expectation,
+            // and require it unchanged until the native operation begins.
+            long preflightRevision = actual.Value<long>("document_revision");
             if (row.Value<bool>("is_nested")) return CommandResult.Fail("nested xrefs cannot be managed directly; select one root definition");
             var inserts = (JArray)row["inserts"];
             foreach (JObject insert in inserts)
@@ -266,13 +279,21 @@ namespace Bimwright.Dwg.Plugin.Xrefs
                 ["dry_run"] = input.DryRun, ["mutation_attempted"] = false, ["completed"] = false,
                 ["atomic"] = false, ["single_undo_verified"] = false, ["rollback_verified"] = false,
                 ["note"] = "One root definition per call. Native xref operations can affect dependent symbols; no cross-operation atomicity or save is promised." };
+            if (bindCurrent)
+            {
+                plan["semantics"] = "current_root_definition";
+                plan["source_revision"] = input.ExpectedXref.Value<long>("document_revision");
+                plan["preflight_revision"] = preflightRevision;
+                plan["preflight_refreshed_under_write_lock"] = !input.DryRun;
+            }
             if (input.DryRun)
             { plan["operation_status"] = "validated"; plan["expected_xref"] = input.ExpectedXref.DeepClone(); return CommandResult.Success(plan); }
             var revision = DrawingRevision.For(doc);
-            if (revision.SessionId != input.ExpectedXref.Value<string>("document_session") || revision.Revision != input.ExpectedXref.Value<long>("document_revision"))
-                return CommandResult.Fail("document changed after xref preflight; no mutation was attempted");
             if (!doc.Editor.IsQuiescent) return CommandResult.Fail("an AutoCAD command became active after xref preflight; no mutation was attempted");
-            plan["mutation_attempted"] = true;
+            // Check after the last native readiness getter as well: a reactor or
+            // concurrent event must not turn the freshly inspected plan stale.
+            if (revision.SessionId != input.ExpectedXref.Value<string>("document_session") || revision.Revision != preflightRevision)
+                return CommandResult.Fail("document changed after xref preflight; no mutation was attempted");
             bool nativeReturned = false;
             try
             {
@@ -281,6 +302,11 @@ namespace Bimwright.Dwg.Plugin.Xrefs
                 // claim a surrounding transaction makes that work completely atomic.
                 using (var tx = doc.Database.TransactionManager.StartTransaction())
                 {
+                    // Starting a native transaction can invoke database reactors.
+                    // Reject a plan invalidated there before calling Bind/Detach.
+                    if (revision.SessionId != input.ExpectedXref.Value<string>("document_session") || revision.Revision != preflightRevision)
+                        return CommandResult.Fail("document changed when native transaction started; no xref mutation was attempted");
+                    plan["mutation_attempted"] = true;
                     if (input.Action == "bind")
                     {
                         var ids = new ObjectIdCollection { targetId };

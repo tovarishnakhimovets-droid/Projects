@@ -1230,65 +1230,69 @@ plan/write инструменты.
 Первичные API: [BindXrefs](https://help.autodesk.com/cloudhelp/2026/ENU/OARX-ManagedRefGuide/files/OARX-ManagedRefGuide-Autodesk_AutoCAD_DatabaseServices_Database_BindXrefs_ObjectIdCollection__MarshalAsUnmanagedType_U1__bool.html),
 [native Explode](https://help.autodesk.com/cloudhelp/2027/ENU/OARX-DevGuide-Managed/files/GUID-A853CD73-58A9-4380-B8E2-B3451C94C46B.htm),
 [ограничения EXPLODE](https://help.autodesk.com/cloudhelp/2027/ENU/AutoCAD-Core/files/GUID-E98BCEF4-DED6-48A6-87EB-10FE87188083.htm).
-### Блокировка dry-run и проверка associative network
+### Проверка блокировки и внедрение текущей ссылки
 
-Только manage_xrefs и explode_blocks с dry_run=true (включая значение по
-умолчанию) получают read lock. Реальная запись получает write lock лишь
-при явном boolean false и после полного разбора входа. Активная вкладка
-обязательна; остальные команды сохраняют прежний режим.
+В v3.3 реальный manage_xrefs/explode_blocks вызывал custom DwgFiler для
+сравнения AssocNetwork. Native-проверка закончилась фаталом в callback
+dwgVersion/GCHandle. Этот путь удалён из исходника. Старый установленный
+пакет3.3 не исправляется редактированием исходника: его реальные writers
+не запускать до обновления. Подробности инцидента — WORK_STATUS.md.
 
-Перед реальной записью session/revision должны точно совпасть с внешним
-снимком. Они проверяются снова после ограниченного чтения associative network
-под read lock и непосредственно перед получением write lock. Ошибка захвата
-или освобождения read lock останавливает вызов.
+В исправленном исходнике manage_xrefs/explode_blocks снова требуют точного
+совпадения session/revision до и после write lock. Изменение на acquisition
+останавливает handler. События не подавляются, счётчик не уменьшается,
+входные ожидания не переписываются. dry_run/defaulttrue остаётся под read lock.
+При ошибке release сохраняются primary exception, bounded handler receipt,
+handler_invoked/returned, execution_unknown и запрет повтора. Ошибка release
+не доказывает откат.
 
-Native v3.2 показал три modified-уведомления AssocNetwork на переходах
-write_lock_acquire/dispose со всеми шестью false-флагами. Самих флагов
-недостаточно: смена режима блокировки автоматически запускает
-[оценку associative network](https://help.autodesk.com/cloudhelp/2022/ENU/OARX-ManagedRefGuide/files/OARX-ManagedRefGuide-Autodesk_AutoCAD_DatabaseServices_AssocManager_EvaluateTopLevelNetwork_Database_AssocEvaluationCallback_int.html).
+Отдельный modify-инструмент dwg_bind_current_xref внедряет одну целую
+текущую корневую definition. Он не исполняет рассчитанную раньше геометрию.
+Его параметры: expected_document, expected_fingerprint, полный expected_xref
+из list_xrefs и dry_run (по умолчанию true). action/insert-style merge и
+другие поля не принимаются. Активная вкладка обязательна. В read-only
+профиле инструмент отсутствует. В batch/baked он запрещён, чтобы вложенный
+dispatch не обходил pre-lock проверку.
 
-Подготовленный после v3.2 gate не подавляет события и не вычитает константу
-из revision. При изменении счётчика внутри acquisition продолжение разрешено
-только при одновременном выполнении всех условий:
+Реальный bind_current_xref выполняется в такой последовательности:
 
-- Полный непрерывный trace, не более 16 событий; та же session, без пропусков,
-  capture failures и последующих событий во время чтения/сравнения.
-- Только modified в синхронной фазе write_lock_acquire на её потоке,
-  managed AssocNetwork, полные шесть false-флагов. Любой иной объект, structural
-  event или неизвестный флаг останавливает обработчик.
-- Все затронутые handles присутствовали в pre-lock snapshot точных native
-  AcDbAssocNetwork без proxy/производных классов. До и после совпадают root,
-  полный доступный набор сетей и native FileFiler SHA256 каждой сети.
-- После доказанного равенства только приватная копия revision-ожидания
-  переносится на acquired_revision. Исходный запрос не меняется; все прежние
-  object/graph/reference/transform/definition guards обработчика обязательны.
+1. Полный разбор входа и точное совпадение source session/revision до lock.
+   Любая правка за время между внешним чтением и вызовом требует нового guard.
+2. Обычный native write lock. Его автоматическая associative evaluation
+   может изменить revision; инструмент не объявляет всю БД неизменной.
+3. Новое bounded-чтение всего xref graph под этим lock. Оно должно быть
+   полным и стабильным. Все guard-поля, кроме старой document_revision,
+   обязаны совпасть: та же session, имя/путь/status/overlay/root, graph hash,
+   все reference transforms/owners/layers/XCLIP. Все nodes resolved/loaded,
+   inserts — в местных layout на unlocked слоях. Native source не reload.
+4. Проверка свежей preflight_revision после readiness-getter и ещё раз
+   внутри native transaction непосредственно перед BindXrefs. Любое событие
+   за время preflight или transaction startup останавливает вызов до Bind.
+5. Общий с manage_xrefs вызов BindXrefs(..., false), затем прежний readback:
+   local definition, полный набор исходных вставок, то же размещение/XCLIP.
+   Нет отдельной реализации cloning, custom filer или network serializer.
 
-Snapshot читает default hierarchy через GetInstanceFromDatabase(false) и
-скопированные массивы GetActions. Чужие ключи/несвязанные сети не считаются
-проверенными: уведомление от отсутствующего в снимке handle вызывает отказ.
-Пределы одного capture: 128 сетей, 10000 actions, 2 МиБ typed payload, 3 секунды
-между native вызовами. Native DwgOut нельзя прервать таймером. Записываются
-только данные в память; DWG, сеть и ассоциации не редактируются и не сохраняются.
-FileFiler использует полное native filing, включая base fields и XData;
-IDs/типы/строки/двоичные данные и raw float bits различаются. Unsupported
-read/address/seek, пустой filing, non-OK status или превышение лимита дают отказ,
-даже если native code перехватил исключение callback.
-[Контракт DwgOut](https://help.autodesk.com/cloudhelp/2026/ENU/OARX-ManagedRefGuide/files/OARX-ManagedRefGuide-Autodesk_AutoCAD_DatabaseServices_DBObject_DwgOut_DwgFiler.html),
-[native dwgOutFields](https://help.autodesk.com/cloudhelp/2027/ENU/OARX-RefGuide/files/OARX-RefGuide-AcDbObject__dwgOutFields_AcDbDwgFiler__const.html).
+Источник definition — её текущее resolved-содержимое на шаге3. Штриховки,
+покрытия и отдельные вершины не правятся по старому geometry-плану. Именно
+для этой операции не требуется равенство всей associative network через lock.
+Эта семантика не переносится на detach или explode автоматически.
 
-Результат может содержать lock_boundary_validation: source/acquired revisions,
-число уведомлений, persisted_network_state_equal, число сетей и объём снимка.
-Это доказательство равенства сохраняемых данных проверенных сетей, а не всей БД.
-Все события write_command и write_lock_dispose продолжают увеличивать raw
-revision; после записи нужен свежий внешний снимок.
+Receipt содержит semantics=current_root_definition, source_revision,
+preflight_revision и preflight_refreshed_under_write_lock. Последнее false
+для dry-run. Raw revision учитывает все изменения, включая release; для
+следующей операции получить новый list_xrefs. Нет обещания atomic rollback,
+проверенного single-Undo или сохранения DWG. После native timeout/неизвестного
+исхода сначала читать состояние, автоматически запись не повторять.
 
-DrawingRevision сохраняет прежние правила инвалидации. Диагностика содержит
-class/handle, вид события, доступные native flags и фазу. Чтение диагностики
-не открывает объекты и не меняет счётчики; пропуски явно обозначены.
-list_xrefs возвращает revision_diagnostics, mismatch-error — changed_fields.
+Native API:
+[BindXrefs](https://help.autodesk.com/cloudhelp/2026/ENU/OARX-ManagedRefGuide/files/OARX-ManagedRefGuide-Autodesk_AutoCAD_DatabaseServices_Database_BindXrefs_ObjectIdCollection__MarshalAsUnmanagedType_U1__bool.html),
+[DocumentLock](https://help.autodesk.com/cloudhelp/2022/ENU/OARX-DevGuide-Managed/files/GUID-A2CD7540-69C5-4085-BCE8-2A8ACE16BFDD.htm).
 
-При ошибке освобождения write lock сохраняются исходное исключение,
-ограниченный receipt обработчика и доказательство границы, если оно было.
-handler_invoked/returned, execution_unknown и запрет автоматического повтора
-обязательны. Ошибка release не доказывает откат. Native работа нового gate,
-самого Bind и Explode требует проверки после загрузки; offline PASS её не заменяет.
+После фатала первый native-прогон исправления проводится только в отдельном
+явно разрешённом тестовом DWG. Для регрессии допустима отдельная копия того
+же host DWG в той же папке, чтобы относительные xref-пути сохранились.
+Проверить exact test path/fingerprint, fresh metadata и dry-run, затем один
+bind целевого root. Сверить receipt, уменьшение xref count на1, local block,
+вставки, состав HATCH и неизменность source xref-файла. Не сохранять тест
+и не переходить к производственному файлу без результата этого прогона.
+Offline PASS и успешная сборка эту native-проверку не заменяют.

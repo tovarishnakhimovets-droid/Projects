@@ -64,6 +64,7 @@ namespace Bimwright.Dwg.Tests
         [InlineData("batch_execute")]
         [InlineData("run_baked_tool")]
         [InlineData("apply_bake")]
+        [InlineData("bind_current_xref")]
         public void BakedToolDispatchAuthorizer_RejectsUnsafeTargets(string command)
         {
             Assert.False(BakedToolDispatchAuthorizer.IsAllowed(command));

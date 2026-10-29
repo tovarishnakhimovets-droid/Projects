@@ -46,7 +46,7 @@ namespace Bimwright.Dwg.Plugin
 
         internal static bool UsesReadLock(string command, JToken parameters = null)
         {
-            if (command == "manage_xrefs" || command == "explode_blocks")
+            if (command == "manage_xrefs" || command == "explode_blocks" || command == "bind_current_xref")
             {
                 // Only an explicit native boolean false asks for a write lock.
                 // Missing/default dry-run and invalid input stay on the read path;
