@@ -52,11 +52,18 @@ namespace Bimwright.Dwg.Plugin.EntityBatch
                             allowed.AddRange(new[] { "center", "radius" }); Point(obj["center"]); Positive(obj, "radius"); break;
                         case "point": allowed.Add("position"); Point(obj["position"]); break;
                         case "polyline":
-                            allowed.AddRange(new[] { "points", "closed" });
+                            allowed.AddRange(new[] { "points", "closed", "bulges" });
                             var points = obj["points"] as JArray;
                             Need(points != null && points.Count >= 2 && points.Count <= 512, "polyline points must contain 2-512 objects");
                             bool closed = Boolean(obj, "closed", false);
                             Need(!closed || points.Count >= 3, "closed polyline requires at least three vertices");
+                            if (Present(obj, "bulges"))
+                            {
+                                var bulges = obj["bulges"] as JArray;
+                                Need(bulges != null && bulges.Count == points.Count, "bulges must have one value per polyline vertex");
+                                foreach (var bulge in bulges) Need(Math.Abs(Number(bulge, "bulge")) <= 1000000, "bulge absolute value must not exceed 1000000");
+                                Need(closed || (double)bulges[bulges.Count - 1] == 0, "open polyline final bulge must be zero");
+                            }
                             foreach (var p in points) Point(p);
                             double elevation = Coordinate(points[0], "z");
                             for (int i = 0; i < points.Count; i++)
@@ -91,7 +98,11 @@ namespace Bimwright.Dwg.Plugin.EntityBatch
                             allowed.AddRange(new[] { "boundary_id", "associative" }); string boundaryId = Text(obj, "boundary_id", 64);
                             Need(ids.TryGetValue(boundaryId, out var boundary), "hatch boundary_id must name an earlier entity");
                             Need(boundary.Type == "circle" || boundary.Type == "rectangle" || boundary.Type == "polyline" && Boolean(boundary.Parameters, "closed", false), "hatch boundary must be circle, rectangle or closed polyline");
-                            if (boundary.Type == "polyline") CheckSimpleBoundary((JArray)boundary.Parameters["points"], ref intersections);
+                            if (boundary.Type == "polyline")
+                            {
+                                Need(!(boundary.Parameters["bulges"] is JArray b) || b.All(v => (double)v == 0), "curved polyline hatch boundaries are not supported by this creation operation");
+                                CheckSimpleBoundary((JArray)boundary.Parameters["points"], ref intersections);
+                            }
                             Boolean(obj, "associative", true); break;
                         default: throw new ArgumentException("unsupported entity type: " + type);
                     }

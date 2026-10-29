@@ -151,6 +151,14 @@ namespace Bimwright.Dwg.Plugin
 
     public static class CommandSchemas
     {
+        public static readonly CommandSchema PlanHatchClip = CommandSchema.Object(
+            SchemaProperty.RequiredNonEmptyString("expected_document"), SchemaProperty.RequiredNonEmptyString("expected_fingerprint"),
+            SchemaProperty.Required("hatch_handles", JTokenType.Array), SchemaProperty.Required("boundary_handles", JTokenType.Array));
+        public static readonly CommandSchema ClipHatches = CommandSchema.Object(
+            SchemaProperty.RequiredNonEmptyString("expected_document"), SchemaProperty.RequiredNonEmptyString("expected_fingerprint"),
+            SchemaProperty.Required("hatch_handles", JTokenType.Array), SchemaProperty.Required("boundary_handles", JTokenType.Array),
+            SchemaProperty.RequiredNonEmptyString("expected_session"), SchemaProperty.RequiredNonEmptyString("expected_plan_hash"),
+            SchemaProperty.Optional("dry_run", JTokenType.Boolean));
         public static readonly CommandSchema GetDrawingInfo = CommandSchema.Empty;
 
         public static readonly CommandSchema ListXrefs = CommandSchema.Object(

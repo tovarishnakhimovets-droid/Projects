@@ -30,7 +30,8 @@ namespace Bimwright.Dwg.Server.Tools
         [Description("Circle, arc or ellipse WCS center.")] public EntityBatchPoint center { get; set; }
         [Description("Point/TEXT/MTEXT position; rectangle lower-left local origin, in WCS drawing units.")] public EntityBatchPoint position { get; set; }
         public double? radius { get; set; }
-        [Description("Straight lightweight polyline vertices, 2-512. One exact WCS elevation; no repeated closing vertex.")] public EntityBatchPoint[] points { get; set; }
+        [Description("Lightweight polyline vertices, 2-512. One exact WCS elevation; no repeated closing vertex.")] public EntityBatchPoint[] points { get; set; }
+        [Description("Optional circular-arc bulge per polyline vertex; defaults to all zero. Same count as points, absolute values <=1000000; final value zero for an open polyline. Curved polylines cannot be a hatch boundary in this creation operation.")] public double[] bulges { get; set; }
         public bool? closed { get; set; }
         [Description("Positive rectangle width or MTEXT wrapping width. MTEXT default 100 drawing units.")] public double? width { get; set; }
         [Description("Positive rectangle height or text height. Text default 2.5 drawing units.")] public double? height { get; set; }
@@ -52,7 +53,7 @@ namespace Bimwright.Dwg.Server.Tools
         [McpServerTool(Name = "dwg_create_entities", ReadOnly = false, Idempotent = false), Description(
             "Create 1-2000 heterogeneous whitelisted entities as one guarded operation and one native transaction. " +
             "No command strings, code, arbitrary setters, existing-entity edits or new layers/styles. Explicit existing layer on every entity. " +
-            "WCS drawing units, +Z planar curves, straight zero-width polylines, full ellipses, field-free TEXT/MTEXT and SOLID hatch only. " +
+            "WCS drawing units, +Z planar curves, zero-width polylines with optional circular-arc bulges, full ellipses, field-free TEXT/MTEXT and SOLID hatch only. " +
             "Hatches reference earlier local boundary IDs and put their boundary above the fill. Validates the entire plan, document identity, " +
             "layers/styles and Undo state before writes; dry_run performs no entity construction or writes. " +
             "Limits: 2 MiB UTF-8 input, 20000 total polyline/rectangle vertices, 15-second cooperative native deadline. " +

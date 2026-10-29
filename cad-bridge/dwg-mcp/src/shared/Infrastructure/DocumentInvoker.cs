@@ -4,6 +4,7 @@ using Autodesk.AutoCAD.ApplicationServices;
 using Bimwright.Dwg.Plugin.Blocks;
 using Bimwright.Dwg.Plugin.View;
 using Bimwright.Dwg.Plugin.Xrefs;
+using Bimwright.Dwg.Plugin.Hatches;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -55,6 +56,15 @@ namespace Bimwright.Dwg.Plugin
                     // or prompting the user to activate/finish another drawing.
                     using (doc.LockDocument(DocumentLockMode.Read, null, null, false)) return action(doc);
                 }
+                if (command == "clip_hatches")
+                {
+                    if (!HatchClipInput.TryParse(parameters, false, out var clip, out var clipError))
+                        throw new InvalidOperationException(clipError);
+                    // This command compares a complete source/mask geometry hash
+                    // afresh under the write lock. Other database edits need not
+                    // invalidate it, but a different open-document session must.
+                    return InvokeGuardedWrite(doc, action, clip.Session, DrawingRevision.For(doc).Revision, true);
+                }
                 var expected = ReadWriteExpectation(command, parameters);
                 if (expected.HasValue)
                     return InvokeGuardedWrite(doc, action, expected.Value.Session, expected.Value.Revision, command == "bind_current_xref");
@@ -90,7 +100,7 @@ namespace Bimwright.Dwg.Plugin
             return null;
         }
 
-        private static T InvokeGuardedWrite<T>(Document doc, Func<Document, T> action, string expectedSession, long expectedRevision, bool bindCurrentRoot)
+        private static T InvokeGuardedWrite<T>(Document doc, Func<Document, T> action, string expectedSession, long expectedRevision, bool refreshUnderWriteLock)
         {
             var state = DrawingRevision.For(doc);
             RequireRevision(state, expectedSession, expectedRevision, "before_write_lock");
@@ -113,10 +123,10 @@ namespace Bimwright.Dwg.Plugin
                     throw;
                 }
                 // Legacy operations retain their exact revision guard. The new
-                // bind-current contract binds a whole current definition after a
-                // fresh full metadata preflight under this lock. It does not claim
+                // bind-current and hatch-clip contracts use a fresh complete
+                // preflight under this lock. They do not claim
                 // that lock-mode evaluation left the whole database unchanged.
-                if (!bindCurrentRoot || state.SessionId != expectedSession || state.Revision < expectedRevision)
+                if (!refreshUnderWriteLock || state.SessionId != expectedSession || state.Revision < expectedRevision)
                     RequireRevision(state, expectedSession, expectedRevision, "after_write_lock");
                 using (state.BeginPhase("write_command"))
                 {

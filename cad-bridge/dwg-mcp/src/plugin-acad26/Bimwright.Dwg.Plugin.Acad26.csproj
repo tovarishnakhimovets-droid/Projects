@@ -30,6 +30,10 @@
       <HintPath>$(AutoCad2026Dir)\acdbmgd.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="acdbmgdbrep">
+      <HintPath>$(AutoCad2026Dir)\acdbmgdbrep.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <Reference Include="acmgd">
       <HintPath>$(AutoCad2026Dir)\acmgd.dll</HintPath>
       <Private>false</Private>
