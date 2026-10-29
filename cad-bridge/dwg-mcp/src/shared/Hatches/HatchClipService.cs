@@ -256,7 +256,7 @@ namespace Bimwright.Dwg.Plugin.Hatches
                                 {
                                     var curve = Curve.CreateFromGeCurve(native);
                                     Need(curve != null, "BREP edge could not be converted"); curves.Add(curve);
-                                    Need(curve is Line || curve is Arc || curve is Circle, "unsupported output curve; no approximation was made");
+                                    Need(curve is Line || curve is Arc || curve is Circle || curve is Ellipse, "unsupported output curve; no approximation was made");
                                 }
                             }
                         }

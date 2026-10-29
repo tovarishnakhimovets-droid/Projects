@@ -96,6 +96,24 @@ namespace Bimwright.Dwg.Plugin.Hatches
                                     curves.Add(new Arc(center, arc.Radius, a, b));
                                 }
                             }
+                            else if (curve is EllipticalArc2d ellipse)
+                            {
+                                // AppendLoop may return a circular boundary as EllipticalArc2d.
+                                // Preserve both axes, radii and parameters in native geometry;
+                                // do not fit a circle or tessellate an actual ellipse.
+                                data.Add(new JArray("ellipse", ellipse.Center.X, ellipse.Center.Y,
+                                    ellipse.MajorAxis.X, ellipse.MajorAxis.Y, ellipse.MinorAxis.X, ellipse.MinorAxis.Y,
+                                    ellipse.MajorRadius, ellipse.MinorRadius, ellipse.StartAngle, ellipse.EndAngle));
+                                using (var native = new EllipticalArc3d(new Point3d(ellipse.Center.X, ellipse.Center.Y, 0),
+                                    new Vector3d(ellipse.MajorAxis.X, ellipse.MajorAxis.Y, 0),
+                                    new Vector3d(ellipse.MinorAxis.X, ellipse.MinorAxis.Y, 0),
+                                    ellipse.MajorRadius, ellipse.MinorRadius, ellipse.StartAngle, ellipse.EndAngle))
+                                {
+                                    var converted = Curve.CreateFromGeCurve(native);
+                                    if (converted is Ellipse || converted is Arc || converted is Circle) curves.Add(converted);
+                                    else { converted?.Dispose(); throw new ArgumentException("native ellipse conversion failed; no approximation was made"); }
+                                }
+                            }
                             else throw new ArgumentException("unsupported hatch edge: " + curve.GetType().Name + "; no approximation was made");
                         }
                         rings.Add(MakeRegion(curves));

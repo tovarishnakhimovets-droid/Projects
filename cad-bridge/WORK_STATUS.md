@@ -1,5 +1,37 @@
 # CAD bridge — состояние работы
 
+## v3.6 native: 7/8, Undo; исправлено чтение эллиптических дуг — 2026-10-29
+
+- Продолжение того же поручения, без нового pull/merge. До правок проверены
+  clean andrew/origin-andrew d6f4b11, develop/origin-develop d8b712a,
+  один worktree. Пользователь разрешил выпуск из чистой личной ветки без merge.
+- Реально загружена Acad27 DLL3.6.0.0 +10ff6c11, AutoCAD PID30552.
+  В явно разрешённой __MCP_TEST_CLIP_NK2.dwg семь из8 случаев прошли
+  plan/dry-run/write/readback: keep/remove, прямая, полукруг источника,
+  две части, создание и сохранение отверстия. Пользователь одним Ctrl+Z
+  отменил последний clip: источник51F793 снова жив/2loops/Region area84,
+  output51F79C erased. Неверные session/hash отказали до записи.
+- circular_mask: plan/dry-run area139.2699081698724 верны; writer отказал
+  в HatchRegions после AppendFace: unsupported EllipticalArc2d. Исходный HATCH
+  и маска остались живы, count703 соответствует откату без временного мусора.
+  Ранее один planner guard отказал при изменении revision, свежий план после
+  readback прошёл; raw counter/guard не изменены. Рабочие Поверхности не менялись.
+- Причина локализована native stack: AppendLoop может представить круговую
+  дугу как EllipticalArc2d. Добавлено точное native преобразование 2D→3D
+  с обеими осями, радиусами и угловыми параметрами; принимаются аналитические
+  Ellipse output curves. Не подгоняем эллипс к кругу и не аппроксимируем.
+  Geometry hash включает все эти параметры. Сплайны по-прежнему запрещены.
+  API: https://help.autodesk.com/cloudhelp/2026/ENU/OARX-ManagedRefGuide/files/OARX-ManagedRefGuide-Autodesk_AutoCAD_Geometry_EllipticalArc3d_EllipticalArc3d_Point3d_Vector3d_Vector3d_double_double_double_double.html
+- Проверки текущего кода: полный suite1910/1910, actual MCP SDK/schema в составе;
+  обе Release-сборки PASS. Acad27 — 0errors/2 известных Roslyn warnings;
+  Acad26 — 0errors/0warnings, compile-only AutoCAD.NET25.1.0. Native регрессионный
+  случай уже записан в НК2/hatch_clip_checks.json; офлайн-набор не исполняет
+  Autodesk kernel и не доказывает исправление. Контракт уточнён в TOOLS.
+- Следующее: commit/push в andrew, immutable v3.7 без merge, проверка пакета,
+  установка пользователем и повтор дугового случая в той же разрешённой копии.
+  До этого рабочая обрезка не выполняется. НК2 audit хранится только в
+  проектной папке; новую копию общего кода или runtime не создаём.
+
 ## v3.6 собран из andrew без merge — 2026-10-29
 
 - Пользователь прямо разрешил сборку до merge с накоплением исправлений.

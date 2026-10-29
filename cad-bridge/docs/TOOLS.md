@@ -576,7 +576,10 @@ Receipt содержит `created_handles` для каждого заменён�
 Поддержаны прямые model-space HATCH и lightweight Polyline, normal +Z/elevation0,
 без ширины/толщины масок. HATCH должны быть nonassociative, nongradient,
 HatchStyle.Normal. Петли — полилинейные bulges либо LineSegment2d/CircularArc2d.
-Эллипсы/сплайны не аппроксимируются. Отказ для nested blocks/xrefs, XData,
+EllipticalArc2d читается через нативную EllipticalArc3d/Curve.CreateFromGeCurve
+с исходными осями, радиусами и параметрами; это также необходимо, когда
+AppendLoop представляет круговую дугу как эллиптическую. Аналитические эллипсы
+сохраняются точно, сплайны не поддержаны; аппроксимации нет. Отказ для nested blocks/xrefs, XData,
 extension dictionaries/fields/persistent reactors/annotative и locked/dependent
 слоёв; не стирать метаданные ради обхода. Пределы: 1000 исходных петель,
 20000 суммарных читаемых/выходных сегментов, 2000 новых HATCH,
