@@ -1,5 +1,84 @@
 # CAD bridge — состояние работы
 
+## ФАТАЛ v3.3: real writers не применять — 2026-10-28
+
+- v3.3 установлен пользователем. Активный Поверхности.dwg подтверждён
+  по полному пути/fingerprint739091b3..., DBMOD0. Fresh list30rootmetadata
+  complete, dry-run Bind3273CB PASS. Один real вызов вернул через17секунд
+  plugin closed connection; пользователь подтвердил fatal и перезапустилCAD.
+  Автоматического повторения Bind/Explode/Erase/Save не было.
+- WER: acad.exe23932, 22:07, exception0xc0000005, address0x7ff81f4139e0.
+  Дамп C:/Users/taa6651111/AppData/Local/CrashDumps/acad.exe.23932.dmp,
+  55 829 217байт. Сохранённый dump только читается, на сервер не отправлялся.
+- Microsoft dotnet-dump10.0.750501 установлен локально только в НК2/tools.
+  ip2md(exceptionAddress) => System.Runtime.InteropServices.GCHandle.get_Target.
+  Разрешённые адреса стека образуют цепь Matches→Capture→DBObject.DwgOut→
+  native AcMgDwgFiler.dwgVersion→gcroot<DwgFiler>→GCHandle. Сбой локализован
+  в custom filer path второго снимка. Полный native unwind не получен;
+  точная причина invalid callback context пока не установлена.
+- Independent PE/IL review installed acdbmgd: AcMgDwgFiler callbacks читают
+  gcroot из native this+0x40; ctor создаёт сильныйhandle, destructor освобождает.
+  Добавление KeepAlive вслепую не исправление. Также native dwgOut при error
+  status может ASSERT: throws/InvalidInput из callbacks не гарантируют
+  безопасного отказа. Это дополнительный риск, не доказанная причина данногоAV.
+- После restartPID28544 только readers: то же Поверхности.dwg, DBMOD0,
+ 30xref, все root graph/reference/identitymetadata совпали с pre-call.
+  Receipt упавшего вызова отсутствует, факт входа nativeBind не подтверждён.
+  Состояние до завершения упавшего процесса не объявляется откатанным.
+- Реальные manage_xrefs и explode_blocks v3.3 используют этот общий helper:
+  НЕ ПОВТОРЯТЬ до исправления и отдельной native-проверки. Dry-run/metadata
+  readers на helper не заходят; доступность после restart подтверждена.
+  Пакет3.3 immutable не перезаписывать/не рекламировать как рабочий для записи.
+- Следующий путь: убрать custom filing из production полностью. Для Bind
+  рассмотреть явный bind-only контракт текущего root: strictprelockrevision,
+  fresh full target/graph/transform/layer/status preflight под полученным lock,
+  затем nativeBind+placement readback. Semanticsдолжны бытьявными; не переносить
+  эту политику на detach/explode автоматически и не компенсировать+3.
+  Любой исправленный native путь сначала проверить в отдельном тестовом DWG
+  по явному разрешению, не на рабочей копии.
+- Новый код/пакет/коммиты не выполнялись. В source только накопленная запись
+  WORK_STATUS.md; новый bridge-edit preflight требует чистого дерева.
+  Для её фиксации нужно отдельное поручение по правилам пользователя оGit.
+  Диагностика объекта — НК2/cleanup_attempt.json и fatal_v3_3_*.txt.
+
+
+## v3.3 собран и проверен — 2026-10-28
+
+- По явному поручению пользователя согласованные12файлов зафиксированы
+  в andrew: b87e4f302fd37dded22014a250d97609153968bf. Перед упаковкой
+  рабочее дерево чистое; успешные1940logic/unit checks не повторялись.
+- Официальный package-team-dwg.ps1 -Version 3.3 создал releases/3.3/stage
+  и DwgMcp.Setup-v3.3-win-x64.zip: 40 073 048 байт, SHA256
+  81323f7f33941cbd0aee63a84abdf2936d468a02242235f6b115c4a3b305e212.
+  Manifest version3.3, commit b87e4f3..., dirty=false, оба года2026/2027,
+  40файлов; предыдущие версии не изменялись.
+- Проверены SHA/размеры всех40файлов, полный набор и каждый байт ZIP,
+  sidecar SHA, runtime release.json и точные canonical bridge-docs.
+  Упакованный EXE прошёл6actual MCP SDK initialize/tools-list profiles:
+  standard76/query22/read-only31 для каждого года, server version3.3,
+  writer visibility/annotations/identity/dry_run schema корректны.
+  Проверки используют только MCP discovery, ни одного CAD-вызова.
+- Independent verification: обе DLL PE3.3.0.0 и Product3.3.0+b87e4f3,
+  XML AppVersion3.3.0, ровно2components R25.1/R26.0, Win64 AutoCAD|Civil3D,
+  module paths2026/2027 правильные. Установленный3.2 не изменился:
+  SHA EXE, release.json и фактической Roaming-bundle Acad27DLL совпали
+  с baseline, снятым независимым агентом перед упаковкой.
+- Промежуточный releases/3.3/plugin-build удалён после проверки точного
+  absolute path внутри release workspace, отсутствия reparse points
+  и loaded CAD/MCP modules оттуда. Готовые stage, ZIP и SHA сохранены.
+- Единственная QA-реализация — НК2/check_release.py, результат —
+  НК2/release_3_3_check.json. В папку объекта мост не копировался.
+- Source/offline-package verified. Установлен/загружен по-прежнему3.2;
+  push, merge, установка и CAD-save не выполнялись. Новый gate и native
+  DwgOut(FileFiler) на рабочем DWG ещё не проверены; Bind/Explode не выполнены.
+  Следующий шаг: пользователь закрывает AutoCAD/Codex, устанавливает3.3,
+  затем fresh identity/metadata, dry-run и один защищённый рабочий вызов.
+  При unknown/timeout читать состояние, автоматически не повторять запись.
+- Этот итог добавлен после выпуска без новой Git-фиксации: отдельный коммит
+  журнальной записи не входит в делегированный набор12файлов. Пакет не
+  пересобирался, manifest остаётся привязан к чистому коммиту b87e4f3.
+
+
 ## Подготовка выпуска v3.3 — 2026-10-28
 
 - Пользователь отдельно поручил «Сделай коммит и v3.3»: согласованные12файлов
