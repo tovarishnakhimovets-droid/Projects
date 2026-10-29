@@ -13,7 +13,7 @@ namespace Bimwright.Dwg.Server.Tools
         [McpServerTool(Name = "dwg_plan_hatch_clip", ReadOnly = true, Idempotent = true), Description(
             "Plan clipping of 1-20 explicit direct model-space HATCH handles to the positive UNION of 1-32 closed lightweight polyline masks. Active model tab required. " +
             "Uses native Region booleans on unopened transient line/arc curves; no tessellation. Masks and hatches must be +Z/elevation0; hatches nonassociative, Normal island style, nongradient. " +
-            "Holes and separate islands are preserved. Refuses unsupported curves, metadata/associations, locked/dependent layers and nested block contents. " +
+            "Holes and separate islands are preserved. Scalar XData is guarded and cloned exactly; handle links, unsupported metadata/associations, locked/dependent layers and nested block contents refuse. " +
             "Returns keep/remove/clip decisions, areas, planned output counts, drawing session and geometry plan hash. Never moves masks or writes/saves/selects/changes view. " +
             "Limits: 1000 source loops, 20000 aggregate inspected/output edges, 2000 output hatches, 15-second cooperative deadline; a native modeler call cannot be interrupted.")]
         public static Task<string> PlanHatchClip(string expected_document, string expected_fingerprint, string[] hatch_handles, string[] boundary_handles)
@@ -25,7 +25,7 @@ namespace Bimwright.Dwg.Server.Tools
         [McpServerTool(Name = "dwg_clip_hatches", ReadOnly = false, Idempotent = false), Description(
             "Apply dwg_plan_hatch_clip to the same explicit HATCH/mask handles with its expected_session and expected_plan_hash. dry_run defaults true and performs native transient planning only. " +
             "Real write recomputes and compares source/mask geometry under the document write lock, then commits the selected batch in one transaction. " +
-            "Keeps inside hatch handles, erases outside hatches, replaces crossings with cloned hatch appearance and exact BREP loops; holes retained. Temporary construction curves are erased in the transaction. " +
+            "Keeps inside hatch handles, erases outside hatches, replaces crossings with cloned hatch appearance, scalar XData and exact BREP loops; holes retained. Temporary construction curves are erased in the transaction. " +
             "Checks retained area and geometry before erasing originals; returns source-to-created handles. Same bounds/refusals as planner. No save; masks unchanged. " +
             "Single Undo requires live verification. Never repeat a timed-out mutation with uncertain outcome.")]
         public static Task<string> ClipHatches(string expected_document, string expected_fingerprint, string[] hatch_handles, string[] boundary_handles,

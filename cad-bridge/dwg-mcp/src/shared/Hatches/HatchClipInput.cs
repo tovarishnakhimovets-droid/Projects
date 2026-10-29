@@ -88,5 +88,53 @@ namespace Bimwright.Dwg.Plugin.Hatches
             if (double.IsNaN(source) || double.IsInfinity(source) || source <= 0 || double.IsNaN(result) || double.IsInfinity(result) || result < 0) return "nonfinite or invalid clip area";
             return result > source + AreaTolerance(source) ? "clip increased source area" : null;
         }
+        // Ordered typed data is a guard, not instructions or writable input.
+        // Object-handle links need a separate remapping contract when splitting.
+        public static JArray XDataSnapshot(JArray records)
+        {
+            Need(records != null && records.Count <= 2048, "XData exceeds2048 records");
+            Need(Encoding.UTF8.GetByteCount(records.ToString(Formatting.None)) <= 65536, "XData snapshot exceeds64KiB");
+            int depth = 0; bool application = false;
+            foreach (var token in records)
+            {
+                var row = token as JArray;
+                Need(row != null && row.Count == 2 && row[0].Type == JTokenType.Integer, "invalid typed XData record");
+                int code = row[0].Value<int>(); var value = row[1];
+                if (code == 1001)
+                {
+                    Need(depth == 0 && value.Type == JTokenType.String && !string.IsNullOrEmpty((string)value), "invalid XData application group");
+                    application = true; continue;
+                }
+                Need(application, "XData must begin with an application name");
+                if (code == 1000 || code == 1003) Need(value.Type == JTokenType.String, "invalid XData string");
+                else if (code == 1002)
+                {
+                    Need(value.Type == JTokenType.String && ((string)value == "{" || (string)value == "}"), "invalid XData control string");
+                    depth += (string)value == "{" ? 1 : -1; Need(depth >= 0 && depth <= 64, "invalid XData nesting");
+                }
+                else if (code == 1004)
+                {
+                    Need(value.Type == JTokenType.String, "invalid XData binary chunk");
+                    Need(Convert.FromBase64String((string)value).Length <= 127, "XData binary chunk exceeds127 bytes");
+                }
+                else if (code >= 1010 && code <= 1013)
+                {
+                    var point = value as JArray;
+                    Need(point != null && point.Count == 3 && point.All(FiniteNumber), "invalid XData point/vector");
+                }
+                else if (code >= 1040 && code <= 1042) Need(FiniteNumber(value), "invalid XData real");
+                else if (code == 1070 || code == 1071)
+                {
+                    Need(value.Type == JTokenType.Integer, "invalid XData integer");
+                    long n = value.Value<long>();
+                    Need(n >= (code == 1070 ? short.MinValue : int.MinValue) && n <= (code == 1070 ? short.MaxValue : int.MaxValue), "XData integer out of range");
+                }
+                else throw new ArgumentException("unsupported XData code " + code + "; handle links are not remapped");
+            }
+            Need(depth == 0, "unclosed XData group");
+            return (JArray)records.DeepClone();
+        }
+        private static bool FiniteNumber(JToken value) => (value.Type == JTokenType.Integer || value.Type == JTokenType.Float)
+            && !double.IsNaN(value.Value<double>()) && !double.IsInfinity(value.Value<double>());
     }
 }

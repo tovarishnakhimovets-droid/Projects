@@ -27,6 +27,9 @@ namespace Bimwright.Dwg.Plugin.Hatches
             {
                 Need(clone.Database == null, "mask clone must be transient");
                 for (int i = 0; i < clone.NumberOfVertices; i++) { Segment(); Need(clone.GetStartWidthAt(i) == 0 && clone.GetEndWidthAt(i) == 0 && clone.ConstantWidth == 0, "mask widths are unsupported"); }
+                // Localize the polyline BEFORE Explode computes arc endpoints.
+                // Translating already exploded WCS arcs retains their rounding gaps.
+                clone.TransformBy(Matrix3d.Displacement(Point3d.Origin - Origin));
                 var curves = new DBObjectCollection();
                 try { clone.Explode(curves); return MakeRegion(curves); }
                 finally { foreach (DBObject o in curves) o.Dispose(); }
@@ -36,8 +39,7 @@ namespace Bimwright.Dwg.Plugin.Hatches
         {
             Time();
             foreach (DBObject o in curves) Need(o is Curve && o.Database == null && o.ObjectId.IsNull, "modeler input must contain unopened transient curves");
-            var shift = Matrix3d.Displacement(Point3d.Origin - Origin);
-            foreach (Entity curve in curves) curve.TransformBy(shift);
+            // All callers construct their curves in this geometry's local frame.
             var result = Region.CreateFromCurves(curves);
             if (result.Count != 1)
             {
@@ -71,7 +73,7 @@ namespace Bimwright.Dwg.Plugin.Hatches
                                 {
                                     Segment(); var b = loop.Polyline[v];
                                     data.Add(new JArray(b.Vertex.X, b.Vertex.Y, b.Bulge));
-                                    p.AddVertexAt(v, b.Vertex, b.Bulge, 0, 0);
+                                    p.AddVertexAt(v, new Point2d(b.Vertex.X - Origin.X, b.Vertex.Y - Origin.Y), b.Bulge, 0, 0);
                                 }
                                 p.Closed = true; p.Explode(curves);
                             }
@@ -82,12 +84,12 @@ namespace Bimwright.Dwg.Plugin.Hatches
                             if (curve is LineSegment2d line)
                             {
                                 data.Add(new JArray("line", line.StartPoint.X, line.StartPoint.Y, line.EndPoint.X, line.EndPoint.Y));
-                                curves.Add(new Line(new Point3d(line.StartPoint.X, line.StartPoint.Y, 0), new Point3d(line.EndPoint.X, line.EndPoint.Y, 0)));
+                                curves.Add(new Line(Local(line.StartPoint), Local(line.EndPoint)));
                             }
                             else if (curve is CircularArc2d arc)
                             {
                                 data.Add(new JArray("arc", arc.Center.X, arc.Center.Y, arc.Radius, arc.StartAngle, arc.EndAngle, arc.ReferenceVector.X, arc.ReferenceVector.Y, arc.IsClockWise));
-                                var center = new Point3d(arc.Center.X, arc.Center.Y, 0);
+                                var center = Local(arc.Center);
                                 if (Math.Abs(arc.EndAngle - arc.StartAngle) == Math.PI * 2) curves.Add(new Circle(center, Vector3d.ZAxis, arc.Radius));
                                 else
                                 {
@@ -104,7 +106,7 @@ namespace Bimwright.Dwg.Plugin.Hatches
                                 data.Add(new JArray("ellipse", ellipse.Center.X, ellipse.Center.Y,
                                     ellipse.MajorAxis.X, ellipse.MajorAxis.Y, ellipse.MinorAxis.X, ellipse.MinorAxis.Y,
                                     ellipse.MajorRadius, ellipse.MinorRadius, ellipse.StartAngle, ellipse.EndAngle));
-                                using (var native = new EllipticalArc3d(new Point3d(ellipse.Center.X, ellipse.Center.Y, 0),
+                                using (var native = new EllipticalArc3d(Local(ellipse.Center),
                                     new Vector3d(ellipse.MajorAxis.X, ellipse.MajorAxis.Y, 0),
                                     new Vector3d(ellipse.MinorAxis.X, ellipse.MinorAxis.Y, 0),
                                     ellipse.MajorRadius, ellipse.MinorRadius, ellipse.StartAngle, ellipse.EndAngle))
@@ -125,6 +127,8 @@ namespace Bimwright.Dwg.Plugin.Hatches
             }
             finally { foreach (var r in rings) r.Dispose(); }
         }
+        private Point3d Local(Point2d point) => new Point3d(point.X - Origin.X, point.Y - Origin.Y, 0);
+
         private List<Region> FillRings(List<Region> rings)
         {
             var parent = Enumerable.Repeat(-1, rings.Count).ToArray();

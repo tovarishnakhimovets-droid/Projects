@@ -73,13 +73,11 @@ namespace Bimwright.Dwg.Plugin.Hatches
                             item.Action = inside ? "keep" : item.Pieces.Count == 0 ? "remove" : "clip";
                             if (item.Action == "clip")
                                 foreach (var piece in item.Pieces) ReadFaces(piece, item, geometry, ref outputCount);
-                            double? reported = null;
-                            try { reported = hatch.Area; } catch (Autodesk.AutoCAD.Runtime.Exception) { }
-                            if (reported.HasValue) Need(Math.Abs(reported.Value - before) <= HatchClipInput.AreaTolerance(before), "hatch area disagrees with loop regions: " + handle);
                             item.Receipt = new JObject { ["handle"] = handle, ["action"] = item.Action,
                                 ["source_area"] = before, ["retained_area"] = after,
                                 ["removed_area"] = Math.Max(0, before - after), ["output_hatch_count"] = item.Faces.Count,
-                                ["reported_hatch_area"] = reported.HasValue ? new JValue(reported.Value) : JValue.CreateNull() };
+                                ["reported_hatch_area"] = JValue.CreateNull(), ["reported_hatch_area_read"] = false,
+                                ["xdata_records"] = ((JArray)item.Signature["appearance"]["xdata"]).Count };
                             receipts.Add(item.Receipt);
                         }
                         finally { foreach (var r in source) r.Dispose(); }
@@ -186,7 +184,7 @@ namespace Bimwright.Dwg.Plugin.Hatches
             Need(entity != null && entity.GetType() == typeof(T) && !entity.IsErased && !id.IsEffectivelyErased && entity.OwnerId == model,
                 "target must be a live direct model-space " + typeof(T).Name + ": " + handle);
             Need(entity.ExtensionDictionary.IsNull && !entity.HasFields && entity.Annotative != AnnotativeStates.True, "extension dictionary, fields or annotation are unsupported: " + handle);
-            using (var data = entity.XData) Need(data == null || data.AsArray().Length == 0, "XData is unsupported: " + handle);
+            XDataSignature(entity); // Validate bounded supported metadata before geometry work.
             Need(entity.GetPersistentReactorIds().Count == 0, "persistent associations are unsupported: " + handle);
             var layer = (LayerTableRecord)tx.GetObject(entity.LayerId, OpenMode.ForRead);
             Need(!layer.IsLocked && !layer.IsDependent && !layer.IsErased, "locked or dependent layer: " + layer.Name);
@@ -198,7 +196,8 @@ namespace Bimwright.Dwg.Plugin.Hatches
             for (int i = 0; i < p.NumberOfVertices; i++) vertices.Add(new JArray(p.GetPoint2dAt(i).X, p.GetPoint2dAt(i).Y, p.GetBulgeAt(i), p.GetStartWidthAt(i), p.GetEndWidthAt(i)));
             return new JObject { ["handle"] = p.Handle.ToString(), ["owner"] = p.OwnerId.Handle.ToString(), ["layer"] = p.Layer,
                 ["closed"] = p.Closed, ["normal"] = new JArray(p.Normal.X, p.Normal.Y, p.Normal.Z),
-                ["elevation"] = p.Elevation, ["thickness"] = p.Thickness, ["width"] = p.ConstantWidth, ["vertices"] = vertices };
+                ["elevation"] = p.Elevation, ["thickness"] = p.Thickness, ["width"] = p.ConstantWidth, ["vertices"] = vertices,
+                ["xdata"] = XDataSignature(p) };
         }
         private static JObject SourceSignature(Hatch h, JObject shape) => new JObject {
             ["handle"] = h.Handle.ToString(), ["owner"] = h.OwnerId.Handle.ToString(), ["appearance"] = AppearanceSignature(h), ["shape"] = shape };
@@ -210,7 +209,28 @@ namespace Bimwright.Dwg.Plugin.Hatches
             ["associative"] = h.Associative, ["pattern"] = h.PatternName, ["pattern_type"] = (int)h.PatternType,
             ["angle"] = h.PatternAngle, ["scale"] = h.PatternScale, ["space"] = h.PatternSpace,
             ["double"] = h.PatternDouble, ["origin"] = new JArray(h.Origin.X, h.Origin.Y),
-            ["definitions"] = PatternSignature(h) };
+            ["definitions"] = PatternSignature(h), ["xdata"] = XDataSignature(h) };
+
+        private static JArray XDataSignature(Entity entity)
+        {
+            var records = new JArray();
+            using (var buffer = entity.XData)
+            {
+                var values = buffer?.AsArray() ?? Array.Empty<TypedValue>();
+                Need(values.Length <= 2048, "XData exceeds2048 records");
+                foreach (var value in values)
+                {
+                    JToken data;
+                    if (value.Value is Point3d point) data = new JArray(point.X, point.Y, point.Z);
+                    else if (value.Value is byte[] bytes) data = new JValue(Convert.ToBase64String(bytes));
+                    else if (value.Value is string || value.Value is double || value.Value is short || value.Value is int)
+                        data = new JValue(value.Value);
+                    else throw new ArgumentException("unsupported native XData value for code " + value.TypeCode);
+                    records.Add(new JArray(value.TypeCode, data));
+                }
+            }
+            return HatchClipInput.XDataSnapshot(records);
+        }
 
         private static JObject TransparencySignature(Hatch hatch)
         {

@@ -12,6 +12,60 @@ namespace Bimwright.Dwg.Tests
 {
     public class HatchClipTests
     {
+        [Fact]
+        public void ScalarXDataKeepsExactOrderTypesValuesAndIndependentStorage()
+        {
+            var data = new JArray(new JArray(1001, "APP"), new JArray(1002, "{"),
+                new JArray(1000, "Кровля"), new JArray(1000, ""), new JArray(1003, "0"),
+                new JArray(1004, Convert.ToBase64String(new byte[] { 0, 127, 255 })),
+                new JArray(1010, new JArray(1.25, -2.5, 0)), new JArray(1011, new JArray(2e6, -2e7, 0)),
+                new JArray(1012, new JArray(-1, 2, 3)), new JArray(1013, new JArray(0, 0, 1)),
+                new JArray(1040, 0.123456789012345), new JArray(1041, 5.0), new JArray(1042, 1.0),
+                new JArray(1070, short.MinValue), new JArray(1071, int.MaxValue), new JArray(1002, "}"),
+                new JArray(1001, "APP2"), new JArray(1000, "second group"));
+            var snapshot = HatchClipInput.XDataSnapshot(data);
+            Assert.True(JToken.DeepEquals(data, snapshot));
+            string original = HatchClipInput.Hash(snapshot);
+            data[10][1] = 0.2;
+            Assert.Equal(original, HatchClipInput.Hash(snapshot));
+            Assert.NotEqual(original, HatchClipInput.Hash(HatchClipInput.XDataSnapshot(data)));
+            var swapped = (JArray)snapshot.DeepClone();
+            var first = swapped[2].DeepClone(); swapped[2] = swapped[3].DeepClone(); swapped[3] = first;
+            Assert.NotEqual(original, HatchClipInput.Hash(HatchClipInput.XDataSnapshot(swapped)));
+            Assert.Empty(HatchClipInput.XDataSnapshot(new JArray()));
+        }
+        [Theory]
+        [InlineData(1005, "\"AB12\"")]
+        [InlineData(1006, "1")]
+        [InlineData(1000, "1")]
+        [InlineData(1002, "\"command\"")]
+        [InlineData(1002, "\"}\"")]
+        [InlineData(1004, "\"not base64!\"")]
+        [InlineData(1010, "[1,2]")]
+        [InlineData(1011, "[1,2,\"3\"]")]
+        [InlineData(1040, "\"1.5\"")]
+        [InlineData(1070, "32768")]
+        [InlineData(1071, "2147483648")]
+        [InlineData(1070, "1.5")]
+        public void XDataLinksUnknownCodesAndWrongTypesRefuse(int code, string json)
+        {
+            var data = new JArray(new JArray(1001, "APP"), new JArray(code, JToken.Parse(json)));
+            Assert.ThrowsAny<Exception>(() => HatchClipInput.XDataSnapshot(data));
+        }
+        [Fact]
+        public void XDataGroupAndSizeBoundsRefuseWithoutDiscardingRecords()
+        {
+            Assert.Throws<ArgumentException>(() => HatchClipInput.XDataSnapshot(new JArray(new JArray(1000, "orphan"))));
+            Assert.Throws<ArgumentException>(() => HatchClipInput.XDataSnapshot(new JArray(new JArray(1001, "APP"), new JArray(1002, "{"))));
+            Assert.Throws<ArgumentException>(() => HatchClipInput.XDataSnapshot(new JArray(new JArray(1001, "APP"), new JArray(1002, "{"), new JArray(1001, "APP2"))));
+            var tooMany = new JArray(new JArray(1001, "APP"));
+            for (int i = 0; i < 2048; i++) tooMany.Add(new JArray(1070, 0));
+            Assert.Throws<ArgumentException>(() => HatchClipInput.XDataSnapshot(tooMany));
+            Assert.Throws<ArgumentException>(() => HatchClipInput.XDataSnapshot(new JArray(new JArray(1001, "APP"), new JArray(1000, new string('x', 65536)))));
+            Assert.Throws<ArgumentException>(() => HatchClipInput.XDataSnapshot(new JArray(new JArray(1001, "APP"), new JArray(1004, Convert.ToBase64String(new byte[128])))));
+            foreach (double n in new[] { double.NaN, double.PositiveInfinity, double.NegativeInfinity })
+                Assert.Throws<ArgumentException>(() => HatchClipInput.XDataSnapshot(new JArray(new JArray(1001, "APP"), new JArray(1040, n))));
+        }
         [Theory]
         [InlineData(true, false, false, false, "by_layer")]
         [InlineData(false, true, false, false, "by_block")]
