@@ -1,5 +1,22 @@
 # CAD bridge — состояние работы
 
+## Кандидат v3.11 собран без merge — 2026-10-29
+
+- Код5af4de634cdfdf98e0f908f5016e3d337804c2c9 опубликован вandrew.
+  Из чистого commit собран releases/3.11/DwgMcp.Setup-v3.11-win-x64.zip,
+  40111477байт, manifest dirty=false,2026/2027,40файлов. SHA256:
+  038fda8fbbaecfbf2289e5d2bd4e15cb837c0bcf47d2098581142bec8d6c3e48.
+- Manifest SHA256/ZIP bytes/metadata/canonical docs PASS. Реальный packaged
+  EXE прошёл6SDK initialize/tools-list: оба года standard79/query23/read-only32,
+  guards/defaults/version3.11 верны,0CAD calls. Результат только в
+  НК2/release_3_11_check.json.1936тестов и обе сборки действительны;
+  docs-only итог не требует повторных проверок/пересборки.
+- Установка/merge не выполнялись. Runtimev3.10; рабочий DWG без записей агента,
+  разрешённая CLIP-копия600entities/7масок неизменна после откатов, save=false.
+  Далее пользователь обновляет пакет и активирует ту же копию; сначала контроль
+  4966D8, затем488456, только после успешного readback — отверстия/дуги/budget.
+  Native v3.11 и устранение appearance-регрессии ещё не подтверждены.
+
 ## Native v3.10: регрессия; исправление v3.11 готово офлайн — 2026-10-29
 
 - Загруженаv3.10 +a903272, PID23860, точная CLIP-копия активна, baseline600
