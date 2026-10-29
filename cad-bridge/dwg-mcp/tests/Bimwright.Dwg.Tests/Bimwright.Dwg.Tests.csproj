@@ -24,6 +24,7 @@
     <Compile Include="..\..\src\shared\Rewriting\CollapseAndRewriteInput.cs" LinkBase="Shared\Rewriting" />
     <Compile Include="..\..\src\shared\Infrastructure\CommandResult.cs" LinkBase="Shared\Infrastructure" />
     <Compile Include="..\..\src\shared\Hatches\HatchClipResources.cs" LinkBase="Shared\Hatches" />
+    <Compile Include="..\..\src\shared\Hatches\HatchIslandPolicy.cs" LinkBase="Shared\Hatches" />
     <Compile Include="..\..\src\shared\Preferences\CrosshairSettingsService.cs" LinkBase="Shared\Preferences" />
     <Compile Include="..\..\src\shared\Preferences\GeneralSettingsService.cs" LinkBase="Shared\Preferences" />
     <Compile Include="..\..\src\shared\Infrastructure\DwgApiExecutor.cs" LinkBase="Shared\Infrastructure" />

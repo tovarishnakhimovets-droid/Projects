@@ -50,9 +50,16 @@ namespace Bimwright.Dwg.Plugin.Hatches
             try { Need(!region.IsNull && region.Area > 0, "empty or invalid boundary region"); return region; }
             catch { region.Dispose(); throw; }
         }
-        internal List<Region> HatchRegions(Hatch hatch, out JObject shape)
+        internal JObject HatchShape(Hatch hatch)
         {
-            Need(hatch.Normal == Vector3d.ZAxis && hatch.Elevation == 0 && hatch.HatchStyle == HatchStyle.Normal, "hatch must use Normal island style, +Z and elevation0");
+            ReadHatch(hatch, out var shape, false);
+            return shape;
+        }
+        internal List<Region> HatchRegions(Hatch hatch, out JObject shape) => ReadHatch(hatch, out shape, true);
+        private List<Region> ReadHatch(Hatch hatch, out JObject shape, bool buildRegions)
+        {
+            Need(hatch.Normal == Vector3d.ZAxis && hatch.Elevation == 0, "hatch requires +Z and elevation0");
+            Need((int)hatch.HatchStyle >= 0 && (int)hatch.HatchStyle <= 2, "unsupported hatch island style");
             shape = new JObject { ["normal"] = new JArray(0, 0, 1), ["elevation"] = hatch.Elevation, ["style"] = (int)hatch.HatchStyle };
             var signature = new JArray(); shape["loops"] = signature;
             var rings = new List<Region>();
@@ -73,9 +80,9 @@ namespace Bimwright.Dwg.Plugin.Hatches
                                 {
                                     Segment(); var b = loop.Polyline[v];
                                     data.Add(new JArray(b.Vertex.X, b.Vertex.Y, b.Bulge));
-                                    p.AddVertexAt(v, new Point2d(b.Vertex.X - Origin.X, b.Vertex.Y - Origin.Y), b.Bulge, 0, 0);
+                                    if (buildRegions) p.AddVertexAt(v, new Point2d(b.Vertex.X - Origin.X, b.Vertex.Y - Origin.Y), b.Bulge, 0, 0);
                                 }
-                                p.Closed = true; p.Explode(curves);
+                                if (buildRegions) { p.Closed = true; p.Explode(curves); }
                             }
                         }
                         else foreach (Curve2d curve in loop.Curves)
@@ -84,11 +91,12 @@ namespace Bimwright.Dwg.Plugin.Hatches
                             if (curve is LineSegment2d line)
                             {
                                 data.Add(new JArray("line", line.StartPoint.X, line.StartPoint.Y, line.EndPoint.X, line.EndPoint.Y));
-                                curves.Add(new Line(Local(line.StartPoint), Local(line.EndPoint)));
+                                if (buildRegions) curves.Add(new Line(Local(line.StartPoint), Local(line.EndPoint)));
                             }
                             else if (curve is CircularArc2d arc)
                             {
                                 data.Add(new JArray("arc", arc.Center.X, arc.Center.Y, arc.Radius, arc.StartAngle, arc.EndAngle, arc.ReferenceVector.X, arc.ReferenceVector.Y, arc.IsClockWise));
+                                if (!buildRegions) continue;
                                 var center = Local(arc.Center);
                                 if (Math.Abs(arc.EndAngle - arc.StartAngle) == Math.PI * 2) curves.Add(new Circle(center, Vector3d.ZAxis, arc.Radius));
                                 else
@@ -106,6 +114,7 @@ namespace Bimwright.Dwg.Plugin.Hatches
                                 data.Add(new JArray("ellipse", ellipse.Center.X, ellipse.Center.Y,
                                     ellipse.MajorAxis.X, ellipse.MajorAxis.Y, ellipse.MinorAxis.X, ellipse.MinorAxis.Y,
                                     ellipse.MajorRadius, ellipse.MinorRadius, ellipse.StartAngle, ellipse.EndAngle));
+                                if (!buildRegions) continue;
                                 using (var native = new EllipticalArc3d(Local(ellipse.Center),
                                     new Vector3d(ellipse.MajorAxis.X, ellipse.MajorAxis.Y, 0),
                                     new Vector3d(ellipse.MinorAxis.X, ellipse.MinorAxis.Y, 0),
@@ -118,18 +127,18 @@ namespace Bimwright.Dwg.Plugin.Hatches
                             }
                             else throw new ArgumentException("unsupported hatch edge: " + curve.GetType().Name + "; no approximation was made");
                         }
-                        rings.Add(MakeRegion(curves));
+                        if (buildRegions) rings.Add(MakeRegion(curves));
                     }
                     finally { foreach (DBObject o in curves) o.Dispose(); }
                 }
-                Need(rings.Count > 0, "hatch has no loops");
-                return FillRings(rings);
+                Need(hatch.NumberOfLoops > 0, "hatch has no loops");
+                return buildRegions ? FillRings(rings, (int)hatch.HatchStyle) : new List<Region>();
             }
             finally { foreach (var r in rings) r.Dispose(); }
         }
         private Point3d Local(Point2d point) => new Point3d(point.X - Origin.X, point.Y - Origin.Y, 0);
 
-        private List<Region> FillRings(List<Region> rings)
+        private List<Region> FillRings(List<Region> rings, int style)
         {
             var parent = Enumerable.Repeat(-1, rings.Count).ToArray();
             var areas = rings.Select(r => r.Area).ToArray();
@@ -148,19 +157,15 @@ namespace Bimwright.Dwg.Plugin.Hatches
                         if (parent[small] < 0 || areas[big] < areas[parent[small]]) parent[small] = big;
                     }
                 }
-            var depth = new int[rings.Count];
-            for (int i = 0; i < rings.Count; i++)
-                for (int p = parent[i]; p >= 0; p = parent[p]) { Need(++depth[i] <= rings.Count, "cyclic loop containment"); }
             var output = new List<Region>();
             try
             {
-                for (int i = 0; i < rings.Count; i++)
+                foreach (int i in HatchIslandPolicy.FilledLoops(style, parent))
                 {
-                    if (depth[i] % 2 != 0) continue;
                     var filled = (Region)rings[i].Clone();
                     try
                     {
-                        for (int j = 0; j < rings.Count; j++) if (parent[j] == i)
+                        for (int j = 0; j < rings.Count; j++) if (HatchIslandPolicy.SubtractChild(style) && parent[j] == i)
                         { using (var hole = (Region)rings[j].Clone()) filled.BooleanOperation(BooleanOperationType.BoolSubtract, hole); }
                         Need(!Empty(filled), "empty filled loop"); output.Add(filled); filled = null;
                     }

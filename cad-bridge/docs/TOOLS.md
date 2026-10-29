@@ -555,6 +555,15 @@ lifetime проверено офлайн и в разрешённом Acad27 scr
 могут давать штатный отказ. Для изменённой реализации сначала нужна отдельная
 разрешённая scratch-проба. Не повторять native clip-tools v3.8.
 
+**v3.10 — кандидат, native ещё не проверен.** Сборка нового HATCH и AppendLoop
+выполняются в локальной системе Region; готовый HATCH переносится в WCS один раз.
+Точный исходный Origin и XData восстанавливаются после TransformBy, поскольку
+native-преобразование также меняет часть координат XData. Полный снимок оформления,
+геометрия результата и оба направления покрытия по-прежнему обязательны.
+Проверка неизменности источника теперь сравнивает полный снимок исходных петель,
+без повторной сборки Region. При проверке покрытия непересекающиеся габариты
+не передаются в BoolSubtract; бюджет15секунд и геометрические допуски не увеличены.
+
 `dwg_plan_hatch_clip` (профиль `query`) принимает полный `expected_document`,
 `expected_fingerprint`, `hatch_handles` (1–20) и `boundary_handles` (1–32).
 Нужна активная вкладка и пространство модели. Маска — **объединение положительных
@@ -562,7 +571,7 @@ lifetime проверено офлайн и в разрешённом Acad27 scr
 сохраняются. Для маски с отверстием этот контракт не подходит.
 
 План возвращает `drawing_session`, `plan_hash`, решения `keep/remove/clip`,
-`source_area`, `retained_area`, `removed_area`, число новых HATCH. Площади —
+`source_area`, `retained_area`, `removed_area`, `island_style`, число новых HATCH. Площади —
 в квадратных единицах чертежа. `keep` сохраняет исходный handle. План и dry-run
 строят только transient Region/BREP/curves и не открывают объекты для записи.
 
@@ -588,7 +597,14 @@ reported_hatch_area=null и reported_hatch_area_read=false явно отлича
 
 Поддержаны прямые model-space HATCH и lightweight Polyline, normal +Z/elevation0,
 без ширины/толщины масок. HATCH должны быть nonassociative, nongradient,
-HatchStyle.Normal. Петли — полилинейные bulges либо LineSegment2d/CircularArc2d.
+HatchStyle.Normal/Outer/Ignore, с сохранением исходного стиля в hash/readback.
+Normal чередует вложенные острова, Outer заполняет только корневые области за
+вычетом первых внутренних границ, Ignore заполняет корневые области целиком:
+[семантика Autodesk](https://help.autodesk.com/cloudhelp/2019/ENU/OARX-ManagedRefGuide/files/OREFNET-Autodesk_AutoCAD_DatabaseServices_HatchStyle.html).
+Новые отверстия от масок у Ignore отклоняются в planner: этот стиль не может
+их показать без изменения оформления. Пересекающиеся без вложенности петли,
+дубли/совпадения по-прежнему отклоняются; их семантика автоматически не угадывается.
+Петли — полилинейные bulges либо LineSegment2d/CircularArc2d.
 EllipticalArc2d читается через нативную EllipticalArc3d/Curve.CreateFromGeCurve
 с исходными осями, радиусами и параметрами; это также необходимо, когда
 AppendLoop представляет круговую дугу как эллиптическую. Аналитические эллипсы

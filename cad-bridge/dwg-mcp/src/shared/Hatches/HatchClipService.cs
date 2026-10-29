@@ -74,6 +74,7 @@ namespace Bimwright.Dwg.Plugin.Hatches
                             if (item.Action == "clip")
                                 foreach (var piece in item.Pieces) ReadFaces(piece, item, geometry, resources, ref outputCount);
                             item.Receipt = new JObject { ["handle"] = handle, ["action"] = item.Action,
+                                ["island_style"] = (int)hatch.HatchStyle,
                                 ["source_area"] = before, ["retained_area"] = after,
                                 ["removed_area"] = Math.Max(0, before - after), ["output_hatch_count"] = item.Faces.Count,
                                 ["reported_hatch_area"] = JValue.CreateNull(), ["reported_hatch_area_read"] = false,
@@ -125,9 +126,7 @@ namespace Bimwright.Dwg.Plugin.Hatches
                         finally { foreach (var r in rebuilt) r.Dispose(); }
                         // A reactor triggered by appends must not silently change the source being erased.
                         Open<Hatch>(db, tx, item.Source.Handle.ToString(), modelId);
-                        var current = geometry.HatchRegions(item.Source, out var currentShape);
-                        try { Need(JToken.DeepEquals(item.Signature, SourceSignature(item.Source, currentShape)), "source changed during append; transaction aborted"); }
-                        finally { foreach (var r in current) r.Dispose(); }
+                        Need(JToken.DeepEquals(item.Signature, SourceSignature(item.Source, geometry.HatchShape(item.Source))), "source changed during append; transaction aborted");
                         if (newIds.Count > 0)
                             ((DrawOrderTable)tx.GetObject(model.DrawOrderTableId, OpenMode.ForWrite)).MoveBelow(newIds, item.Source.ObjectId);
                         item.Source.UpgradeOpen(); item.Source.Erase();
@@ -141,9 +140,7 @@ namespace Bimwright.Dwg.Plugin.Hatches
                         if (item.Action == "keep")
                         {
                             Open<Hatch>(db, tx, item.Source.Handle.ToString(), modelId);
-                            var current = geometry.HatchRegions(item.Source, out var currentShape);
-                            try { Need(JToken.DeepEquals(item.Signature, SourceSignature(item.Source, currentShape)), "retained hatch changed during clipping"); }
-                            finally { foreach (var r in current) r.Dispose(); }
+                            Need(JToken.DeepEquals(item.Signature, SourceSignature(item.Source, geometry.HatchShape(item.Source))), "retained hatch changed during clipping");
                             continue;
                         }
                         var finalRegions = new List<Region>();
@@ -209,7 +206,7 @@ namespace Bimwright.Dwg.Plugin.Hatches
             ["color"] = h.Color.ToString(), ["background"] = h.BackgroundColor.ToString(),
             ["transparency"] = TransparencySignature(h), ["lineweight"] = (int)h.LineWeight,
             ["linetype"] = h.Linetype, ["linetype_scale"] = h.LinetypeScale, ["visible"] = h.Visible,
-            ["associative"] = h.Associative, ["pattern"] = h.PatternName, ["pattern_type"] = (int)h.PatternType,
+            ["associative"] = h.Associative, ["island_style"] = (int)h.HatchStyle, ["pattern"] = h.PatternName, ["pattern_type"] = (int)h.PatternType,
             ["angle"] = h.PatternAngle, ["scale"] = h.PatternScale, ["space"] = h.PatternSpace,
             ["double"] = h.PatternDouble, ["origin"] = new JArray(h.Origin.X, h.Origin.Y),
             ["definitions"] = PatternSignature(h), ["xdata"] = XDataSignature(h) };
@@ -289,6 +286,8 @@ namespace Bimwright.Dwg.Plugin.Hatches
                         Need(curves.Count > 0, "empty BREP loop");
                     }
                     Need(exteriors == 1, "BREP face must have exactly one exterior loop");
+                    Need(item.Source.HatchStyle != HatchStyle.Ignore || loops.Count == 1,
+                        "Ignore-style output has holes; source style cannot be preserved");
                 }
         }
         private static Hatch AppendFace(Transaction tx, BlockTableRecord model, Hatch source, List<List<Curve>> face, HatchClipGeometry geometry, HatchClipResources resources)
@@ -300,7 +299,9 @@ namespace Bimwright.Dwg.Plugin.Hatches
                 for (int i = 0; i < loop.Count; i++)
                 {
                     geometry.Time(); var curve = loop[i];
-                    curve.TransformBy(Matrix3d.Displacement(geometry.Origin - Point3d.Origin));
+                    // Keep the edges local until AppendLoop has assembled them.
+                    // Reconstructing endpoints in large WCS coordinates first
+                    // reintroduces numeric gaps between otherwise joined edges.
                     curve.LayerId = source.LayerId;
                     model.AppendEntity(curve); tx.AddNewlyCreatedDBObject(curve, true); loop[i] = null;
                     ids.Add(curve.ObjectId);
@@ -308,10 +309,20 @@ namespace Bimwright.Dwg.Plugin.Hatches
             }
             var hatch = resources.Own((Hatch)source.Clone());
             while (hatch.NumberOfLoops > 0) hatch.RemoveLoopAt(hatch.NumberOfLoops - 1);
+            hatch.Origin = new Point2d(source.Origin.X - geometry.Origin.X, source.Origin.Y - geometry.Origin.Y);
             model.AppendEntity(hatch); tx.AddNewlyCreatedDBObject(hatch, true);
             hatch.Associative = false;
-            for (int i = 0; i < boundaryIds.Count; i++) hatch.AppendLoop(i == 0 ? HatchLoopTypes.Outermost : HatchLoopTypes.Default, boundaryIds[i]);
+            for (int i = 0; i < boundaryIds.Count; i++)
+            {
+                try { hatch.AppendLoop(i == 0 ? HatchLoopTypes.Outermost : HatchLoopTypes.Default, boundaryIds[i]); }
+                catch (Exception error) { throw new InvalidOperationException("local AppendLoop failed at loop " + i + " (" + boundaryIds[i].Count + " edges): " + error.Message, error); }
+            }
             hatch.EvaluateHatch(true);
+            hatch.TransformBy(Matrix3d.Displacement(geometry.Origin - Point3d.Origin));
+            hatch.Origin = source.Origin;
+            // TransformBy transforms some XData coordinates too. This operation
+            // preserves source metadata, not metadata translated a second time.
+            using (var xdata = source.XData) if (xdata != null) hatch.XData = xdata;
             Need(!hatch.Associative && hatch.NumberOfLoops == boundaryIds.Count, "rebuilt hatch loop count or association changed");
             Need(JToken.DeepEquals(AppearanceSignature(source), AppearanceSignature(hatch)), "native hatch rebuild changed appearance");
             foreach (var ids in boundaryIds) foreach (ObjectId id in ids) ((Entity)tx.GetObject(id, OpenMode.ForWrite)).Erase();
@@ -328,6 +339,7 @@ namespace Bimwright.Dwg.Plugin.Hatches
                     foreach (var mask in cover)
                     {
                         geometry.Time(); if (HatchClipGeometry.Empty(rest)) break;
+                        if (!HatchClipGeometry.Overlap(rest, mask)) continue;
                         using (var operand = (Region)mask.Clone()) rest.BooleanOperation(BooleanOperationType.BoolSubtract, operand);
                     }
                     if (!HatchClipGeometry.Empty(rest)) uncovered += rest.Area;
