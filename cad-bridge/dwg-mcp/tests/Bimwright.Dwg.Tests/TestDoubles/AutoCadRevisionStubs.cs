@@ -9,15 +9,22 @@ namespace Autodesk.AutoCAD.DatabaseServices
     {
         public ObjectId ObjectId { get; set; }
         public ObjectId OwnerId { get; set; }
-        public bool IsModified { get; set; } = true;
-        public bool IsModifiedGraphics { get; set; }
-        public bool IsModifiedXData { get; set; }
-        public bool IsNewObject { get; set; }
-        public bool IsUndoing { get; set; }
-        public bool IsEraseStatusToggled { get; set; }
+        public virtual Handle Handle { get; set; }
+        public virtual bool IsModified { get; set; } = true;
+        public virtual bool IsModifiedGraphics { get; set; }
+        public virtual bool IsModifiedXData { get; set; }
+        public virtual bool IsNewObject { get; set; }
+        public virtual bool IsUndoing { get; set; }
+        public virtual bool IsEraseStatusToggled { get; set; }
     }
+    public class AssocNetwork : DBObject { }
     public class Entity : DBObject { }
-    public class BlockReference : Entity { }
+    public class BlockReference : Entity
+    {
+        public bool IsDynamicBlock { get; set; } = true;
+        public double Rotation { get; set; }
+        public Dictionary<string, double> Angles { get; } = new Dictionary<string, double>(StringComparer.Ordinal);
+    }
     public class LineAngularDimension2 : Entity { }
     public class Point3AngularDimension : Entity { }
     public class Viewport : Entity { }
@@ -33,7 +40,7 @@ namespace Autodesk.AutoCAD.DatabaseServices
     {
         private sealed class NativeState
         {
-            internal ObjectEventHandler Modified, Appended, Unappended, Reappended;
+            internal ObjectEventHandler Opened, Modified, Appended, Unappended, Reappended;
             internal ObjectErasedEventHandler Erased;
             internal bool Disposed;
             internal bool FailModifiedSubscribe;
@@ -46,6 +53,7 @@ namespace Autodesk.AutoCAD.DatabaseServices
         public override int GetHashCode() => RuntimeHelpers.GetHashCode(state);
         public bool IsDisposed { get => state.Disposed; set => state.Disposed = value; }
         public bool ThrowOnObjectModifiedSubscribe { get => state.FailModifiedSubscribe; set => state.FailModifiedSubscribe = value; }
+        public event ObjectEventHandler ObjectOpenedForModify { add => state.Opened += value; remove => state.Opened -= value; }
         public event ObjectEventHandler ObjectModified
         {
             add
@@ -59,13 +67,14 @@ namespace Autodesk.AutoCAD.DatabaseServices
         public event ObjectEventHandler ObjectUnappended { add => state.Unappended += value; remove => state.Unappended -= value; }
         public event ObjectEventHandler ObjectReappended { add => state.Reappended += value; remove => state.Reappended -= value; }
         public event ObjectErasedEventHandler ObjectErased { add => state.Erased += value; remove => state.Erased -= value; }
-        public int Subscribers => Count(state.Modified) + Count(state.Appended) + Count(state.Unappended) + Count(state.Reappended) + Count(state.Erased);
+        public int Subscribers => Count(state.Opened) + Count(state.Modified) + Count(state.Appended) + Count(state.Unappended) + Count(state.Reappended) + Count(state.Erased);
         private static int Count(Delegate value) => value?.GetInvocationList().Length ?? 0;
         public void Raise(string name, DBObject value)
         {
             var args = new ObjectEventArgs { DBObject = value };
             switch (name)
             {
+                case "opened": state.Opened?.Invoke(this, args); break;
                 case "modified": state.Modified?.Invoke(this, args); break;
                 case "appended": state.Appended?.Invoke(this, args); break;
                 case "unappended": state.Unappended?.Invoke(this, args); break;

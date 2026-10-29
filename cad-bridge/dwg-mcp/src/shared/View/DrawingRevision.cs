@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using System.Threading;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
+using Newtonsoft.Json.Linq;
 
 namespace Bimwright.Dwg.Plugin.View
 {
@@ -18,9 +19,66 @@ namespace Bimwright.Dwg.Plugin.View
         private long revision;
         private int graphicsReadDepth;
         private long graphicsRevision;
+        private readonly object diagnosticsGate = new object();
+        private readonly Queue<JObject> recentEvents = new Queue<JObject>();
+        private long diagnosticCaptureFailures;
+        private DiagnosticPhase activePhase;
+        private const int EventCapacity = 16;
         internal string SessionId { get; } = Guid.NewGuid().ToString("N");
         internal long Revision => Interlocked.Read(ref revision);
         internal long GraphicsRevision => Interlocked.Read(ref graphicsRevision);
+
+        // Phases describe synchronous native work only. They never suppress events
+        // or authorize a changed revision. The caller still enforces its own guard.
+        internal IDisposable BeginPhase(string name)
+        {
+            lock (diagnosticsGate)
+            {
+                var scope = new DiagnosticPhase(this, activePhase, Bounded(name ?? "unscoped", 64));
+                Volatile.Write(ref activePhase, scope);
+                return scope;
+            }
+        }
+
+        internal JObject DiagnosticsSince(long afterRevision)
+        {
+            if (afterRevision < 0) throw new ArgumentOutOfRangeException(nameof(afterRevision));
+            lock (diagnosticsGate)
+            {
+                var events = new JArray();
+                foreach (var item in recentEvents)
+                    if (item.Value<long>("revision") > afterRevision) events.Add(item.DeepClone());
+                long currentRevision = Revision;
+                long requestedEvents = currentRevision > afterRevision ? currentRevision - afterRevision : 0;
+                long unrecordedCount = Math.Max(0, requestedEvents - events.Count);
+                return new JObject
+                {
+                    ["session"] = SessionId, ["current_revision"] = currentRevision,
+                    ["after_revision"] = afterRevision, ["graphics_revision"] = GraphicsRevision,
+                    ["capacity"] = EventCapacity, ["captures_per_phase"] = EventCapacity,
+                    ["active_phase"] = activePhase == null ? JValue.CreateNull() : new JValue(activePhase.Name),
+                    ["eventbuffer_truncated"] = unrecordedCount > 0, ["unrecorded_count"] = unrecordedCount,
+                    ["diagnostic_capture_failures"] = diagnosticCaptureFailures, ["events"] = events
+                };
+            }
+        }
+
+        private sealed class DiagnosticPhase : IDisposable
+        {
+            private DrawingRevision owner;
+            private readonly DiagnosticPhase previous;
+            internal readonly string Name;
+            internal readonly int ThreadId;
+            internal int CaptureAttempts;
+            internal DiagnosticPhase(DrawingRevision owner, DiagnosticPhase previous, string name)
+            { this.owner = owner; this.previous = previous; Name = name; ThreadId = Thread.CurrentThread.ManagedThreadId; }
+            public void Dispose()
+            {
+                var state = Interlocked.Exchange(ref owner, null);
+                if (state == null) return;
+                lock (state.diagnosticsGate) Volatile.Write(ref state.activePhase, previous);
+            }
+        }
 
         // Only the synchronous native preview/view+regen calls enter this scope.
         // It is not a blanket suppression: data writes and structural events still
@@ -61,10 +119,10 @@ namespace Bimwright.Dwg.Plugin.View
             // Key by the document lifetime and retain the wrapper owning our handlers.
             var state = new DrawingRevision { database = document.Database };
             state.database.ObjectModified += state.OnObjectModified;
-            state.database.ObjectAppended += state.OnStructuralChange;
+            state.database.ObjectAppended += state.OnObjectAppended;
             state.database.ObjectErased += state.OnObjectErased;
-            state.database.ObjectUnappended += state.OnStructuralChange;
-            state.database.ObjectReappended += state.OnStructuralChange;
+            state.database.ObjectUnappended += state.OnObjectUnappended;
+            state.database.ObjectReappended += state.OnObjectReappended;
             LiveStates.Add(state);
             return state;
         }
@@ -96,16 +154,18 @@ namespace Bimwright.Dwg.Plugin.View
         private void Detach()
         {
             database.ObjectModified -= OnObjectModified;
-            database.ObjectAppended -= OnStructuralChange;
+            database.ObjectAppended -= OnObjectAppended;
             database.ObjectErased -= OnObjectErased;
-            database.ObjectUnappended -= OnStructuralChange;
-            database.ObjectReappended -= OnStructuralChange;
+            database.ObjectUnappended -= OnObjectUnappended;
+            database.ObjectReappended -= OnObjectReappended;
             // AutoCAD owns this database; do not dispose it.
             database = null;
         }
 
-        private void OnStructuralChange(object sender, ObjectEventArgs args) => Interlocked.Increment(ref revision);
-        private void OnObjectErased(object sender, ObjectErasedEventArgs args) => Interlocked.Increment(ref revision);
+        private void OnObjectAppended(object sender, ObjectEventArgs args) => Record("appended", args.DBObject);
+        private void OnObjectUnappended(object sender, ObjectEventArgs args) => Record("unappended", args.DBObject);
+        private void OnObjectReappended(object sender, ObjectEventArgs args) => Record("reappended", args.DBObject);
+        private void OnObjectErased(object sender, ObjectErasedEventArgs args) => Record("erased", args.DBObject);
 
         private void OnObjectModified(object sender, ObjectEventArgs args)
         {
@@ -131,7 +191,58 @@ namespace Bimwright.Dwg.Plugin.View
             {
                 // Unreadable native flags are unknown changes, never proof of a read.
             }
-            Interlocked.Increment(ref revision);
+            Record("modified", value);
         }
+
+        private void Record(string kind, DBObject value)
+        {
+            // Keep exactly the old invalidation semantics. Diagnostics are best effort
+            // and must not throw back into native event dispatch or change the counter.
+            long eventRevision = Interlocked.Increment(ref revision);
+            // Ordinary drawing work pays no native diagnostic getter/JSON cost. Each
+            // explicit phase captures only its first 16 events, even for a huge bind.
+            var trace = Volatile.Read(ref activePhase);
+            if (trace == null || trace.ThreadId != Thread.CurrentThread.ManagedThreadId ||
+                Volatile.Read(ref trace.CaptureAttempts) >= EventCapacity ||
+                Interlocked.Increment(ref trace.CaptureAttempts) > EventCapacity) return;
+            try
+            {
+                var flags = new JObject
+                {
+                    ["is_modified"] = Flag(() => value.IsModified),
+                    ["is_modified_xdata"] = Flag(() => value.IsModifiedXData),
+                    ["is_modified_graphics"] = Flag(() => value.IsModifiedGraphics),
+                    ["is_new_object"] = Flag(() => value.IsNewObject),
+                    ["is_undoing"] = Flag(() => value.IsUndoing),
+                    ["is_erase_status_toggled"] = Flag(() => value.IsEraseStatusToggled)
+                };
+                bool flagsComplete = true;
+                foreach (var item in flags.Properties()) if (item.Value.Type == JTokenType.Null) flagsComplete = false;
+                var entry = new JObject
+                {
+                    ["revision"] = eventRevision, ["kind"] = kind,
+                    ["class"] = Text(() => value.GetType().FullName, 128),
+                    ["handle"] = Text(() => value.Handle.ToString(), 64),
+                    ["flags_complete"] = flagsComplete
+                };
+                foreach (var item in flags.Properties()) entry[item.Name] = item.Value.DeepClone();
+                lock (diagnosticsGate)
+                {
+                    entry["phase"] = trace.Name;
+                    recentEvents.Enqueue(entry);
+                    if (recentEvents.Count > EventCapacity) recentEvents.Dequeue();
+                }
+            }
+            catch
+            {
+                lock (diagnosticsGate) diagnosticCaptureFailures++;
+            }
+        }
+
+        private static JToken Flag(Func<bool> read)
+        { try { return new JValue(read()); } catch { return JValue.CreateNull(); } }
+        private static JToken Text(Func<string> read, int limit)
+        { try { var value = read(); return value == null ? JValue.CreateNull() : new JValue(Bounded(value, limit)); } catch { return JValue.CreateNull(); } }
+        private static string Bounded(string value, int limit) => value.Length <= limit ? value : value.Substring(0, limit);
     }
 }

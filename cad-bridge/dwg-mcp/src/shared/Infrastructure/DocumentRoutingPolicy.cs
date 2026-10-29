@@ -44,8 +44,18 @@ namespace Bimwright.Dwg.Plugin
             return false;
         }
 
-        internal static bool UsesReadLock(string command)
-            => IsInactiveReadCommand(command) || command == "get_selection" || command == "get_selected_texts" || command == "read_table";
+        internal static bool UsesReadLock(string command, JToken parameters = null)
+        {
+            if (command == "manage_xrefs" || command == "explode_blocks" || command == "bind_current_xref")
+            {
+                // Only an explicit native boolean false asks for a write lock.
+                // Missing/default dry-run and invalid input stay on the read path;
+                // command input validation still rejects malformed requests.
+                var dryRun = (parameters as JObject)?["dry_run"];
+                return dryRun?.Type != JTokenType.Boolean || dryRun.Value<bool>();
+            }
+            return IsInactiveReadCommand(command) || command == "get_selection" || command == "get_selected_texts" || command == "read_table" || command == "list_layouts" || command == "get_layout_entities" || command == "list_xrefs" || command == "plan_block_explode";
+        }
 
         internal static string ValidateCommandTarget(string command, bool isActive)
             => isActive || IsInactiveReadCommand(command) || command == "use_document"

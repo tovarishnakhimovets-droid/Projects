@@ -124,6 +124,27 @@ namespace Bimwright.Dwg.Tests
             Assert.Null(map.Find(closedId, Array.Empty<object>()));
         }
 
+        [Theory]
+        [InlineData("manage_xrefs")]
+        [InlineData("explode_blocks")]
+        public void GuardedWritersTakeReadLockUnlessExplicitBooleanFalse(string command)
+        {
+            Assert.True(DocumentRoutingPolicy.UsesReadLock(command));
+            Assert.True(DocumentRoutingPolicy.UsesReadLock(command, new JObject()));
+            foreach (var value in new JToken[] { JValue.CreateNull(), new JValue(true), new JValue("false"), new JValue(0), new JObject() })
+                Assert.True(DocumentRoutingPolicy.UsesReadLock(command, new JObject { ["dry_run"] = value }));
+            Assert.False(DocumentRoutingPolicy.UsesReadLock(command, new JObject { ["dry_run"] = false }));
+            Assert.NotNull(DocumentRoutingPolicy.ValidateCommandTarget(command, false));
+        }
+
+        [Theory]
+        [InlineData("create_line")]
+        [InlineData("erase_entities")]
+        [InlineData("set_system_variable")]
+        public void DryRunFieldDoesNotChangeUnrelatedWriterLockPolicy(string command)
+        {
+            Assert.False(DocumentRoutingPolicy.UsesReadLock(command, new JObject { ["dry_run"] = true }));
+        }
         private sealed class EqualCopy
         {
             public override bool Equals(object obj) => obj is EqualCopy;

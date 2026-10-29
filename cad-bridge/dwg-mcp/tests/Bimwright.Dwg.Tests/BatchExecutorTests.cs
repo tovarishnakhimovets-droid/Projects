@@ -58,6 +58,44 @@ namespace Bimwright.Dwg.Tests
             Assert.Contains("run_baked_tool", result.Error);
         }
 
+        [Theory]
+        [InlineData(null)]
+        [InlineData("{}")]
+        [InlineData("{\"dry_run\":true}")]
+        [InlineData("{\"dry_run\":false}")]
+        [InlineData("{\"dry_run\":\"false\"}")]
+        public void Run_RejectsCurrentRootBindBeforeExecutingAnyEarlierItem(string bindParameters)
+        {
+            var request = new JObject
+            {
+                ["commands"] = new JArray(
+                    new JObject
+                    {
+                        ["cmd"] = "create_line",
+                        ["params"] = new JObject
+                        {
+                            ["start"] = new JObject { ["x"] = 0, ["y"] = 0 },
+                            ["end"] = new JObject { ["x"] = 1, ["y"] = 0 }
+                        }
+                    },
+                    new JObject
+                    {
+                        ["cmd"] = "bind_current_xref",
+                        ["params"] = bindParameters == null ? JValue.CreateNull() : JObject.Parse(bindParameters)
+                    })
+            };
+            var original = request.DeepClone();
+            int executed = 0;
+            var result = BatchExecutor.Run(request,
+                (cmd, parameters) => { executed++; return CommandResult.Success(null); });
+
+            Assert.False(result.Ok);
+            Assert.Equal(0, executed);
+            Assert.Contains("bind_current_xref", result.Error);
+            Assert.Contains("top-level only", result.Error);
+            Assert.True(JToken.DeepEquals(original, request));
+        }
+
         [Fact]
         public void Run_DetectsPartialFailureAndKeepsPerItemResults()
         {

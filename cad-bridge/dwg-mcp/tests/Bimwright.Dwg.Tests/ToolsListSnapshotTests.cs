@@ -24,6 +24,7 @@ namespace Bimwright.Dwg.Tests
             {
                 "dwg_accept_bake_suggestion",
                 "dwg_batch_execute",
+                "dwg_bind_current_xref",
                 "dwg_capture_view_image",
                 "dwg_change_color",
                 "dwg_change_layer",
@@ -55,12 +56,14 @@ namespace Bimwright.Dwg.Tests
                 "dwg_erase_entities",
                 "dwg_erase_proxy_objects",
                 "dwg_explode_block",
+                "dwg_explode_blocks",
                 "dwg_export_dxf",
                 "dwg_get_block_attributes",
                 "dwg_get_crosshair_settings",
                 "dwg_get_current_target",
                 "dwg_get_drawing_info",
                 "dwg_get_entity_properties",
+                "dwg_get_layout_entities",
                 "dwg_get_lisp_status",
                 "dwg_get_selected_texts",
                 "dwg_get_selection",
@@ -77,16 +80,22 @@ namespace Bimwright.Dwg.Tests
                 "dwg_list_blocks",
                 "dwg_list_documents",
                 "dwg_list_layers",
+                "dwg_list_layouts",
                 "dwg_list_settings",
                 "dwg_list_text_styles",
+                "dwg_list_xrefs",
+                "dwg_manage_xrefs",
                 "dwg_match_properties",
                 "dwg_move_entities",
                 "dwg_move_network_endpoint",
                 "dwg_node_network",
                 "dwg_offset_entities",
+                "dwg_plan_block_explode",
+                "dwg_plot_pdf",
                 "dwg_purge_drawing",
                 "dwg_query_entities",
                 "dwg_read_table",
+                "dwg_reposition_leaders",
                 "dwg_restore_view",
                 "dwg_rotate_entities",
                 "dwg_run_baked_tool",
@@ -95,6 +104,7 @@ namespace Bimwright.Dwg.Tests
                 "dwg_scale_entities",
                 "dwg_select_by_layer",
                 "dwg_select_by_type",
+                "dwg_select_layout",
                 "dwg_send_code",
                 "dwg_set_block_attributes",
                 "dwg_set_crosshair_settings",
@@ -255,6 +265,8 @@ namespace Bimwright.Dwg.Tests
             Assert.Equal(new[]
             {
                 "BatchTools",
+                "BlockExplodeQueryTools",
+                "BlockExplodeWriteTools",
                 "BlockInspectionTools",
                 "BlockVariantTools",
                 "CodeTools",
@@ -264,6 +276,7 @@ namespace Bimwright.Dwg.Tests
                 "EntityStyleTools",
                 "GeneralSettingsQueryTools",
                 "GeneralSettingsWriteTools",
+                "LeaderTools",
                 "LispTools",
                 "MetaTools",
                 "ModifyTools",
@@ -274,7 +287,9 @@ namespace Bimwright.Dwg.Tests
                 "QueryTools",
                 "TableQueryTools",
                 "TextQueryTools",
-                "ViewTools"
+                "ViewTools",
+                "XrefQueryTools",
+                "XrefWriteTools"
             }, defaultTypeNames);
 
             var defaultReadOnlyTypeNames = InvokeToolTypeResolver(
@@ -283,6 +298,7 @@ namespace Bimwright.Dwg.Tests
                 readOnly: true);
             Assert.Equal(new[]
             {
+                "BlockExplodeQueryTools",
                 "BlockInspectionTools",
                 "CrosshairQueryTools",
                 "DocumentTools",
@@ -292,7 +308,8 @@ namespace Bimwright.Dwg.Tests
                 "QueryTools",
                 "TableQueryTools",
                 "TextQueryTools",
-                "ViewTools"
+                "ViewTools",
+                "XrefQueryTools"
             }, defaultReadOnlyTypeNames);
 
             var codeWriteTypeNames = InvokeToolTypeResolver(method, new[] { "code" }, readOnly: false);

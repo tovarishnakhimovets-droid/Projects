@@ -475,7 +475,8 @@ The binding is a **plugin calculation**, not a native portable AutoCAD Field.
 There was no field in the source, and public managed API does not provide a
 verified mapping from a named property to the undocumented Field Parameter(n).
 Do not infer that index from the collection position. The plugin must be loaded
-for subsequent grip/command/Undo/Redo updates.
+for subsequent updates after that reference is rotated. Native grip and
+Undo/Redo event behavior still require a live check of the installed version.
 
 `dimension_display_degrees` reads exactly one supported direct angular Dimension
 from **reference.BlockTableRecord**, the CURRENT evaluated definition. The
@@ -503,30 +504,31 @@ symbol only in these legacy modes. They do NOT guarantee equality with the
 dimension's selected angular quadrant or display precision. The technical
 attribute tag is unchanged.
 
-Command-ended/cancelled/failed callbacks only queue a bounded refresh episode;
-they do not lock, open or write objects inside the native command callback.
-Idle performs all passes only for the active, quiescent, writable document.
-Database ObjectModified
-callbacks only queue watched bound references/current evaluated angular dimensions;
-they never open, evaluate or write objects. The retained database wrapper is
-unsubscribed when its document closes. Only explicitly owned attribute/parent
-writes are suppressed; a dimension event during lock release remains pending.
+The module listens only to writes of individual dynamic BlockReference objects.
+ObjectOpenedForModify captures that reference's previous rotation and named
+angular values from the event object; ObjectModified queues only that ID.
+Callbacks do not start transactions, look up owners/bindings or assign properties.
+A deferred callback runs once after the active document becomes quiescent.
+It compares the before/after angles and reads the binding only for an actually
+rotated reference. MOVE, colour and other non-angular changes stop before binding
+inspection. Only that reference's own attribute can be updated; other references
+of the same definition are not enumerated or refreshed.
 
-Each pass first scans with a read-only OpenCloseTransaction, without Commit or a
-document write lock. A current attribute therefore causes no write phase. Only
-pending changes acquire a document lock; IDs and managed values cross the
-transaction boundary. All affected objects, binding, old text, angles, layers
-and calculated output are reopened and revalidated before any UpgradeOpen.
-The apply phase also uses OpenCloseTransaction and commits actual changes.
-Completion occurs after releasing transactions/the lock and requires two identical
-read-only observations on separate callbacks. Raw angles, current evaluated
-definition/dimension identities and native measurement/display are included in a
-bounded SHA256 signature. A write or late dimension event resets stability.
-Six passes and 2000ms of active processing bound an episode; idle intervals are
-not charged. One pass has a cooperative 500 ms deadline, 10000 definitions,
-1000 references and 256 KiB snapshot bound. These do not interrupt blocked native
-calls. Native dirty notifications cannot continually renew an exhausted budget;
-a new external command starts a fresh episode. Exhaustion is reported.
+Opening/activating a document and unrelated commands do not scan anything.
+There is no BlockTable traversal, definition-count limit, startup refresh,
+dimension watcher or periodic/repeated stabilization pass. Idle is subscribed
+only while an object notification is pending, then unsubscribed after one
+attempt. Events for an inactive document wait for its activation without
+switching the user's tab. An error is logged and is not retried automatically;
+the same error message is suppressed until a successful later rotation.
+
+The deferred inspection uses a read-only OpenCloseTransaction without Commit
+or a document write lock. Only actual attribute changes acquire a write lock;
+IDs and managed values cross the transaction boundary. Binding, old attribute
+text, current angles/rotation and layers are revalidated before any UpgradeOpen.
+The apply phase uses OpenCloseTransaction and commits actual changes.
+A request is limited to 1000 changed references and a cooperative 500 ms
+deadline; these bounds do not interrupt blocked native calls.
 
 After changing an attribute, only its actual parent BlockReference is write-opened
 and RecordGraphicsModified(true) is called. This supplies AutoCAD's documented
@@ -1043,3 +1045,254 @@ Live-проверка требует отдельного разрешения �
 reference anchor и остальные нужные значения. Проверки Undo/Redo, grip/action
 поведения блоков, обновления Properties и повторного открытия выполняются
 отдельно в AutoCAD. Схемы, компиляция и test doubles их не подтверждают.
+
+## Листы и печать PDF
+
+Профиль `drawing` включает `dwg_list_layouts` и `dwg_get_layout_entities` для чтения,
+а в режиме записи также `dwg_select_layout` и `dwg_plot_pdf`. Все четыре операции
+требуют свежие `expected_document` и `expected_fingerprint` и активный целевой DWG.
+Неактивный документ и подстановка другого чертежа не поддерживаются.
+
+`dwg_list_layouts` возвращает до 256 существующих листов, их handles, handles
+пространств, порядок вкладок и `plot_settings`. Чтение не переключает лист.
+`dwg_get_layout_entities(layout_name, entity_type=null, layer=null, limit=1000,
+include_geometry=false)` читает прямые объекты указанного пространства, включая
+paperspace. Тип можно ограничить DBText, MText, BlockReference, Line или Polyline.
+Предел: 1000 результатов, 50000 просмотренных объектов, 3 секунды и 200000 знаков
+данных. `complete=false`/`truncated=true` обозначает неполный результат. Внутрь
+блоков reader не заходит: полученный BlockReference содержит атрибуты при
+`include_geometry=true`, а его определение читается существующим inspect_block.
+Чтение использует read-lock/OpenCloseTransaction и не меняет Undo/Redo.
+
+`dwg_select_layout(layout_name, expected_current_layout, dry_run=true)` явно
+выбирает уже существующий лист и для листа входит в paperspace. `dry_run=true`
+только проверяет цель. Операция меняет вид редактора; новый лист не создаёт,
+чертёж не сохраняет. Ошибка текущей вкладки запрещает переключение.
+
+Для печати сначала получить `plot_settings` нужного листа через list_layouts,
+при необходимости явно выбрать его и сделать новый снимок. Затем вызвать:
+
+```
+dwg_plot_pdf(expected_document, expected_fingerprint, layout_name,
+             expected_plot_settings, output_path,
+             overwrite_existing=false, allow_repo_output=false, dry_run=true)
+```
+
+`expected_plot_settings` передаётся строкой JSON (`JSON.stringify(plot_settings)`)
+целиком из свежего чтения, включая устройство,
+размер бумаги, масштаб, окно, поворот и таблицу стилей. Сервер разбирает её в
+объект для native-контракта; предел 65536 знаков/16 уровней, дубли полей и JSON
+вне объекта отклоняются до CAD. Целые значения в числовых массивах нормализуются
+к double для сохранения native snapshot после JSON.stringify. `output_path` задаёт
+абсолютный путь PDF в существующей папке. `overwrite_existing=true` явно разрешает
+замену этого файла; `allow_repo_output=true` отдельно разрешает вывод в каталог
+исходников моста. По умолчанию `dry_run=true`: путь/identity/настройки и native
+PlotInfo проверяются без печати. Для создания файла явно указать `dry_run=false`.
+
+Печать использует сохранённое устройство с PDF в имени. Лист должен уже быть
+текущим, а paperspace должен быть активен вне плавающего видового экрана.
+На основном потоке AutoCAD создаётся transient PlotSettings с копией Layout.
+RefreshLists обновляет сведения об устройствах, затем проверяются точные имена
+сохранённых PC3 и canonical media и повторно задаются те же имена. Затем в копии
+восстанавливаются исходные PlotPaperUnits: привязка PC3 может сбросить единицы
+после предыдущей печати другого листа. Native MatchEnabled разрешён только
+с последующим полным сравнением ValidatedSettings с исходным snapshot. Отличие устройства, бумаги, масштаба, окна, поворота,
+смещения, стиля или любого другого сохранённого поля запрещает BeginPlot.
+Молчаливой замены формата нет. Layout и его настройки не записываются.
+
+Один foreground PlotEngine с невидимым штатным PlotProgressDialog печатает одну
+страницу в уникальный PDF системной локальной Temp. BACKGROUNDPLOT временно
+становится 0; прежнее значение восстанавливается в finally и проверяется.
+Dry-run не меняет BACKGROUNDPLOT. После проверки %PDF/размера/SHA256 результат
+копируется в уникальный файл рядом с выходным путём и переименовывается с явным
+overwrite guard. Собственные временные файлы удаляются в finally; неудачная очистка
+успешного вывода возвращается как cleanup_warnings. Результат содержит размер,
+SHA256, имя листа, pages=1 и background_plot_restored=true. Native печать может
+поднять DBMOD из-за работы хоста; инструмент не обнуляет DBMOD и не сохраняет DWG.
+
+Native печать синхронная. Таймаут транспорта не отменяет начавшийся PlotEngine
+и не означает отсутствия PDF: перед любым повтором проверить выходной файл и
+состояние AutoCAD. Очередь долговременных заданий печати пока не реализована.
+Новые методы требуют загрузки новой DLL плагина и нового серверного каталога.
+MCPSTOP/MCPSTART перезапускают listener прежней DLL и не служат hot-reload.
+
+## Перестановка текста выносок: dwg_reposition_leaders
+
+Профиль `modify`, только запись; отсутствует в read-only. Переставляет текст и
+последнюю вершину 1–100 существующих native MLeader в текущем пространстве.
+Стрелка остаётся в точных исходных координатах. Объект целиком не перемещается,
+не пересоздаётся, текст и его форматирование не переписываются. Сохранения нет.
+
+Сначала `dwg_get_drawing_info`, затем `dwg_get_entity_properties` с
+`includeGeometry=true`: для поддерживаемой выноски `reposition_snapshot` содержит
+готовые `handle`, `expected_layer`, `expected_owner_handle`, буквальный
+`expected_text` (native MText.Contents со всеми escape-кодами),
+`expected_leader_index`, `expected_line_index`, `expected_text_location`,
+`expected_vertices` из двух WCS точек и `expected_dogleg`. Индекс единственного
+leader может быть 1, а line – 0; нулевые индексы не предполагаются.
+Для неподдерживаемой формы snapshot=null, причина в `reposition_unavailable`.
+
+В `changes` к каждому свежему snapshot добавляют `new_text_location`,
+`new_terminal` и `dogleg_side` (`left`/`right`, направление доглега к тексту).
+Координаты – массивы [x,y,z], единицы чертежа. `new_text_location` – точный
+native MLeader.TextLocation: при правой посадке он может находиться на правом
+краю текста. Это не обязательно левый угол рамки. `new_terminal` – последняя
+вершина линии; она должна быть согласована с этим якорем и существующей
+посадкой. Native AutoCAD может связно менять оба положения. Инструмент требует
+точного readback обоих заданных значений и стрелки; при несовместимых целях
+транзакция откатывается. Не следует округлять ожидаемые или конечные точки.
+
+Поддерживаются горизонтальные +Z MText без полей, аннотативности или рамки:
+один leader, одна прямая line, две вершины. Все точки сохраняют точную отметку Z,
+координаты конечные в пределах ±1e12; новый отрезок длиннее 1e-9.
+Сохраняются длина/включение доглега, посадка, native handles, слои, цвета,
+стили, высота/ширина и содержимое текста, стрелки, XData и прочая графика.
+Все объекты проверяются до setters; используется одна transaction, без обещания
+единой Undo-группы. `dry_run=true` по умолчанию проверяет план без setters;
+для записи передать false. Выход: actual_snapshot, actual `text_bounds`,
+явные proposed targets, committed/saved. В dry_run actual остаётся исходным.
+Таймаут или ошибка Commit требуют чтения фактического состояния до повторения.
+
+Используются native [TextLocation](https://help.autodesk.com/cloudhelp/2026/ENU/OARX-ManagedRefGuide/files/OARX-ManagedRefGuide-Autodesk_AutoCAD_DatabaseServices_MLeader_TextLocation.html),
+[SetDogleg](https://help.autodesk.com/cloudhelp/2026/ENU/OARX-ManagedRefGuide/files/OARX-ManagedRefGuide-Autodesk_AutoCAD_DatabaseServices_MLeader_SetDogleg_int_Vector3d.html),
+[SetLastVertex](https://help.autodesk.com/cloudhelp/2026/ENU/OARX-ManagedRefGuide/files/OARX-ManagedRefGuide-Autodesk_AutoCAD_DatabaseServices_MLeader_SetLastVertex_int_Point3d.html)
+и GetContentGeomExtents; расположение и устранение пересечений выбирает вызывающий.
+
+## Внешние ссылки и раскрытие блоков
+
+Общие typed-операции доступны в `query` (`dwg_list_xrefs`,
+`dwg_plan_block_explode`) и `modify` (`dwg_manage_xrefs`,
+`dwg_explode_blocks`). Все четыре требуют активной вкладки; reader работает
+под read lock. Ни одна операция не сохраняет DWG и не меняет исходные файлы
+внешних ссылок. Установка и загрузка нового плагина выполняются по TEAM_SETUP.
+
+### Инвентаризация и управление Xref
+
+`dwg_list_xrefs` читает native-граф внешних ссылок, их определения, пути,
+состояния, родителей и прямые вставки с преобразованиями и подрезками.
+Пара `expected_document`/`expected_fingerprint` необязательна, но передаётся
+только совместно. `max_xrefs` ограничен 1–512, `max_entities` — 0–100000;
+ноль отключает сводку содержимого для быстрого повторного чтения metadata.
+Общий предел — 10000 описаний вставок, 10 секунд между native-вызовами и
+2 MiB ответа. Проверять `metadata_complete`, `counts_complete`, `complete`
+и ошибки отдельно. Сводка считает прямые объекты определений: отсутствие
+прямого HATCH не доказывает отсутствие поверхностей во вложенных блоках.
+Недоступные записи графа приводят к неполному metadata-ответу и запрещают
+запись; инструмент не загружает и не исправляет отсутствующие источники.
+
+`dwg_manage_xrefs` принимает полный путь/fingerprint DWG, `action` (`bind`
+или `detach`) и typed `expected_xref` из свежей инвентаризации. Одна корневая
+ссылка за вызов. Snapshot включает имя/путь/состояние и hashes полного графа,
+вставок, преобразований и подрезок, а также session/revision DWG. Любая правка
+чертежа требует нового чтения. Вложенную ссылку напрямую менять нельзя;
+вставки должны находиться в местных model/paper layout и на открытых для
+изменения слоях. Завершить активную команду AutoCAD до вызова.
+
+По умолчанию `dry_run=true`: выполняется только проверка. Для внедрения
+нужны resolved/loaded узлы всего текущего графа (включая посторонние); native `BindXrefs(..., false)` сохраняет
+различия имён зависимых символов, insert-style слияние имён не предлагается.
+Для `detach` проверяется удаление определения и всех его исходных вставок;
+для `bind` — местное определение и сохранение размещения/подрезок вставок.
+Не обещаются общая атомарность native binding, отмена его по таймауту или
+проверенное single-Undo. При неопределённом результате сначала прочитать
+текущее состояние; автоматический повтор записи запрещён.
+
+### Раскрытие местных блоков на один уровень
+
+`dwg_plan_block_explode` принимает обязательные `expected_document`,
+`expected_fingerprint`, `handles` (1–100) и необязательный `max_entities`
+(1–20000, по умолчанию 20000). Возвращает `drawing_session`,
+`drawing_revision`, точные `snapshots`, число и типы прямых объектов.
+Геометрия не конструируется и не выгружается целиком.
+
+`dwg_explode_blocks` принимает те же identity и limit, session/revision как
+`expected_session`/`expected_revision`, snapshots как `expected_snapshots`.
+По умолчанию `dry_run=true`, без вызова `Entity.Explode` и write-open.
+Реальная запись раскрывает только переданные обычные model-space вставки
+на один уровень; HATCH сохраняются как HATCH, вложенные вставки остаются
+блоками. Для следующего уровня требуется новый явный план.
+
+Первая версия отклоняет внешние/зависимые определения, dynamic/annotative,
+атрибуты, extension dictionaries/XCLIP, XData/reactors, заблокированные слои,
+запрещённое раскрытие и неположительный/неравномерный масштаб. Не удалять
+эти данные ради прохождения проверки. Число и типы native-выхода сверяются
+с планом; все новые объекты сначала добавляются владельцу и транзакции,
+затем удаляются исходные вставки. Используется одна транзакция и 15-секундный
+кооперативный бюджет; один native Explode нельзя жёстко прервать.
+
+Native-положение, площади и отверстия штриховок, их ассоциативность,
+отображение ByBlock/слоя 0 и Undo проверяются после установки на отдельном
+тестовом DWG с явным разрешением. Офлайн-сборка и tools/list этого не доказывают.
+Старый opt-in `dwg_explode_block` сохраняет прежний контракт и использует
+тот же helper добавления native-выхода; для guarded-процесса применять новые
+plan/write инструменты.
+
+Первичные API: [BindXrefs](https://help.autodesk.com/cloudhelp/2026/ENU/OARX-ManagedRefGuide/files/OARX-ManagedRefGuide-Autodesk_AutoCAD_DatabaseServices_Database_BindXrefs_ObjectIdCollection__MarshalAsUnmanagedType_U1__bool.html),
+[native Explode](https://help.autodesk.com/cloudhelp/2027/ENU/OARX-DevGuide-Managed/files/GUID-A853CD73-58A9-4380-B8E2-B3451C94C46B.htm),
+[ограничения EXPLODE](https://help.autodesk.com/cloudhelp/2027/ENU/AutoCAD-Core/files/GUID-E98BCEF4-DED6-48A6-87EB-10FE87188083.htm).
+### Проверка блокировки и внедрение текущей ссылки
+
+В v3.3 реальный manage_xrefs/explode_blocks вызывал custom DwgFiler для
+сравнения AssocNetwork. Native-проверка закончилась фаталом в callback
+dwgVersion/GCHandle. Этот путь удалён из исходника. Старый установленный
+пакет3.3 не исправляется редактированием исходника: его реальные writers
+не запускать до обновления. Подробности инцидента — WORK_STATUS.md.
+
+В исправленном исходнике manage_xrefs/explode_blocks снова требуют точного
+совпадения session/revision до и после write lock. Изменение на acquisition
+останавливает handler. События не подавляются, счётчик не уменьшается,
+входные ожидания не переписываются. dry_run/defaulttrue остаётся под read lock.
+При ошибке release сохраняются primary exception, bounded handler receipt,
+handler_invoked/returned, execution_unknown и запрет повтора. Ошибка release
+не доказывает откат.
+
+Отдельный modify-инструмент dwg_bind_current_xref внедряет одну целую
+текущую корневую definition. Он не исполняет рассчитанную раньше геометрию.
+Его параметры: expected_document, expected_fingerprint, полный expected_xref
+из list_xrefs и dry_run (по умолчанию true). action/insert-style merge и
+другие поля не принимаются. Активная вкладка обязательна. В read-only
+профиле инструмент отсутствует. В batch/baked он запрещён, чтобы вложенный
+dispatch не обходил pre-lock проверку.
+
+Реальный bind_current_xref выполняется в такой последовательности:
+
+1. Полный разбор входа и точное совпадение source session/revision до lock.
+   Любая правка за время между внешним чтением и вызовом требует нового guard.
+2. Обычный native write lock. Его автоматическая associative evaluation
+   может изменить revision; инструмент не объявляет всю БД неизменной.
+3. Новое bounded-чтение всего xref graph под этим lock. Оно должно быть
+   полным и стабильным. Все guard-поля, кроме старой document_revision,
+   обязаны совпасть: та же session, имя/путь/status/overlay/root, graph hash,
+   все reference transforms/owners/layers/XCLIP. Все nodes resolved/loaded,
+   inserts — в местных layout на unlocked слоях. Native source не reload.
+4. Проверка свежей preflight_revision после readiness-getter и ещё раз
+   внутри native transaction непосредственно перед BindXrefs. Любое событие
+   за время preflight или transaction startup останавливает вызов до Bind.
+5. Общий с manage_xrefs вызов BindXrefs(..., false), затем прежний readback:
+   local definition, полный набор исходных вставок, то же размещение/XCLIP.
+   Нет отдельной реализации cloning, custom filer или network serializer.
+
+Источник definition — её текущее resolved-содержимое на шаге3. Штриховки,
+покрытия и отдельные вершины не правятся по старому geometry-плану. Именно
+для этой операции не требуется равенство всей associative network через lock.
+Эта семантика не переносится на detach или explode автоматически.
+
+Receipt содержит semantics=current_root_definition, source_revision,
+preflight_revision и preflight_refreshed_under_write_lock. Последнее false
+для dry-run. Raw revision учитывает все изменения, включая release; для
+следующей операции получить новый list_xrefs. Нет обещания atomic rollback,
+проверенного single-Undo или сохранения DWG. После native timeout/неизвестного
+исхода сначала читать состояние, автоматически запись не повторять.
+
+Native API:
+[BindXrefs](https://help.autodesk.com/cloudhelp/2026/ENU/OARX-ManagedRefGuide/files/OARX-ManagedRefGuide-Autodesk_AutoCAD_DatabaseServices_Database_BindXrefs_ObjectIdCollection__MarshalAsUnmanagedType_U1__bool.html),
+[DocumentLock](https://help.autodesk.com/cloudhelp/2022/ENU/OARX-DevGuide-Managed/files/GUID-A2CD7540-69C5-4085-BCE8-2A8ACE16BFDD.htm).
+
+После фатала первый native-прогон исправления проводится только в отдельном
+явно разрешённом тестовом DWG. Для регрессии допустима отдельная копия того
+же host DWG в той же папке, чтобы относительные xref-пути сохранились.
+Проверить exact test path/fingerprint, fresh metadata и dry-run, затем один
+bind целевого root. Сверить receipt, уменьшение xref count на1, local block,
+вставки, состав HATCH и неизменность source xref-файла. Не сохранять тест
+и не переходить к производственному файлу без результата этого прогона.
+Offline PASS и успешная сборка эту native-проверку не заменяют.

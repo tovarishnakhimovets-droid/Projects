@@ -153,6 +153,40 @@ namespace Bimwright.Dwg.Plugin
     {
         public static readonly CommandSchema GetDrawingInfo = CommandSchema.Empty;
 
+        public static readonly CommandSchema ListXrefs = CommandSchema.Object(
+            SchemaProperty.Optional("expected_document", JTokenType.String),
+            SchemaProperty.Optional("expected_fingerprint", JTokenType.String),
+            SchemaProperty.Optional("max_xrefs", JTokenType.Integer),
+            SchemaProperty.Optional("max_entities", JTokenType.Integer));
+
+        public static readonly CommandSchema BindCurrentXref = CommandSchema.Object(
+            SchemaProperty.RequiredNonEmptyString("expected_document"),
+            SchemaProperty.RequiredNonEmptyString("expected_fingerprint"),
+            SchemaProperty.Required("expected_xref", JTokenType.Object),
+            SchemaProperty.Optional("dry_run", JTokenType.Boolean));
+
+        public static readonly CommandSchema ManageXrefs = CommandSchema.Object(
+            SchemaProperty.RequiredNonEmptyString("expected_document"),
+            SchemaProperty.RequiredNonEmptyString("expected_fingerprint"),
+            SchemaProperty.RequiredNonEmptyString("action"),
+            SchemaProperty.Required("expected_xref", JTokenType.Object),
+            SchemaProperty.Optional("dry_run", JTokenType.Boolean));
+
+        public static readonly CommandSchema PlanBlockExplode = CommandSchema.Object(
+            SchemaProperty.RequiredNonEmptyString("expected_document"),
+            SchemaProperty.RequiredNonEmptyString("expected_fingerprint"),
+            SchemaProperty.Required("handles", JTokenType.Array),
+            SchemaProperty.Optional("max_entities", JTokenType.Integer));
+
+        public static readonly CommandSchema ExplodeBlocks = CommandSchema.Object(
+            SchemaProperty.RequiredNonEmptyString("expected_document"),
+            SchemaProperty.RequiredNonEmptyString("expected_fingerprint"),
+            SchemaProperty.RequiredNonEmptyString("expected_session"),
+            SchemaProperty.Required("expected_revision", JTokenType.Integer),
+            SchemaProperty.Required("expected_snapshots", JTokenType.Array),
+            SchemaProperty.Optional("max_entities", JTokenType.Integer),
+            SchemaProperty.Optional("dry_run", JTokenType.Boolean));
+
         public static readonly CommandSchema InspectBlock = CommandSchema.Object(
             SchemaProperty.RequiredNonEmptyString("handle"),
             SchemaProperty.Optional("expected_document", JTokenType.String),
@@ -276,6 +310,12 @@ namespace Bimwright.Dwg.Plugin
             SchemaProperty.Optional("text_style", JTokenType.String),
             SchemaProperty.Optional("layer", JTokenType.String),
             SchemaProperty.Optional("color_index", JTokenType.Integer));
+
+        public static readonly CommandSchema RepositionLeaders = CommandSchema.Object(
+            SchemaProperty.RequiredNonEmptyString("expected_document"),
+            SchemaProperty.RequiredNonEmptyString("expected_fingerprint"),
+            SchemaProperty.Required("changes", JTokenType.Array),
+            SchemaProperty.Optional("dry_run", JTokenType.Boolean));
 
         public static readonly CommandSchema CreateLeader = CommandSchema.Object(
             SchemaProperty.Required("points", JTokenType.Array),
@@ -518,6 +558,23 @@ namespace Bimwright.Dwg.Plugin
         public static readonly CommandSchema SetSystemVariable = CommandSchema.Object(
             SchemaProperty.Required("name", JTokenType.String),
             SchemaProperty.Required("value", JTokenType.String, JTokenType.Integer, JTokenType.Float, JTokenType.Boolean));
+
+        public static readonly CommandSchema ListLayouts = CommandSchema.Object(
+            SchemaProperty.RequiredNonEmptyString("expected_document"), SchemaProperty.RequiredNonEmptyString("expected_fingerprint"));
+        public static readonly CommandSchema GetLayoutEntities = CommandSchema.Object(
+            SchemaProperty.RequiredNonEmptyString("expected_document"), SchemaProperty.RequiredNonEmptyString("expected_fingerprint"),
+            SchemaProperty.RequiredNonEmptyString("layout_name"), SchemaProperty.Optional("entity_type", JTokenType.String),
+            SchemaProperty.Optional("layer", JTokenType.String), SchemaProperty.Optional("limit", JTokenType.Integer),
+            SchemaProperty.Optional("include_geometry", JTokenType.Boolean));
+        public static readonly CommandSchema SelectLayout = CommandSchema.Object(
+            SchemaProperty.RequiredNonEmptyString("expected_document"), SchemaProperty.RequiredNonEmptyString("expected_fingerprint"),
+            SchemaProperty.RequiredNonEmptyString("layout_name"), SchemaProperty.RequiredNonEmptyString("expected_current_layout"),
+            SchemaProperty.Optional("dry_run", JTokenType.Boolean));
+        public static readonly CommandSchema PlotPdf = CommandSchema.Object(
+            SchemaProperty.RequiredNonEmptyString("expected_document"), SchemaProperty.RequiredNonEmptyString("expected_fingerprint"),
+            SchemaProperty.RequiredNonEmptyString("layout_name"), SchemaProperty.Required("expected_plot_settings", JTokenType.Object),
+            SchemaProperty.RequiredNonEmptyString("output_path"), SchemaProperty.Optional("overwrite_existing", JTokenType.Boolean),
+            SchemaProperty.Optional("allow_repo_output", JTokenType.Boolean), SchemaProperty.Optional("dry_run", JTokenType.Boolean));
 
         public static readonly CommandSchema SaveDrawing = CommandSchema.Object(
             SchemaProperty.Optional("output_path", JTokenType.String),

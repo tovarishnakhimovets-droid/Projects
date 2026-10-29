@@ -39,6 +39,11 @@ namespace Bimwright.Dwg.Plugin
                 { "move_network_endpoint",   new MoveNetworkEndpointHandler() },
                 { "get_entity_properties",   new GetEntityPropertiesHandler() },
                 { "inspect_block",           new InspectBlockHandler() },
+                { "list_xrefs",              new ListXrefsHandler() },
+                { "manage_xrefs",            new ManageXrefsHandler() },
+                { "bind_current_xref",       new BindCurrentXrefHandler() },
+                { "plan_block_explode",      new PlanBlockExplodeHandler() },
+                { "explode_blocks",          new ExplodeBlocksHandler() },
                 { "create_block_variant",    new CreateBlockVariantHandler() },
                 { "update_block_angles",     new UpdateBlockAnglesHandler() },
                 { "get_selected_texts",      new GetSelectedTextsHandler() },
@@ -61,6 +66,7 @@ namespace Bimwright.Dwg.Plugin
                 { "create_ellipse",          new CreateEllipseHandler() },
                 { "create_text",             new CreateTextHandler() },
                 { "create_mtext",            new CreateMTextHandler() },
+                { "reposition_leaders",       new RepositionLeadersHandler() },
                 { "create_leader",           new CreateLeaderHandler() },
                 { "create_table",            new CreateTableHandler() },
                 { "read_table",              new ReadTableHandler() },
@@ -99,6 +105,10 @@ namespace Bimwright.Dwg.Plugin
                 { "inspect_view_region",     new InspectViewRegionHandler() },
                 { "restore_view",            new RestoreViewHandler() },
                 { "export_dxf",              new ExportDxfHandler() },
+                { "list_layouts",            new LayoutReadHandler("list_layouts") },
+                { "get_layout_entities",     new LayoutReadHandler("get_layout_entities") },
+                { "select_layout",           new LayoutWriteHandler("select_layout") },
+                { "plot_pdf",                new LayoutWriteHandler("plot_pdf") },
                 { "get_variables",           new GetVariablesHandler() },
                 { "set_system_variable",     new SetSystemVariableHandler() },
                 { "save_drawing",            new SaveDrawingHandler() },
@@ -153,7 +163,7 @@ namespace Bimwright.Dwg.Plugin
                 else if (cmd == "use_document")
                     result = DocumentInvoker.InvokeApplication(() => ExecuteCommand(
                         DocumentRouting.Resolve(documentId, allowMissingActive: true), cmd, parameters));
-                else result = DocumentInvoker.Invoke(cmd, documentId, doc => ExecuteCommand(doc, cmd, parameters));
+                else result = DocumentInvoker.Invoke(cmd, documentId, doc => ExecuteCommand(doc, cmd, parameters), parameters);
 
                 string resultJson = null;
                 if (result.Ok)

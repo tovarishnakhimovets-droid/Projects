@@ -5,6 +5,7 @@ using Autodesk.AutoCAD.Colors;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
 using Bimwright.Dwg.Plugin.Blocks;
+using Bimwright.Dwg.Plugin.Annotation;
 
 namespace Bimwright.Dwg.Plugin.Cad
 {
@@ -192,6 +193,10 @@ namespace Bimwright.Dwg.Plugin.Cad
                     result["text"] = mText?.Contents ?? string.Empty;
                 result["text_height"] = mLeader.TextHeight;
             }
+            try { result["reposition_snapshot"] = LeaderRepositionNative.Describe(mLeader);
+                result["text_bounds"] = LeaderRepositionNative.Bounds(mLeader); }
+            catch (Exception ex) { result["reposition_snapshot"] = null;
+                result["reposition_unavailable"] = ErrorSanitizer.Sanitize(ex.Message); }
             result["leader_count"] = mLeader.LeaderCount;
             result["leader_line_count"] = mLeader.LeaderLineCount;
             try

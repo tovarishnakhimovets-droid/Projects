@@ -1,8 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Security.Cryptography;
-using System.Text;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Bimwright.Dwg.Plugin.Drawing;
@@ -69,17 +67,16 @@ namespace Bimwright.Dwg.Plugin.Blocks
                     if(existing!=null){attribute=Attribute(tx,reference,(string)existing["tag"]);BlockVariantService.Require(attribute!=null&&!attribute.HasFields,"bound attribute unavailable");attribute.UpgradeOpen();attribute.TextString=Calculate(tx,reference,after,existing);}
                 }
                 var result=new JObject{["dry_run"]=false,["committed"]=true,["handle"]=reference.Handle.ToString(),["angles"]=JObject.FromObject(after),["attribute_text"]=attribute?.TextString,["binding_created"]=binding!=null&&!replacing,["binding_replaced"]=replacing,["saved"]=false,["binding_requires_plugin"]=true,["grip_undo_behavior_verified"]=false};
-                tx.Commit();Initialize();Documents[doc].Notify(DeferredAngleRefreshNotification.ExternalChange);return result;
+                tx.Commit();Initialize();return result;
             }
         }
         private static string Calculate(Transaction tx,BlockReference reference,Dictionary<string,double> angles,JObject b,
-            Func<bool> continueInspection=null,Action<JObject> nativeReadback=null)
+            Func<bool> continueInspection=null)
         {
             if((string)b["mode"]=="dimension_display_degrees")
             {
                 var native=BlockAngularDimensionReader.ReadCurrent(tx,reference,500,continueInspection);
                 BlockVariantService.Require(native.Value<bool>("complete")&&native.Value<int>("matching_count")==1&&native["unique_numeric_text"]?.Type==JTokenType.String,"evaluated angular dimension is missing, ambiguous or unsupported: "+(string)native["error"]);
-                nativeReadback?.Invoke(native);
                 return (string)native["unique_numeric_text"];
             }
             var secondary=b["secondary_property"];
@@ -102,75 +99,59 @@ namespace Bimwright.Dwg.Plugin.Blocks
             using(var data=record.Data)
             {var values=data?.AsArray();BlockVariantService.Require(values!=null&&values.Length==1&&values[0].Value is string s&&s.Length<=4096,"angle binding record invalid");return JObject.Parse((string)values[0].Value);}
         }
-        private static RefreshPlan InspectRefresh(RefreshContext context)
+        private static AngleSnapshot ReadAngleSnapshot(BlockReference reference) =>
+            reference.IsDynamicBlock ? new AngleSnapshot
+            { Rotation = reference.Rotation, Angles = BlockVariantService.ReadAngles(reference) } : null;
+
+        private static RefreshPlan InspectRefresh(RefreshContext context, Dictionary<ObjectId, AngleSnapshot> changed)
         {
             var db = context.Database;
             var plan = new RefreshPlan { StartedAt = Clock.ElapsedMilliseconds };
+            BlockVariantService.Require(changed.Count <= 1000, "rotated block refresh reference limit exceeded");
             using (var tx = db.TransactionManager.StartOpenCloseTransaction())
             {
-                var table=(BlockTable)tx.GetObject(db.BlockTableId,OpenMode.ForRead);
-                var snapshot=new JArray();int definitions=0,snapshotCharacters=0;
-                foreach(ObjectId id in table)
+                foreach (var item in changed)
                 {
                     RequireRefreshBudget(plan);
-                    BlockVariantService.Require(++definitions<=10000,"angle refresh definition limit exceeded");
-                    var definition=(BlockTableRecord)tx.GetObject(id,OpenMode.ForRead);
-                    if(definition.IsAnonymous||definition.IsDependent||definition.IsFromExternalReference)continue;
-                    var binding=ReadBinding(tx,definition);if(binding==null)continue;
-                    var records=new List<BlockTableRecord>{definition};
-                    foreach(ObjectId anonymous in definition.GetAnonymousBlockIds())records.Add((BlockTableRecord)tx.GetObject(anonymous,OpenMode.ForRead));
-                    foreach(var record in records)foreach(ObjectId refId in record.GetBlockReferenceIds(true,false))
+                    var id = item.Key;
+                    if (id.IsNull || !id.IsValid || id.IsErased || id.IsEffectivelyErased) continue;
+                    var reference = tx.GetObject(id, OpenMode.ForRead) as BlockReference;
+                    if (reference == null) continue;
+                    var current = ReadAngleSnapshot(reference);
+                    // MOVE, colour, graphics and other non-angular changes stop here.
+                    if (current == null || item.Value.SameAs(current)) continue;
+                    var definition = (BlockTableRecord)tx.GetObject(reference.DynamicBlockTableRecord, OpenMode.ForRead);
+                    if (definition.IsDependent || definition.IsFromExternalReference) continue;
+                    var binding = ReadBinding(tx, definition);
+                    if (binding == null) continue;
+                    var attribute = Attribute(tx, reference, (string)binding["tag"]);
+                    BlockVariantService.Require(attribute != null && !attribute.HasFields && !attribute.IsMTextAttribute,
+                        "bound attribute missing or contains a field");
+                    var wanted = Calculate(tx, reference, current.Angles, binding,
+                        () => Clock.ElapsedMilliseconds - plan.StartedAt < RefreshBudgetMilliseconds);
+                    if (attribute.TextString == wanted) continue;
+                    BlockVariantService.CheckLayer(tx, db, attribute.Layer);
+                    BlockVariantService.CheckLayer(tx, db, reference.Layer);
+                    plan.Updates.Add(new AttributeRefreshUpdate
                     {
-                        if(!plan.BoundReferences.Add(refId)||refId.IsErased||refId.IsEffectivelyErased)continue;
-                        BlockVariantService.Require(plan.BoundReferences.Count<=1000,"angle refresh reference limit exceeded");
-                        var reference=tx.GetObject(refId,OpenMode.ForRead) as BlockReference;
-                        if(reference==null||!reference.IsDynamicBlock)continue;
-                        var a=Attribute(tx,reference,(string)binding["tag"]);
-                        BlockVariantService.Require(a!=null&&!a.HasFields&&!a.IsMTextAttribute,"bound attribute missing or contains a field");
-                        var angles=BlockVariantService.ReadAngles(reference);JObject native=null;
-                        var wanted=Calculate(tx,reference,angles,binding,
-                            ()=>Clock.ElapsedMilliseconds-plan.StartedAt<RefreshBudgetMilliseconds,n=>native=n);
-                        var source=new JObject{["reference"]=reference.Handle.ToString(),
-                            ["evaluated_definition"]=reference.BlockTableRecord.Handle.ToString(),
-                            ["angles"]=new JObject(angles.OrderBy(p=>p.Key,StringComparer.Ordinal).Select(p=>new JProperty(p.Key,p.Value))),
-                            ["attribute_text"]=wanted};
-                        if(native!=null)
-                        {
-                            var dimension=(JObject)native["dimensions"][0];
-                            source["dimension"]=dimension["handle"].DeepClone();
-                            source["measurement_radians"]=dimension["measurement_radians"].DeepClone();
-                            source["formatted"]=dimension["formatted_plain_text"].DeepClone();
-                            plan.EvaluatedDefinitions.Add(reference.BlockTableRecord);
-                        }
-                        snapshotCharacters+=source.ToString(Formatting.None).Length;
-                        BlockVariantService.Require(snapshotCharacters<=256*1024,"angle refresh snapshot limit exceeded");
-                        snapshot.Add(source);
-                        if(a.TextString==wanted)continue;
-                        BlockVariantService.CheckLayer(tx,db,a.Layer);BlockVariantService.CheckLayer(tx,db,reference.Layer);
-                        plan.Updates.Add(new AttributeRefreshUpdate
-                        {
-                            AttributeId = a.ObjectId,
-                            ReferenceId = reference.ObjectId,
-                            DefinitionId = definition.ObjectId,
-                            Tag = a.Tag,
-                            OldText = a.TextString,
-                            NewText = wanted,
-                            Binding = (JObject)binding.DeepClone(),
-                            ExpectedAngles = JObject.FromObject(angles)
-                        });
-                    }
+                        AttributeId = attribute.ObjectId,
+                        ReferenceId = reference.ObjectId,
+                        DefinitionId = definition.ObjectId,
+                        Tag = attribute.Tag,
+                        OldText = attribute.TextString,
+                        NewText = wanted,
+                        Binding = (JObject)binding.DeepClone(),
+                        ExpectedAngles = JObject.FromObject(current.Angles),
+                        ExpectedRotation = current.Rotation
+                    });
                 }
                 RequireRefreshBudget(plan);
-                // Do not commit a read-only scan or take a document write lock:
-                // even an empty normal transaction can interfere with Undo/Redo.
-                using (var hash = SHA256.Create())
-                    plan.Snapshot = Convert.ToBase64String(hash.ComputeHash(
-                        Encoding.UTF8.GetBytes(snapshot.ToString(Formatting.None))));
+                // Read-only inspection has no Commit and no document write lock.
             }
             return plan;
         }
 
-        private static RefreshReadback ApplyRefresh(RefreshContext context, RefreshPlan plan)
+        private static void ApplyRefresh(RefreshContext context, RefreshPlan plan)
         {
             // The caller owns the document write lock. Reopen every object and
             // validate the whole plan before the first UpgradeOpen or setter.
@@ -197,6 +178,8 @@ namespace Bimwright.Dwg.Plugin.Blocks
                     BlockVariantService.CheckLayer(tx, db, reference.Layer);
                     var angles = BlockVariantService.ReadAngles(reference);
                     BlockVariantService.CheckAngles(angles, change.ExpectedAngles, 1e-9);
+                    BlockVariantService.Require(Math.Abs(reference.Rotation-change.ExpectedRotation)<1e-9,
+                        "block rotation changed before refresh");
                     BlockVariantService.Require(Calculate(tx, reference, angles, change.Binding,
                         () => Clock.ElapsedMilliseconds - plan.StartedAt < RefreshBudgetMilliseconds) == change.NewText,
                         "derived angle display changed before refresh");
@@ -205,10 +188,16 @@ namespace Bimwright.Dwg.Plugin.Blocks
                 RequireRefreshBudget(plan);
                 // Real derived writes still need native grip/Undo/Redo verification.
                 // Database Undo is never disabled; UpgradeOpen itself may start filing.
+                // Attribute setters can synchronously notify their parent too.
+                // Suppress every target before the first native write/open.
+                foreach (var update in updates)
+                {
+                    context.OwnWrites.Add(update.Item1.ObjectId);
+                    context.OwnWrites.Add(update.Item3.ObjectId);
+                }
                 foreach (var update in updates)
                 {
                     var attribute = update.Item1;
-                    context.OwnWrites.Add(attribute.ObjectId);
                     attribute.UpgradeOpen();
                     attribute.DisableUndoRecording(true);
                     try { attribute.TextString = update.Item2; }
@@ -218,14 +207,12 @@ namespace Bimwright.Dwg.Plugin.Blocks
                 }
                 foreach (var parent in updates.Select(u => u.Item3).GroupBy(r => r.ObjectId).Select(g => g.First()))
                 {
-                    context.OwnWrites.Add(parent.ObjectId);
                     parent.UpgradeOpen();
                     parent.DisableUndoRecording(true);
                     try { parent.RecordGraphicsModified(true); }
                     finally { parent.DisableUndoRecording(false); }
                 }
                 tx.Commit();
-                return new RefreshReadback { Snapshot = plan.Snapshot, Wrote = updates.Count != 0 };
             }
         }
 

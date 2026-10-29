@@ -80,10 +80,10 @@ namespace Bimwright.Dwg.Tests
             Assert.Equal(1, StartupHostFake.Started);
             Assert.True(App.ListenerRunning);
             Assert.True(App.ListenerUsesPipe);
-            Assert.Equal(4, Application.IdleSubscribers);
+            Assert.Equal(3, Application.IdleSubscribers);
             Assert.Equal(3, Documents.Subscribers);
             Assert.Equal(3, doc.CommandSubscribers);
-            Assert.Equal(1, database.Subscribers);
+            Assert.Equal(2, database.Subscribers);
         }
 
         [Theory]
@@ -113,10 +113,10 @@ namespace Bimwright.Dwg.Tests
             Application.RaiseIdle();
             Application.RaiseIdle();
             Assert.Equal(1, StartupHostFake.Started);
-            Assert.Equal(4, Application.IdleSubscribers);
+            Assert.Equal(3, Application.IdleSubscribers);
             Assert.Equal(3, Documents.Subscribers);
             Assert.Equal(3, doc.CommandSubscribers);
-            Assert.Equal(1, doc.Database.Subscribers);
+            Assert.Equal(2, doc.Database.Subscribers);
         }
 
         [Fact]
@@ -141,10 +141,10 @@ namespace Bimwright.Dwg.Tests
             Application.RaiseIdle();
             Assert.Equal(2, StartupHostFake.Started);
             Assert.True(App.ListenerRunning);
-            Assert.Equal(4, Application.IdleSubscribers);
+            Assert.Equal(3, Application.IdleSubscribers);
             Assert.Equal(3, Documents.Subscribers);
             Assert.Equal(3, doc.CommandSubscribers);
-            Assert.Equal(1, doc.Database.Subscribers);
+            Assert.Equal(2, doc.Database.Subscribers);
         }
 
         [Theory]
@@ -190,7 +190,7 @@ namespace Bimwright.Dwg.Tests
             StartupHostFake.ToastFlushError = new InvalidOperationException("toast unavailable");
             Assert.Null(Record.Exception(Application.RaiseIdle));
             Assert.True(App.ListenerRunning);
-            Assert.Equal(3, Application.IdleSubscribers);
+            Assert.Equal(2, Application.IdleSubscribers);
             Assert.Null(Record.Exception(Application.RaiseIdle));
         }
 

@@ -87,6 +87,14 @@ namespace Bimwright.Dwg.Plugin
                     return CommandResult.Fail("run_baked_tool is not allowed inside batch_execute");
                 }
 
+                // Current-root binding validates source session/revision in the
+                // top-level invoker before its own lock. Direct batch dispatch
+                // would skip that boundary, even when the nested call is dry-run.
+                if (string.Equals(cmd, "bind_current_xref", StringComparison.Ordinal))
+                {
+                    return CommandResult.Fail("bind_current_xref is top-level only and is not allowed inside batch_execute");
+                }
+
                 // Reject the entire batch before any earlier item can mutate the
                 // drawing. LISP jobs own their asynchronous completion lifecycle.
                 if (string.Equals(cmd, "run_lisp", StringComparison.Ordinal))

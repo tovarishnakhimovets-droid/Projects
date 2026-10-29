@@ -1,5 +1,716 @@
 # CAD bridge — состояние работы
 
+## v3.4 загружена и проверена в НК2 — 2026-10-29
+
+- Пользователь подтвердил установку. EXE и реально loaded Acad27 DLL3.4.0.0,
+  Product3.4.0+44ccffc; серверPID21788, AutoCADPID33876. Manifest находится
+  server/current/bridge-docs/release.json.
+- По отдельному разрешению выполнен один bind-current газона4 в подготовленном
+  __MCP_TEST_BIND_NK2.dwg. completed/postcondition_verified=true, xref30→29,
+  source_revision0/preflight_revision1; вставка/placement/XCLIP сохранены.
+  В definition видны все5известныхHATCH; полный reader остановлен1MiBлимитом.
+  SHA sourcexref до/после совпал. Тест закрыт пользователем без сохранения.
+- Продолжено исходное поручение на Поверхности.dwg:13из14оставшихсяxref
+  внедрены.12имеют completed receipt/locality/placement readback и сверенный
+  decrement графа. УВК2(383219) вернула read timeout, затем connect timeout;
+  запись не повторялась. После восстановления полный reader подтвердил1xref
+  (только УВК1350); вставка УВК2 на месте с прежними owner/layer/transform.
+  Native receipt13-го bind отсутствует; readback состояния соответствует Bind.
+- УВК1350(382FCB): eNotAllowedForThisProxy, metadata readback всё ещёxref,
+  placement сохранён, complete rollback не доказан. Пользователь подтвердил
+  аналогичный ручной отказ. Нет повторного native вызова этой ссылки.
+  PID33876 жив, связь восстановилась, новых WER о падении не найдено.
+- Нынешний explode plan на уже local газоне4 отказывает до записи:
+  block XData would be lost by explode. XData readers отсутствуют; не стирать
+  данные/не менять scale ради обхода. Раскрытие/экспорт HATCH ещё не выполнены.
+  Поддержанная промежуточная очистка определений:213MTEXT удалены по свежим
+  handles (подписи посадок/МАФ),213/213ok; exact нетекстовые handles сохранены,
+  включая2HATCH и17LINE второго определения.
+- Drawing receipts и подробный текущий этап: НК2/cleanup_attempt.json и
+  НК2/WORK_STATUS.md. Никаких bridge source edits, rebuild, Git mutations,
+  saves или повторов uncertain write в этом проходе. Single Undo не проверен.
+  Следующий шаг: согласованное ручное раскрытие блоков либо bounded доработка
+  после отдельного решения пользователя; проблемную школу разбирать отдельно.
+
+
+## v3.4 собран и проверен — 2026-10-29
+
+- По явному поручению пользователя первый локальный коммит исправления:
+  44ccffc9da3e64196cf1838116ed7bc2e2ac1908, ровно23согласованныхфайла.
+  Перед коммитом убрана только лишняя пустая строка EOF в новом тесте;
+  логика после1878PASS не менялась, успешные unit checks не повторялись.
+  Перед упаковкой и после неё source tree чистое.
+- Официальный package-team-dwg.ps1 -Version 3.4 создал releases/3.4/stage
+  и DwgMcp.Setup-v3.4-win-x64.zip: 40 060 533байт, SHA256
+  3bc67a2b18bd5b371648f974bd7fd6495b80fa1d930cdf2a5c5cef6b0d82771b.
+  Manifest version3.4, commit44ccffc..., dirty=false,40файлов,2026/2027,
+  self-contained server. Прежние выпуски не изменялись.
+- Проверены размеры/SHA всех40файлов, полный набор и каждый байт ZIP,
+  sidecar SHA, release.json, XML и точные canonical bridge-docs.
+  Packaged EXE прошёл6actual MCP SDK initialize/tools-list profiles:
+  standard77/query22/read-only31 для2026 и2027, server version3.4.
+  Новый bind_current_xref присутствует только в модифицирующем профиле,
+  annotations/defaultdry_run/identity guard schema проверены.
+  Ни одного CAD-вызова в package verification.
+- Independent verification: обе DLL892928байт, PE3.4.0.0,
+  Product3.4.0+44ccffc..., XML AppVersion3.4.0, ровно2components R25.1/R26.0,
+  Win64 AutoCAD|Civil3D, правильные module paths. PE metadata без исполнения
+  target DLL подтверждает отсутствие AssocNetworkSnapshot/LockBoundaryProof
+  TypeDefinitions и DwgFiler TypeReference в обеих DLL; новые bind-current
+  handler/input присутствуют.
+- Независимый baseline installed3.3 не изменился: SHA installed EXE,
+  bridge-docs/release.json и фактической Roaming-bundle Acad27DLL совпали
+  с контрольными значениями до упаковки. Установка не выполнялась.
+  Последняя подтверждённая native-сессия —3.3; новые DLL не загружались
+  этим процессом работы, live-проверок3.4 не было.
+- Проверочный результат — НК2/release_3_4_check.json; реализация прежняя
+  НК2/check_release.py. Никакого второго моста в проект не копировали.
+  Intermediate releases/3.4/plugin-build удалён после проверки exactpath,
+  отсутствия reparse points и загруженных CAD/MCP modules из этого дерева;
+ 120временныхфайлов удалены, готовые stage/ZIP/SHA сохранены.
+- Второй разрешённый локальный коммит содержит только эту запись результата
+  в WORK_STATUS.md. Пакет ради неё не пересобирается: его manifest остаётся
+  привязан к первому чистому коммиту44ccffc.
+- Push, merge, установка, AutoCAD-тесты и DWG-save не выполнялись.
+  Следующий этап после установки — отдельно разрешённый один bind-current
+  на __MCP_TEST_BIND_NK2.dwg с fresh identity/metadata/dryrun и проверкой
+  local definition/placement/HATCH/source-file. Не переходить к рабочему
+  Поверхности.dwg до подтверждённого результата. Undo/native Bind ещё
+  не объявляются проверенными.
+
+
+## Подготовка выпуска v3.4 — 2026-10-29
+
+- Пользователь явно поручил два локальных коммита: подготовленные23файла
+  исправления, затем только итог выпуска в WORK_STATUS.md; между ними —
+  официальный пакет3.4. Push, установка и CAD-тест в поручение не входят.
+- Код после1878PASS, двух финальных native-сборок и independent review
+  не меняется; успешные проверки не повторяются. Перед фиксацией сверены
+  согласованные23пути, matching upstream и отсутствие unfinishedGitoperations.
+  FF-preflight выполнен до этой доработки, обновление в её середине не требуется.
+- Следующий шаг: пакет из чистого первого коммита, проверка bytes/manifest/PE/XML
+  и packaged MCP initialize/tools-list, затем второй documentation commit.
+  Нативная проверка нового bind_current_xref пока не выполнялась.
+
+
+## Исправление после фатала v3.3: исходник и offline готовы — 2026-10-29
+
+- По продолжению исходной задачи подготовки поверхностей НК2 убран
+  custom DwgOut/FileFiler путь. Удалены AssocNetworkSnapshot, LockBoundaryProof
+  и их test double/устаревшие tests. Удаление объявлено заранее; runtime path
+  проверен, установленная DLL3.3.0.0 не менялась. История исходника сохранена
+  в прежних Git-коммитах, параллельных реализаций/архивов не создано.
+- До правок чистая andrew0faa379, upstreamorigin/andrew, единственныйworktree,
+  local develop свободна, unfinished operations нет. Три FF-обновления
+  выполнены без изменений, ancestry develop→HEAD PASS.
+- Старые manage_xrefs/explode_blocks снова требуют строгой source revision
+  до/после write lock. Параметры не переписываются, rawcounter не подавляется.
+- Добавлен отдельный bind_current_xref: bind-only whole current root,
+  default dry_run=true/read lock. Для real — strict source session/revision
+  до acquisition, затем полный свежий graph/reference/transform/XCLIP/status/
+  layer preflight под write lock. Все guard-поля кроме source revision
+  совпадают. Свежая revision проверяется до transaction и после её старта,
+  непосредственно перед native Bind/Detach в общей реализации.
+  Нет нового serializer, callback bridge или долгоживущего lock lease.
+- Native BindXrefs(false), placement/locality readback и bounded uncertainty
+  handling остаются единственными общими реализациями. Receipt содержит
+  semantics=current_root_definition, source/preflight revisions и флаг
+  свежей проверки под lock; равенство всей network/DB не обещается.
+- Independent review нашёл два реальных обхода: вложенный batch обходит
+  Invoker, а StartTransaction вызывает reactors после прежнего finalguard.
+  Batch теперь отклоняет currentbind до любых ранних items, baked whitelist
+  проверен регрессией; повторный guard внесён внутрь native transaction.
+  Финальное independent review: no actionable issues.
+- Итог полного набора: 1878 PASS, 0 FAIL, 0 SKIP, включая20 actual MCP SDK
+  stdio profiles без CAD. Новая surface: standard77/query22/read-only31/
+  modify36. Локальные wrapper errors не доходят до CAD.
+  Два первоначальных targeted failures были неверными test-ожиданиями
+  текста ошибок document/fingerprint; исправлены, полный финал PASS.
+- Server net8.0 собран; финальные native2026(pinned25.1.0) и native2027
+  собраны после transaction-guard patch: 0 errors, у2026 0 warnings,
+  у2027 прежние2Roslyn MSB3277. Ни одна DLL не загружалась в CAD.
+- TOOLS обновлён. Единственный НК2/check_release.py сохранён и расширен
+  version-aware counts: прежние пакеты76, начиная3.4 ожидается77/currentbind.
+- Подготовлена отдельная __MCP_TEST_BIND_NK2.dwg рядом с host в НК2,
+  чтобы сохранить относительные xref-пути:3678424байт, SHA256
+  60aa92270a6fe3bbae7e54e85e024c132730789e9578af0c2e3cc6401015082d.
+  Стабильные source hash до/после чтения и copy hash совпали. Обычный
+  Get-FileHash не открыл активный DWG из-за file sharing; read-only
+  FileStream с ReadWrite/Delete sharing подтвердил точные байты.
+  Copy в AutoCAD не открывалась, в рабочем DWG ничего не менялось.
+- Временный НК2/remove_unsafe_filer.py после применения удалён.
+- Состояние: исходник/offline ready; installed/loaded остаётся3.3 с прежним
+  запретом real writers. Новых коммитов, пакета, установки, native-теста
+  и DWG-save не было. Следующий шаг — отдельное поручение фиксации изменения
+  и выпуска3.4. После установки только явно разрешённый тест на отдельной
+  копии; к рабочему DWG не переходить до подтверждённого результата.
+  Detach/explode при lock events по-прежнему могут отказывать: новая
+  bind-only семантика на них автоматически не распространена.
+
+
+## ФАТАЛ v3.3: real writers не применять — 2026-10-28
+
+- v3.3 установлен пользователем. Активный Поверхности.dwg подтверждён
+  по полному пути/fingerprint739091b3..., DBMOD0. Fresh list30rootmetadata
+  complete, dry-run Bind3273CB PASS. Один real вызов вернул через17секунд
+  plugin closed connection; пользователь подтвердил fatal и перезапустилCAD.
+  Автоматического повторения Bind/Explode/Erase/Save не было.
+- WER: acad.exe23932, 22:07, exception0xc0000005, address0x7ff81f4139e0.
+  Дамп C:/Users/taa6651111/AppData/Local/CrashDumps/acad.exe.23932.dmp,
+  55 829 217байт. Сохранённый dump только читается, на сервер не отправлялся.
+- Microsoft dotnet-dump10.0.750501 установлен локально только в НК2/tools.
+  ip2md(exceptionAddress) => System.Runtime.InteropServices.GCHandle.get_Target.
+  Разрешённые адреса стека образуют цепь Matches→Capture→DBObject.DwgOut→
+  native AcMgDwgFiler.dwgVersion→gcroot<DwgFiler>→GCHandle. Сбой локализован
+  в custom filer path второго снимка. Полный native unwind не получен;
+  точная причина invalid callback context пока не установлена.
+- Independent PE/IL review installed acdbmgd: AcMgDwgFiler callbacks читают
+  gcroot из native this+0x40; ctor создаёт сильныйhandle, destructor освобождает.
+  Добавление KeepAlive вслепую не исправление. Также native dwgOut при error
+  status может ASSERT: throws/InvalidInput из callbacks не гарантируют
+  безопасного отказа. Это дополнительный риск, не доказанная причина данногоAV.
+- После restartPID28544 только readers: то же Поверхности.dwg, DBMOD0,
+ 30xref, все root graph/reference/identitymetadata совпали с pre-call.
+  Receipt упавшего вызова отсутствует, факт входа nativeBind не подтверждён.
+  Состояние до завершения упавшего процесса не объявляется откатанным.
+- Реальные manage_xrefs и explode_blocks v3.3 используют этот общий helper:
+  НЕ ПОВТОРЯТЬ до исправления и отдельной native-проверки. Dry-run/metadata
+  readers на helper не заходят; доступность после restart подтверждена.
+  Пакет3.3 immutable не перезаписывать/не рекламировать как рабочий для записи.
+- Следующий путь: убрать custom filing из production полностью. Для Bind
+  рассмотреть явный bind-only контракт текущего root: strictprelockrevision,
+  fresh full target/graph/transform/layer/status preflight под полученным lock,
+  затем nativeBind+placement readback. Semanticsдолжны бытьявными; не переносить
+  эту политику на detach/explode автоматически и не компенсировать+3.
+  Любой исправленный native путь сначала проверить в отдельном тестовом DWG
+  по явному разрешению, не на рабочей копии.
+- Новый код/пакет/коммиты не выполнялись. В source только накопленная запись
+  WORK_STATUS.md; новый bridge-edit preflight требует чистого дерева.
+  Для её фиксации нужно отдельное поручение по правилам пользователя оGit.
+  Диагностика объекта — НК2/cleanup_attempt.json и fatal_v3_3_*.txt.
+
+
+## v3.3 собран и проверен — 2026-10-28
+
+- По явному поручению пользователя согласованные12файлов зафиксированы
+  в andrew: b87e4f302fd37dded22014a250d97609153968bf. Перед упаковкой
+  рабочее дерево чистое; успешные1940logic/unit checks не повторялись.
+- Официальный package-team-dwg.ps1 -Version 3.3 создал releases/3.3/stage
+  и DwgMcp.Setup-v3.3-win-x64.zip: 40 073 048 байт, SHA256
+  81323f7f33941cbd0aee63a84abdf2936d468a02242235f6b115c4a3b305e212.
+  Manifest version3.3, commit b87e4f3..., dirty=false, оба года2026/2027,
+  40файлов; предыдущие версии не изменялись.
+- Проверены SHA/размеры всех40файлов, полный набор и каждый байт ZIP,
+  sidecar SHA, runtime release.json и точные canonical bridge-docs.
+  Упакованный EXE прошёл6actual MCP SDK initialize/tools-list profiles:
+  standard76/query22/read-only31 для каждого года, server version3.3,
+  writer visibility/annotations/identity/dry_run schema корректны.
+  Проверки используют только MCP discovery, ни одного CAD-вызова.
+- Independent verification: обе DLL PE3.3.0.0 и Product3.3.0+b87e4f3,
+  XML AppVersion3.3.0, ровно2components R25.1/R26.0, Win64 AutoCAD|Civil3D,
+  module paths2026/2027 правильные. Установленный3.2 не изменился:
+  SHA EXE, release.json и фактической Roaming-bundle Acad27DLL совпали
+  с baseline, снятым независимым агентом перед упаковкой.
+- Промежуточный releases/3.3/plugin-build удалён после проверки точного
+  absolute path внутри release workspace, отсутствия reparse points
+  и loaded CAD/MCP modules оттуда. Готовые stage, ZIP и SHA сохранены.
+- Единственная QA-реализация — НК2/check_release.py, результат —
+  НК2/release_3_3_check.json. В папку объекта мост не копировался.
+- Source/offline-package verified. Установлен/загружен по-прежнему3.2;
+  push, merge, установка и CAD-save не выполнялись. Новый gate и native
+  DwgOut(FileFiler) на рабочем DWG ещё не проверены; Bind/Explode не выполнены.
+  Следующий шаг: пользователь закрывает AutoCAD/Codex, устанавливает3.3,
+  затем fresh identity/metadata, dry-run и один защищённый рабочий вызов.
+  При unknown/timeout читать состояние, автоматически не повторять запись.
+- Этот итог добавлен после выпуска без новой Git-фиксации: отдельный коммит
+  журнальной записи не входит в делегированный набор12файлов. Пакет не
+  пересобирался, manifest остаётся привязан к чистому коммиту b87e4f3.
+
+
+## Подготовка выпуска v3.3 — 2026-10-28
+
+- Пользователь отдельно поручил «Сделай коммит и v3.3»: согласованные12файлов
+  фиксируются в текущей andrew; push, merge и установка не входят в поручение.
+- Код после1940PASS и двух native-сборок не меняется. Проверки не повторяются;
+  официальный упаковщик задаст версии3.3/3.3.0, предыдущие выпуски не меняются.
+- Перед фиксацией сверены все12путей, matching upstream, одинworktree,
+  unfinished Git operations нет. FF-проверки уже выполнены до этой доработки;
+  в середине задачи новые pull/fetch не запускаются.
+- После коммита: package-team-dwg.ps1 -Version 3.3 из чистого снимка, проверка
+  manifest/ZIP/metadata и packaged MCP initialize/tools-list без CAD calls.
+  Результат и состояние installed/loaded/live будут записаны отдельно.
+
+## Native v3.2 и проверка сохраняемого состояния network — 2026-10-28
+
+- Пользователь сообщил «обновил». Установленные release.json и EXE подтверждают
+  3.2/c51cdee; native reader возвращает новую revision_diagnostics, сессия новая.
+  Активен прежний Поверхности.dwg, fingerprint739091b3..., DBMOD16.
+- Dry-run Bind газона4 (3273CB) PASS, revision0. Один разрешённый production
+  вызов отказал до handler: acquire +1, dispose +2, всего revision3.
+  Все события modified точного managed AssocNetwork3A8732, шесть false-флагов;
+  trace полный, unrecorded/capture failures0. После отказа те же30rootxref,
+  graph/reference hashes и DBMOD16. Bind/Explode/Erase/Save не выполнялись.
+  Диагностика сохранена в существующем НК2/cleanup_attempt.json.
+- Native событие связано с автоматической associative evaluation на смене lock.
+  Флаги сами по себе не доказательство no-op. Подготовлен узкий gate:
+  rawcounter прежний, strict guard до acquisition; только полный all-false
+  exactnetwork trace может быть проверен полным DwgOut(FileFiler) сравнением
+  сохраняемых данных default hierarchy до/после. Набор/root/nativeclass/bytes
+  должны совпасть. Любые child/structural/unknown events, ошибки и лимиты —
+  отказ. Чужие/unlinked networks не объявляются проверенными.
+- Только после доказанного равенства меняется revision в приватной копии входа;
+  handler повторяет все прежние object guards. События release не подавляются.
+  Пределы capture128networks/10000actions/2MiB/3s, без файловой записи.
+- Перед исходными правками: чистая andrew2a6a5b6, matching upstream,
+  develop свободна, unfinished operations нет. Разрешённые FF-команды выполнены,
+  обновлений нет, ancestry PASS. Другая работа не затронута.
+- Итог: 1940 .NET tests PASS, 0 FAIL, 0 SKIP, включая 20 actual MCP SDK
+  stdio/schema profiles без CAD calls. 158 targeted gate/routing tests PASS.
+  Native2026 с pinned25.1.0: 0 warnings/errors; native2027 installed refs:
+  0 errors, прежние2Roslyn MSB3277. Server net8.0 собран в полном наборе.
+  Independent review всех4productionfiles и tests: no actionable issues.
+- Первые12 routing tests упали из-за test double, который не обновлял
+  LastLockMode после нового read-lock capture. Модель явного Write исправлена;
+  проверки восстановления исключений/строгого отказа сохранены, финал PASS.
+  Native helper компилировался с реальными Autodesk refs; unitrouting использует
+  snapshot double. Реальные callbacks/успешность и равенство DwgOut hashes
+  пока НЕ проверены на живом DWG.
+- Технический контракт TOOLS обновлён. Временный проектный patch script удалён
+  после применения; единственный исходник остаётся в общем CAD-мосте.
+- Установленный/загруженный runtime остаётся3.2. Новый коммит, пакет, установка,
+  повторный live writer и сохранение не выполнялись. Следующий шаг после offline
+  итогов — отдельное поручение коммита и пакета, затем загрузка пользователем.
+  DwgOut callbacks/hashes на этом DWG и production Bind пока live не проверены.
+
+
+## Диагностический v3.2 собран и проверен — 2026-10-28
+
+- По явному поручению пользователя диагностический патч зафиксирован в andrew:
+  c51cdee20d5fb57a6fae9c3f0c15da198f22843c. Только согласованные 12 файлов;
+  перед упаковкой исходник чистый. Logic/unit проверки1824PASS не повторялись.
+- tools/package-team-dwg.ps1 -Version 3.2 создал releases/3.2/stage и
+  DwgMcp.Setup-v3.2-win-x64.zip: 40 054 901 байт, SHA256
+  7e14c9d417c021c76a35f3860356ce026c2f15a287601ff6c5feaabf3f57d38f.
+  Manifest: version3.2, commit c51cdee..., dirty=false, годы2026/2027.
+  Предыдущие выпуски не перезаписывались, новый пакет не переиздавался.
+- Проверены bytes/SHA256 всех40файлов manifest, полный набор и байты ZIP,
+  sidecarSHA, release.json, точные копии канонических bridge-docs.
+  Обе plugin DLL имеют PE-version3.2.0.0, Autodesk PackageContents AppVersion3.2.0,
+  ровно два компонента2026(R25.1)/2027(R26.0), Win64, AutoCAD|Civil3D.
+- Упакованный EXE проверен official MCP SDK: только initialize/tools-list,
+  version3.2; для обоих годов standard76/query22/read-only31, всего6profilesPASS,
+  новые readers/writers/annotations/identity/dry_run-schema корректны.
+  Ни одного CAD-вызова, runtime-install или DWG-save в этой проверке не было.
+- Независимая проверка подтвердила PE/XML/release metadata и неизменность
+  установленного3.1 по прежним SHA256 сервера, release.json и Acad27 DLL.
+  Native-сборки успешны, у2027 только прежние2Roslyn MSB3277. Intermediate
+  plugin-build удалён после проверки точного пути и загруженных модулей;
+  stage,ZIP,SHA сохранены. Пакет не пересобирается ради записи этого итога.
+- Служебная QA-реализация в НК2 обобщена и переименована из
+  check_release_3_1.py в check_release.py: версия — positional argument,
+  --commit задаёт ожидаемый коммит manifest. Результат — release_3_2_check.json;
+  прежний JSON3.1 сохранён. Второй реализации проверок не создано.
+- Source-ready/offline-package verified; установлен/загружен по-прежнему3.1.
+  Push,merge,установка и production-очистка не выполнялись. Причина +3native
+  lock-events ещё не установлена. Следующий шаг пользователя — установить3.2,
+  затем получить diagnostic trace при одном защищённом рабочем вызове;
+  неизвестные события всё ещё вызывают отказ, а не подавляются.
+## Подготовка диагностического v3.2 — 2026-10-28
+
+- Пользователь явно поручил «Сделай коммит и v3.2» после описания результата
+  1824 офлайн-тестов и ещё неизвестных причин lock events. В поручение входят
+  фиксация подготовленного патча в andrew и сборка диагностического пакета.
+- Новых исходных правок логики не делается, успешные unit-тесты не повторяются.
+  Сборка пакета задаст версии 3.2/3.2.0; предыдущие3.1/3 не перезаписываются.
+  Это не подтверждение работы Bind/Explode в AutoCAD. После загрузки новой DLL
+  предстоит один защищённый рабочий вызов и чтение типов/флагов событий.
+- Push, merge, установка и сохранение рабочего DWG не поручены и не выполняются.
+  Фактический итог сборки/проверок будет добавлен отдельной записью журнала.
+## Первый native dry-run v3.1 и диагностика блокировки — 2026-10-28
+
+- Пользователь удалил явно лишние ссылки вручную и поручил внедрить и
+  очистить остальные. В установленном release.json версия 3.1; новые native
+  handlers доступны. В рабочем Поверхности.dwg подтверждены 30 resolved/loaded
+  корневых ссылок без подрезок. Служебные данные: НК2/xrefs_before_cleanup.json
+  и НК2/cleanup_attempt.json. Сводка прямых объектов неполна из-за лимита
+  100 000; 417 найденных HATCH — нижняя граница, не реестр готовых поверхностей.
+- Первый ManageXrefs(bind,dry_run=true) отклонил свежий guard; немедленный
+  повтор только проверки с новым snapshot также отклонён. Контроли:
+  list→list под read lock стабилен, любой проверенный write-lock путь даёт
+  revision +3: Manage dry-run, отказ InspectBlock на xref, успешный GetVariables.
+  Graph/reference hashes остаются прежними. Классы/флаги событий неизвестны;
+  компенсировать +3 или игнорировать события целиком нельзя.
+- Команды реального Bind/Detach/Explode/Erase/Save не запускались.
+  DBMOD исходно 16 после пользовательской очистки, при последующем чтении 17;
+  никакой вывод о типе внутренних изменений из этого бита не делался.
+  У двух ссылок третьей очереди scale1000/1000/1: текущий guarded explode
+  их отклоняет, масштаб ради обхода не менялся.
+- Перед исходными правками чистая andrew fb374e3; CAD develop notLoaded,
+  unfinished Git operations нет, три ранее разрешённые FF-команды выполнены,
+  без обновлений; ancestry develop→HEAD PASS. Чужие файлы не менялись.
+- Подготовлено исправление dry_run: request-aware read lock только для
+  ManageXrefs/ExplodeBlocks с default/true. Реальный writer проходит shared
+  input parser и точный session/revision guard до и после получения write lock.
+  При изменении на lock handler не вызывается, ошибка показывает фазу/events.
+- DrawingRevision сохраняет прежние счётчики и исключения. Диагностика читает
+  native flags только на потоке активного BeginPhase, максимум 16 снимков
+  на scope и 16 записей в ring. Вне scope/бюджета/потока — без новых getters,
+  counter всё равно растёт. unrecorded_count/truncated обозначают пропуски.
+  Xref reader возвращает диагностику, отказ guard — changed_fields.
+- Независимое ревью выявило потерю primary outcome при ошибке lock.Dispose.
+  Исправлено: сохраняются primary exception и bounded handler receipt,
+  handler_invoked/returned, execution_unknown и запрет автоматического повтора.
+  Native-ссылки и большие payload в ошибку не сериализуются. Ревью PASS.
+- Итог: 1824 .NET tests PASS, 0 FAIL, 0 SKIP, включая 20 actual MCP SDK stdio
+  profiles без CAD calls. Ранее два новых теста требовали обновить ожидание
+  unscoped diagnostics после performance policy; итоговый полный запуск успешен.
+  Server net8.0 PASS; native2026 pinned25.1.0 PASS без warnings/errors;
+  native2027 installed refs PASS, прежние два Roslyn MSB3277, ошибок нет.
+- Состояние: исправление и диагностика только в исходнике и offline binaries.
+  Новый коммит/пакет не создавался, installed/loaded3.1 не менялся; повторный
+  native прогон с диагностикой ещё не выполнен. Это не завершённый production
+  fix реального Bind: нужен trace классов/флагов lock events после загрузки.
+- Следующий шаг: отдельное поручение коммита/диагностического выпуска v3.2,
+  установка пользователем, одно чтение и dry-run, затем явный рабочий вызов
+  с защитой и анализом trace. До доказанной классификации real writer сохраняет
+  отказ. Выпущенный3.1 не перезаписывать. Производственная очистка не выполнена.
+## v3.1 собран и проверен — 2026-10-28
+
+- Пользователь поручил коммит доработки и сборку v3.1. Коммит реализации:
+  fabf3c3d9d4c9eb8f883eb3f0e7035ca52598e50, ветка andrew. В него вошёл
+  только подготовленный набор из 21 файла. Перед упаковкой исходник чистый.
+- tools/package-team-dwg.ps1 -Version 3.1 создал releases/3.1/stage и
+  DwgMcp.Setup-v3.1-win-x64.zip: 40 045 879 байт, SHA256
+  d273e52a0056b8586a8c7c440ceb1d76e098513512a6881aa5284d8f4cb9906e.
+  manifest.version=3.1, manifest.commit=fabf3c3..., dirty=false,
+  оба года 2026/2027. Готовый пакет не перезаписывался.
+- Проверены bytes/SHA256 всех 40 файлов manifest, полный набор и байты ZIP,
+  sidecar SHA256, release.json и точные копии канонических bridge-docs.
+  PackageContents.xml AppVersion=3.1.0; обе plugin DLL версии 3.1.0.0.
+  Обе native-сборки успешны: у 2026 нет предупреждений/ошибок,
+  у 2027 только прежние два Roslyn MSB3277, ошибок нет.
+- Через официальный MCP SDK запущен именно упакованный EXE. Только
+  initialize и tools/list, без CAD-вызовов: для каждого года прошли standard
+  (76 tools), query (22), read-only (31); serverInfo.version=3.1.
+  Проверены новые readers/writers, annotations, identity/dry_run schema
+  и исключение writers из read-only. Всего шесть packaged-профилей PASS.
+  До этого успешные unit-проверки без причины не повторялись.
+- QA-runner и JSON результата находятся в служебной папке НК2 объекта:
+  check_release_3_1.py и release_3_1_check.json. Временный plugin-build
+  удалён после проверки точного пути и отсутствия загруженных оттуда модулей.
+  Stage, ZIP и SHA сохранены. Этот итог добавлен отдельным документационным
+  коммитом; пакет из fabf3c3 не пересобирался ради обновления журнала.
+- Push, merge, установка runtime и live CAD tests не выполнялись.
+  Следующий шаг пользователя: установка v3.1 по TEAM_SETUP после закрытия
+  AutoCAD/Codex, затем проверка чтения и явно разрешённая native-проверка
+  новых операций. Производственная очистка Поверхности.dwg ещё не начата.
+## Подготовка v3.1 — 2026-10-28
+
+- Пользователь явно поручил зафиксировать подготовленную доработку в andrew
+  и собрать установщик v3.1. Push, merge и установка в поручение не входят.
+- Выпуск готовится из чистого коммита личной ветки без переключения на develop.
+  Порядок сборки — tools/package-team-dwg.ps1 -Version 3.1; параметр задаёт
+  номер пакета и техническую версию сборок 3.1.0. Готовые прежние выпуски
+  не перезаписываются. Результат и фактические проверки будут записаны после
+  окончания упаковки отдельным обновлением журнала без пересборки пакета.
+## Внешние ссылки и раскрытие блоков — 2026-10-28
+
+- Запрос из НК2: первым проходом очистить лишние ссылки, внедрить содержащие
+  поверхности и раскрыть блоки. Деление водосборов в этот проход не входит.
+  Правила объекта находятся в его НК2/README.md; общие контракты — TOOLS.md,
+  раздел «Внешние ссылки и раскрытие блоков».
+- Перед правками чистая andrew/origin/andrew 01673d4; develop не занят другим
+  worktree, незавершённых Git-операций нет, чат CAD develop был idle.
+  Первый pull отклонила автоматическая проверка. Пользователь отдельно
+  разрешил три команды fast-forward; все выполнены, обновлений не было,
+  проверка включения develop в HEAD прошла. Commit, push и merge не выполнялись.
+- Добавлены query-инструменты dwg_list_xrefs, dwg_plan_block_explode и
+  modify-инструменты dwg_manage_xrefs, dwg_explode_blocks. Новые читатели
+  используют read lock; все четыре работают только с активной вкладкой.
+  Полные снимки и счётчик изменений DWG защищают запись от устаревшего плана.
+- Инвентаризация возвращает граф ссылок, вставки, преобразования, подрезки
+  и ограниченную сводку прямых объектов по типам/слоям. Нулевое число прямых
+  HATCH не доказывает отсутствие поверхностей во вложенных блоках.
+- Управление ссылками: один явно выбранный корень за вызов; bind сохраняет
+  различия имён символов, detach проверяет удаление определения и вставок.
+  Неполный граф блокирует запись; bind требует загруженных разрешённых узлов
+  всего графа. Неопределённый результат передаёт подробности через Error;
+  повторять запись автоматически запрещено.
+- Раскрытие: один уровень, до 100 обычных вставок и 20 000 объектов.
+  Штриховки остаются HATCH; сложные неподдержанные случаи отклоняются.
+  До удаления вставок native-выход передаётся владельцу и транзакции;
+  до Commit сверяются число и типы объектов. Старый обработчик использует
+  тот же helper без повторной реализации. Оба writer по умолчанию dry_run.
+- Независимое ревью выявило отсутствие проверки свободной командной строки
+  в Xref и потерю подробностей ошибки через Result. Оба дефекта исправлены;
+  добавлены проверки отказов, сохранения диагностики на wire и bind-policy.
+  Дополнительных actionable замечаний после исправления не осталось.
+- Сервер net8.0 и native 2026/2027 собраны. Для 2026 использованы закреплённые
+  compile-only references 25.1.0: ошибок и предупреждений нет. Для 2027 —
+  установленный AutoCAD: ошибок нет, прежние два предупреждения Roslyn MSB3277.
+  Полный набор .NET: 1776 PASS, 1 FAIL, 0 SKIP из 1777. Единственный FAIL —
+  дубль в тестовом ожидании списка классов, рабочая регистрация без дублей.
+  После его исправления все 9 затронутых ToolsListSnapshotTests прошли;
+  остальные успешные проверки не повторялись. В полном запуске прошли
+  20 реальных MCP SDK stdio-профилей обоих годов без CAD-вызовов:
+  standard 76, query 22, read-only 31, modify 35. git diff --check прошёл.
+- Исходник изменён и собран офлайн. Официальный пакет не выпускался;
+  установленный и загруженный runtime не менялся. Новые native-операции
+  в AutoCAD не запускались. Рабочий DWG только ограниченно прочитан:
+  DBMOD=0 при проверке, очистка и сохранение не выполнялись.
+- Следующий шаг: review и коммит пользователем либо явное поручение коммита,
+  затем выпуск и установка по TEAM_SETUP. После загрузки с отдельным
+  разрешением проверить на тестовом DWG координаты, площади/отверстия HATCH,
+  ассоциативность, ByBlock/слой 0, отказы и Undo. Общая атомарность native
+  binding, полный rollback и жёсткая отмена native-вызова не заявлены.
+
+## Простая нумерация выпусков — 2026-10-28
+
+- Пользователь установил порядок: текущий выпуск v3, мелкие обновления v3.1,
+  v3.2, крупные v4/v5. Новые выпуски без team/rc; памятка TEAM_SETUP обновлена.
+  Команда упаковки принимает 3/3.1 и необязательный префикс v. Один короткий
+  номер используется в имени ZIP, manifest, release.json и ответе MCP initialize.
+  Autodesk/.NET получают техническое числовое значение 3.0.0 или 3.1.0.
+- Installer сохраняет чтение прежних пакетов. Нормализация числовой версии
+  единственная, в package-client-setup; из wrapper удалено повторное XML
+  присваивание. Проверены реальные PowerShell AST-фрагменты: допустимые/битые
+  версии, прежние team/rc, синтаксис и обе build/publish-команды — PASS.
+  После изменения серверной версии 20 реальных MCP SDK профилей PASS.
+- Промежуточный RC5 собран из 98201a7 и проверен: оба года, 40 файлов manifest,
+  точные байты ZIP и standard/query/read-only SDK-профили. Не устанавливался.
+  После смены нумерации его локальный выход удалён с проверкой отсутствия
+  запущенных EXE/загруженных DLL из этого каталога. Итоговый пакет — releases/3/.
+  Проверки угловой логики ниже действуют; живые DWG/runtime не изменены.
+- Итоговый **v3 собран из чистого 5d01a17**, manifest.dirty=false, годы 2026/2027.
+  Папка установки releases/3/stage/, ZIP DwgMcp.Setup-v3-win-x64.zip,
+  39 992 430 байт, SHA256
+  1f6428e3b97254e6a0e344db18a88054c925275585dc8701695a945406d28e31.
+  Все 40 файлов manifest и байты ZIP проверены. MCP initialize сообщает 3,
+  XML 3.0.0, обе plugin assemblies 3.0.0.0. Упакованный EXE проверен реальным
+  SDK для обоих годов: standard72/query20/read-only29, без дублей, CAD tools
+  не вызывались. Финальная упаковка: обе сборки без ошибок, у 2027 прежние
+  два Roslyn MSB3277. Временный plugin-build удалён после проверки отсутствия
+  загруженных DLL; один build.log сохранён в папке версии. Готовый пакет для
+  этой записи журнала не пересобирался. Пользователь обновляет runtime сам;
+  затем остаётся live-проверка поворота связанной вставки и Undo/Redo.
+
+## Угловой атрибут: только повёрнутая вставка — 2026-10-28
+
+- По запросу пользователя устранён обход всей BlockTable, который на большом
+  DWG после каждой команды выдавал angle refresh definition limit exceeded.
+  Начальная идея кеша/порционного поиска отменена после уточнения пользователя;
+  её helper и тесты не оставлены в проекте.
+- При ObjectOpenedForModify сохраняются прежние Rotation/именованные углы
+  только переданной dynamic BlockReference. ObjectModified ставит её ID в очередь.
+  После завершения работы AutoCAD один deferred callback сравнивает углы.
+  Только при изменении угла читаются binding и атрибут этой самой вставки.
+  MOVE/цвет без поворота не доходят до binding; соседние вставки того же
+  определения не перечисляются и не обновляются.
+- При открытии/активации DWG и после посторонних команд скана нет. Постоянная
+  подписка angle Idle удалена; временная снимается после одного прохода.
+  Нет наблюдения за dimensions, повторов стабилизации или автоповтора ошибки.
+  Старый DeferredAngleRefreshState и его тесты удалены, вместо них проверяется
+  новая событийная логика. Явный dwg_update_block_angles сохранён.
+- До правок чистая andrew/origin/andrew 9e5bc17; три обязательных ff-only
+  обновления и ancestry PASS. Пользователь поручил commit/push/пересборку;
+  установку и последующую работу выполняет сам. Merge не выполнялся.
+- Offline: **1735 PASS, 0 FAIL, 0 SKIP**, включая 20 реальных MCP SDK stdio
+  профилей обоих годов. Проверены отсутствие startup/command scan, 12000 чужих
+  вставок и один event-target, old/new углы, однократность, own writes,
+  busy/ошибки, изоляция DWG и очистка подписок. Native DB/геометрия в этих
+  lifecycle-тестах заменены doubles; это не live PASS grip/Undo/Redo.
+- Обе native сборки PASS: 2026 без warnings/errors; 2027 с прежними двумя
+  Roslyn MSB3277 и без ошибок. Чтение без Commit/write-lock и полный preflight
+  перед реальной записью сохранены. Готовится кандидат 2.0.1-team.8-rc.5
+  из чистого коммита. Установленные/загруженные DLL и DWG не менялись.
+  После обновления проверить поворот связанной вставки и Undo/Redo в AutoCAD.
+- Финальное ревью дополнительно закрыло два случая повторного запуска:
+  IDs всех target attributes/parents подавляются до первого native write/open;
+  исключение preflight также снимает Idle и очищает очередь затронутого контекста.
+  После этих локальных изменений 47 lifecycle/startup checks PASS, включая
+  три новых случая отказа native getters. Полный набор без причины не повторялся.
+  Промежуточный RC4 не устанавливался и удалён после проверки отсутствия
+  процессов/модулей из его каталога; пакет с тем же номером не переиздаётся.
+
+
+## Перестановка существующих MLeader – 2026-10-25
+
+- Перед правкой andrew/origin/andrew 9a2f870 чистая, develop не занят другим
+  worktree; три обязательных ff-only обновления и ancestry PASS. Пользователь
+  разрешил необходимые исходники, сборки, commit/push; работа делегирована root.
+- Добавлен typed `dwg_reposition_leaders` в modify: 1–100 native plain MLeader,
+  full DWG path/fingerprint, точные owner/layer, native MText.Contents, actual
+  leader/line indices, anchor/2vertices/dogleg. Новый reader возвращает готовый
+  reposition_snapshot и content bounds. Чужие исходники/ветки не менялись.
+- Только SetDogleg/restore length, TextLocation и SetLastVertex: стрелка не
+  получает setter и не двигается вместе с entity. Все targets до setters,
+  одна transaction, exact native readback стрелки/обоих заданных положений,
+  индексов и сохранённых text/graphics/XData. dry_run по умолчанию без setters;
+  нет сохранения, пересоздания, автоматической маршрутизации или обещания Undo.
+- Учтён native случай НВ: единственный leader index1, line index0. TextLocation
+  – native anchor, может быть правым краем; несовместимая с ним последняя
+  вершина отклоняется readback, а не молча сдвигает подпись.
+- 47 affected checks PASS: exact/stale snapshots включая оба индекса и
+  буквальные escapes, лимиты/hex aliases/геометрия, actual SDK schema,
+  tools-list snapshots и 20 real stdio профилей 2026/2027. Начальные ошибки
+  тестовых helpers/counts исправлены; финальные проверки успешны.
+- Native сборки 2026/2027 PASS по реальным закреплённым references, сервер
+  net8.0 собран. В первом 2027 build прежние два Roslyn MSB3277; в итоговом
+  выводе они подавлены NoWarn=MSB3277, код зависимостей не менялся.
+- Установленные/загруженные DLL не заменялись, нового RC/инсталлятора нет.
+  Typed native live-тестов в этом подзадании не было. Root отдельно подтвердил
+  одноразовым проектным прототипом перенос216/сохранение228стрелок, actual
+  пересечений линий0 и наложений текста0. Это evidence подхода, не live PASS
+  нового typed handler. Следующий шаг – штатный будущий выпуск/загрузка и
+  отдельно разрешённый bounded native smoke test dry_run/запись/Undo.
+
+## PlotPdf: сохранение единиц при смене листа – 2026-10-25
+
+- Перед новой правкой andrew/origin/andrew cca00a5 чистая; обязательные ff-only
+  обновления и ancestry PASS. Пользователь разрешил исходники/commit/push/сборку.
+- Загруженный RC2 после успешной Model/A4 печати отказал на СГП/A0: native plot
+  validation changed saved setting paper_units. После точной привязки PC3/media
+  и RefreshLists копия теперь получает SetPlotPaperUnits(copy, l.PlotPaperUnits).
+  Исходный Layout не меняется; оба полных snapshot guards сохранены без ослабления.
+- Основной агент подтвердил такой порядок в bounded проектном прототипе:
+  saved/ValidatedSettings DeepEquals TRUE, СГП A0 напечатан 3548343байта. Это live
+  evidence алгоритма после смены листов, отдельное от новой typed DLL.
+- Обе native сборки PASS: 2026 без warnings/errors; 2027 без errors, прежние
+  два Roslyn MSB3277. 76 affected/schema checks PASS: существующие политики
+  полного snapshot (включая paper_units), foreground и 20 реальных MCP SDK
+  stdio-профилей обоих годов. Полный набор не повторяли, API/schema не менялись.
+- Код cf852f0 опубликован в origin/andrew. Штатный RC3 собран из чистого commit:
+  releases/2.0.1-team.8-rc.3/stage/install.ps1, manifest.dirty=false, оба года,
+  40 payload-файлов. ZIP DwgMcp.Setup-v2.0.1-team.8-rc.3-win-x64.zip; SHA256
+  9c92f770f3eeb81a08ac17cc375be39a4b6ecbde30071dcbd3c46fd4daea730b.
+  Это кандидат личной ветки; RC2 и его ZIP не менялись. Новую DLL в работающий
+  CAD не устанавливали, живых CAD-вызовов в этом подзадании не было.
+  После безопасного обновления ещё нужна проверка typed печати Model/A4,
+  затем СГП/A0; прототип не заменяет этот native smoke test. Пакет и успешные
+  проверки для этой записи документации не пересобирать/не повторять.
+
+## PlotPdf RC2: упакован исправленный foreground-путь – 2026-10-25
+
+- Код bc80a5b, штатный кандидат releases/2.0.1-team.8-rc.2/, manifest.dirty=false,
+  оба года2026/2027, 40 payload-файлов. ZIP
+  DwgMcp.Setup-v2.0.1-team.8-rc.2-win-x64.zip; SHA256
+  d4410aa4252abf08f2a4c7bb424aff1eed01cae138a9ead1dd3ca95d526fefa8.
+  Пакет включает предыдущий серверный фикс JSON-string d844062. Финальная
+  упаковка собрала оба native плагина: 2026 без предупреждений/ошибок, 2027 без
+  ошибок с прежними двумя Roslyn MSB3277. 76 affected/schema checks PASS.
+- По сообщению основного агента повторный bounded проектный прототип напечатал
+  актуальный СГП 3541213байт за18с; собран том54страницы/5552219байт/17закладок.
+  Это live evidence самого foreground/ProgressDialog/exact-snapshot алгоритма,
+  отдельного от ещё не установленного и не загруженного нового typed RC2.
+- RC2 не устанавливался поверх рабочего AutoCAD, программа не перезапускалась
+  этим подзаданием, прямых live-вызовов новых методов не было. Нужен штатный
+  последующий install из stage после безопасного закрытия CAD/MCP и проверка
+  typed dry_run/печати. Старый RC1 и его неизменяемый ZIP сохранены как предыдущий
+  кандидат. Дополнительную упаковку для этой записи документации не выполнять.
+
+## PlotPdf: exact media, foreground и локальный вывод – 2026-10-25
+
+- До новой native правки чистая andrew/origin/andrew d844062; обязательные
+  ff-only обновления и ancestry PASS. Пользователь разрешил необходимые
+  исходники/коммиты/push/сборки. Другие компоненты и таблицы не менялись.
+- Native теперь обновляет списки transient PlotSettings, проверяет точное наличие
+  сохранённых устройства и canonical media, задаёт те же имена. MatchDisabled
+  заменён на MatchEnabled только с полным exact guard ValidatedSettings до
+  BeginPlot. Подмена любого сохранённого поля отклоняется до создания PDF.
+- По фактической диагностике основного агента MatchDisabled отказывал
+  eNoMatchingMedia даже при существующем exact media, тогда как MatchEnabled
+  вернул полный snapshot без отличий. Первый прототип с BACKGROUNDPLOT2 не
+  создал PDF. Затем foreground0, стандартный невидимый ProgressDialog и localTemp
+  дали PDF 3540622 байта и восстановили BACKGROUNDPLOT2. Это проверка одноразового
+  проектного прототипа, не live-тест нового typed handler.
+- В shared service перенесён foreground scope с finally-restore/readback,
+  невидимые OnBeginPlot/OnBeginSheet/OnEndSheet/OnEndPlot, локальный временный PDF.
+  Готовый файл копируется в уникальный staging рядом с целью, затем rename с
+  overwrite guard. Оба собственных temp очищаются; cleanup_warnings отдельно.
+  Нет автосохранения или обнуления DBMOD: при native печати наблюдался DBMOD5.
+- 76 affected checks PASS: политики exact device/media/полного snapshot,
+  восстановление BACKGROUNDPLOT при успехе/ошибке, отказы setter/restore и реальные
+  MCP SDK схемы/20 stdio-профилей обоих годов. Полный 1709-набор не повторяли.
+  Обе сборки PASS: 2026 без warnings/errors, 2027 без errors и с прежними двумя
+  Roslyn MSB3277. Новый typed handler не вызывался живьём, CAD не переключался,
+  не печатался и не сохранялся этим подзаданием. Кандидат RC2 готовится отдельно;
+  установленные рабочие DLL не заменялись.
+
+## PlotPdf: явная JSON-строка на входе MCP – 2026-10-25
+
+- В рабочем ПОС после пользовательской переустановки обнаружено расхождение:
+  официальный installed EXE tools/list отдаёт expected_plot_settings:true
+  (неограниченный JSON Schema), но адаптер чата представляет его строкой.
+  JSON.stringify snapshot при прежнем JsonElement-параметре доходил до native
+  как строка и отклонялся: expected_plot_settings must be object. Контракт
+  установленного EXE прочитан официальным MCP SDK; CAD из этой проверки не вызывался.
+- Исправлен только сервер: вход PlotPdf явно string, с JSON object parsing в
+  JObject до plugin request. Предел 65536 знаков, глубина16, дубликаты и остаток
+  после объекта отклоняются локально. Числа в paper_size/origin/window/custom_scale
+  преобразуются к native double: JSON.stringify может убрать дробную часть .0.
+- Native handler, schema, plugin DLL и прочие операции не менялись. 36 целевых
+  LayoutPlotTests PASS, включая 10 новых regression cases и реальную MCP schema.
+  Server net8.0 собран. Новый сервер доступен как source bin/Release DLL для
+  отдельного официального MCP stdio вызова; установка текущего runtime не менялась.
+- По сообщению основного агента direct installed stdio с object уже преодолел
+  JSON-контракт, но native dry_run отказал eNoMatchingMedia. Это отдельный вопрос
+  PC3/media initialization, данный серверный фикс его не устраняет. Native/live
+  диагностика или печать в этом подзадании не выполнялись.
+
+## Листы и печать PDF: кандидат собран – 2026-10-24
+
+- Код commit c563409 в andrew. Штатный пакет 2.0.1-team.8-rc.1 собран из
+  чистого commit, manifest.dirty=false, оба года 2026/2027. Финальная сборка
+  включает последние ограничения reader: 2026 без warnings/errors, 2027 без
+  errors и с прежними двумя Roslyn MSB3277. 1709 offline PASS остаются актуальны;
+  повтор полного набора после этой записи документации не требуется.
+- ZIP: releases/2.0.1-team.8-rc.1/DwgMcp.Setup-v2.0.1-team.8-rc.1-win-x64.zip.
+  SHA256 4bd89c481ec30aac551e94e548f970f72c01568f211901fd3258fc9951902307.
+  Это локальный кандидат из личной ветки, не принятие в develop и не публикация
+  для коллег. Установленные и загруженные рабочие DLL не заменялись.
+- По явному поручению выполнен один read-only запрос list_layouts через новый
+  упакованный штатный stdio server/official MCP SDK к текущему СГП v6. Identity
+  подтверждена, DBMOD=0, Model. Ответ старого загруженного плагина:
+  unknown command: list_layouts. Новая читающая схема присутствует в tools/list.
+  Новая native реализация при этом не исполнялась. Результат записан в ignored
+  releases/native-tests/layout-plot-readonly-probe-20261024.json.
+- CAD не закрывался и не переключался. Следующий шаг: безопасно сохранить и
+  закрыть открытые пользовательские документы, штатно обновить через install.ps1
+  из stage, перезапустить AutoCAD и MCP. Затем прочитать layouts и штамп, выполнить
+  явное select_layout/печать по основной задаче. Не пытаться выдавать новую DLL
+  на диске за уже загруженную; hot-reload в текущем плагине отсутствует.
+
+## Листы и печать PDF: исходники и offline-проверки – 2026-10-24
+
+- Прямой запрос из задачи ПОС: чтение штампа paperspace, правка исходных DWG и
+  печать тома. Пользователь отдельно разрешил необходимые Git-коммиты, push,
+  сборки и обновление. До правок чистая andrew/origin/andrew 0d587ef, develop
+  не занят другим worktree; три обязательных ff-only обновления и ancestry PASS.
+  Первый git pull ранее был отклонён auto-review до этого явного разрешения;
+  повтор состоялся только после разрешения пользователя.
+- Добавлены четыре typed метода профиля drawing: list_layouts,
+  get_layout_entities, select_layout, plot_pdf. Читатели используют read-lock и
+  OpenCloseTransaction, точную identity активного DWG, ограниченные результаты.
+  Прямые тексты, геометрия и атрибуты BlockReference из paperspace доступны без
+  перехода UI. SelectLayout отдельно и явно меняет существующий layout/PSPACE.
+- PlotPdf проверяет snapshot сохранённых print settings, активный layout,
+  PDF-device, отсутствие текущей печати и абсолютный выходной PDF-путь. Копия
+  PlotSettings transient; масштаб, формат, окно, CTB и исходный Layout не меняются.
+  PlotEngine печатает одну страницу; проверяется %PDF, размер и SHA256. Сначала
+  создаётся уникальный временный PDF рядом с целью; готовый файл заменяет цель
+  только с явным overwrite_existing. DWG не сохраняется.
+- Чистая политика и реальные SDK-схемы: 1709 PASS, включая 26 новых проверок.
+  Обновлены ожидаемые каталоги: стандартный writable 71, read-only 29;
+  drawing writable 14, read-only 4. Первоначальные 13 snapshot/count отказов
+  устранены только добавлением четырёх фактически новых методов в ожидания.
+- Первые builds API2026/2027 PASS; 2026 без предупреждений, 2027 с прежними двумя
+  Roslyn MSB3277. Финальная упаковка после ограничений размера reader ещё впереди.
+  Live-вызовов новых методов, переключений DWG, правок или печати не выполнялось.
+- Ограничение: синхронный native PlotEngine может пережить транспортный таймаут;
+  не повторять неизвестную печать автоматически. Очередь заданий не реализована.
+  В текущем плагине нет hot-reload: MCPSTOP/MCPSTART оставляют старую DLL.
+  Для новых методов нужны новые server/plugin и штатная загрузка при перезапуске
+  AutoCAD. Установка поверх загруженной рабочей DLL не выполнялась.
 ## TABLE: кандидат 2.0.1-team.7-rc.2 собран и проверен — 2026-10-23
 
 - Исправления native-теста: commit edbcc1b в andrew, merge

@@ -329,60 +329,7 @@ namespace Bimwright.Dwg.Plugin.Handlers
         }
 
         private static string[] ExplodeIntoSourceOwner(Transaction tx, BlockReference blockReference)
-        {
-            var explodedObjects = new DBObjectCollection();
-            var unappended = new List<DBObject>();
-            var entities = new List<Entity>();
-            var createdHandles = new List<string>();
-
-            try
-            {
-                blockReference.Explode(explodedObjects);
-
-                foreach (DBObject explodedObject in explodedObjects)
-                {
-                    var entity = explodedObject as Entity;
-                    if (entity == null)
-                    {
-                        explodedObject.Dispose();
-                        throw new InvalidOperationException("exploded object is not an entity: " + explodedObject.GetType().Name);
-                    }
-
-                    entities.Add(entity);
-                    unappended.Add(entity);
-                }
-
-                if (blockReference.OwnerId.IsNull)
-                {
-                    throw new InvalidOperationException("block reference owner is not available");
-                }
-
-                var owner = tx.GetObject(blockReference.OwnerId, OpenMode.ForWrite) as BlockTableRecord;
-                if (owner == null)
-                {
-                    throw new InvalidOperationException("block reference owner is not a block table record");
-                }
-
-                foreach (var entity in entities)
-                {
-                    owner.AppendEntity(entity);
-                    tx.AddNewlyCreatedDBObject(entity, true);
-                    unappended.Remove(entity);
-                    createdHandles.Add(entity.Handle.ToString());
-                }
-
-                return createdHandles.ToArray();
-            }
-            catch
-            {
-                foreach (var dbObject in unappended)
-                {
-                    dbObject.Dispose();
-                }
-
-                throw;
-            }
-        }
+            => BlockExplodeService.AppendExploded(tx, blockReference);
     }
 
     internal static class BlockHandlerInput
