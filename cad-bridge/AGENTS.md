@@ -25,10 +25,14 @@ reason to create a replacement. The setup/development/release sequence is solely
 docs/TEAM_SETUP.md.
 
 The agent manages Git for authorized bridge work: setup, branches, staging,
-commits, fetch/pull, pushes, PRs, ordinary merges and conflict resolution.
+commits, fetch/pull, pushes, PR preparation and conflict analysis.
 The user has given standing authorization; do not ask again for each Git step
-or hand routine Git work back to the user. Each person uses a permanent branch;
-PRs target develop. The agent prepares changes, reviews, builds and offline-tests. The user
+or hand routine Git work back to the user. The user performs ordinary merges
+and PR merges; this is the user's latest explicit exception to that delegation.
+Each person uses a permanent branch; PRs target develop. If GitHub API/CLI access
+is unavailable, publish the branch and provide a compare link for the user's
+PR/merge instead of making plugin installation a prerequisite.
+The agent prepares changes, reviews, builds and offline-tests. The user
 performs AutoCAD UI actions and explicitly enabled live tests. Do not authorize
 live tests from a successful build. Explain new flags beside their commands.
 Serialize overlapping source edits and live operations; do not overwrite another
@@ -54,9 +58,9 @@ Finally require `git merge-base --is-ancestor develop HEAD` to succeed: local
 develop must be included in the personal branch even if GitHub changed between
 requests. This command only checks ancestry; it does not merge.
 
-If fast-forward is impossible, inspect both histories and perform an ordinary
-merge on a clean, unshared checkout when the intended result is clear. Resolve
-unambiguous conflicts, review the merged diff and run affected checks. Ask only
+If fast-forward is impossible, inspect both histories and report the concrete
+integration needed; the user performs the ordinary merge. Do not start it
+automatically. Review the resulting diff and run affected checks. Ask only
 when intent, ownership or conflict resolution is genuinely unclear, or access
 requires the user's participation. Preserve existing work; never auto-stash,
 rebase, reset or force to bypass a failed check. Switch branches only after
@@ -64,8 +68,8 @@ checking cleanliness, worktree ownership and other chats' active paths.
 Do not pull during unfinished edits or for read-only/drawing-only work; fetch
 and integrate as needed after committing the work for publication/release.
 Report completed updates if a later step fails; do not roll them back. After
-updates, reread the applicable instructions and work log. The agent also
-completes the Git publication and merge cycle; it is not a human handoff gate.
+updates, reread the applicable instructions and work log. The agent completes
+commits and pushes without a permission gate; only the merge remains with the user.
 
 ## Hosts and CAD operations
 
