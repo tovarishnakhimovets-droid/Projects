@@ -1,5 +1,51 @@
 # CAD bridge — состояние работы
 
+## v3.4 собран и проверен — 2026-10-29
+
+- По явному поручению пользователя первый локальный коммит исправления:
+  44ccffc9da3e64196cf1838116ed7bc2e2ac1908, ровно23согласованныхфайла.
+  Перед коммитом убрана только лишняя пустая строка EOF в новом тесте;
+  логика после1878PASS не менялась, успешные unit checks не повторялись.
+  Перед упаковкой и после неё source tree чистое.
+- Официальный package-team-dwg.ps1 -Version 3.4 создал releases/3.4/stage
+  и DwgMcp.Setup-v3.4-win-x64.zip: 40 060 533байт, SHA256
+  3bc67a2b18bd5b371648f974bd7fd6495b80fa1d930cdf2a5c5cef6b0d82771b.
+  Manifest version3.4, commit44ccffc..., dirty=false,40файлов,2026/2027,
+  self-contained server. Прежние выпуски не изменялись.
+- Проверены размеры/SHA всех40файлов, полный набор и каждый байт ZIP,
+  sidecar SHA, release.json, XML и точные canonical bridge-docs.
+  Packaged EXE прошёл6actual MCP SDK initialize/tools-list profiles:
+  standard77/query22/read-only31 для2026 и2027, server version3.4.
+  Новый bind_current_xref присутствует только в модифицирующем профиле,
+  annotations/defaultdry_run/identity guard schema проверены.
+  Ни одного CAD-вызова в package verification.
+- Independent verification: обе DLL892928байт, PE3.4.0.0,
+  Product3.4.0+44ccffc..., XML AppVersion3.4.0, ровно2components R25.1/R26.0,
+  Win64 AutoCAD|Civil3D, правильные module paths. PE metadata без исполнения
+  target DLL подтверждает отсутствие AssocNetworkSnapshot/LockBoundaryProof
+  TypeDefinitions и DwgFiler TypeReference в обеих DLL; новые bind-current
+  handler/input присутствуют.
+- Независимый baseline installed3.3 не изменился: SHA installed EXE,
+  bridge-docs/release.json и фактической Roaming-bundle Acad27DLL совпали
+  с контрольными значениями до упаковки. Установка не выполнялась.
+  Последняя подтверждённая native-сессия —3.3; новые DLL не загружались
+  этим процессом работы, live-проверок3.4 не было.
+- Проверочный результат — НК2/release_3_4_check.json; реализация прежняя
+  НК2/check_release.py. Никакого второго моста в проект не копировали.
+  Intermediate releases/3.4/plugin-build удалён после проверки exactpath,
+  отсутствия reparse points и загруженных CAD/MCP modules из этого дерева;
+ 120временныхфайлов удалены, готовые stage/ZIP/SHA сохранены.
+- Второй разрешённый локальный коммит содержит только эту запись результата
+  в WORK_STATUS.md. Пакет ради неё не пересобирается: его manifest остаётся
+  привязан к первому чистому коммиту44ccffc.
+- Push, merge, установка, AutoCAD-тесты и DWG-save не выполнялись.
+  Следующий этап после установки — отдельно разрешённый один bind-current
+  на __MCP_TEST_BIND_NK2.dwg с fresh identity/metadata/dryrun и проверкой
+  local definition/placement/HATCH/source-file. Не переходить к рабочему
+  Поверхности.dwg до подтверждённого результата. Undo/native Bind ещё
+  не объявляются проверенными.
+
+
 ## Подготовка выпуска v3.4 — 2026-10-29
 
 - Пользователь явно поручил два локальных коммита: подготовленные23файла
