@@ -12,6 +12,34 @@ namespace Bimwright.Dwg.Tests
 {
     public class HatchClipTests
     {
+        [Theory]
+        [InlineData(true, false, false, false, "by_layer")]
+        [InlineData(false, true, false, false, "by_block")]
+        [InlineData(false, false, false, true, "invalid")]
+        public void NonnumericTransparencyNeverInvokesNativeAlphaGetter(bool layer, bool block, bool alpha, bool invalid, string mode)
+        {
+            var snapshot = HatchClipInput.TransparencySnapshot(layer, block, alpha, invalid,
+                () => throw new InvalidOperationException("eInvalidKey: Alpha is unavailable"));
+            Assert.Equal(mode, snapshot.Value<string>("mode")); Assert.Null(snapshot["alpha"]);
+        }
+        [Theory]
+        [InlineData((byte)0)] [InlineData((byte)123)] [InlineData((byte)255)]
+        public void ExplicitAlphaIsReadOnceAndKeepsItsExactValue(byte value)
+        {
+            int reads = 0;
+            var snapshot = HatchClipInput.TransparencySnapshot(false, false, true, false, () => { reads++; return value; });
+            Assert.Equal(1, reads); Assert.Equal("alpha", snapshot.Value<string>("mode")); Assert.Equal(value, snapshot.Value<byte>("alpha"));
+        }
+        [Fact]
+        public void InheritedAndOpaqueTransparencyRemainDifferentSnapshotGuards()
+        {
+            var inherited = HatchClipInput.TransparencySnapshot(true, false, false, false, null);
+            var opaque = HatchClipInput.TransparencySnapshot(false, false, true, false, () => 255);
+            Assert.NotEqual(HatchClipInput.Hash(inherited), HatchClipInput.Hash(opaque));
+            Assert.Throws<ArgumentException>(() => HatchClipInput.TransparencySnapshot(true, true, false, false, null));
+            Assert.Throws<ArgumentException>(() => HatchClipInput.TransparencySnapshot(false, false, false, false, null));
+            Assert.Throws<ArgumentException>(() => HatchClipInput.TransparencySnapshot(false, false, true, false, null));
+        }
         private static JObject Plan() => new JObject {
             ["expected_document"] = @"D:\Work\surface.dwg", ["expected_fingerprint"] = "739091b3-e588-a041-882e-fdfad3af3b45",
             ["hatch_handles"] = new JArray("a1", "00a2"), ["boundary_handles"] = new JArray("b1") };

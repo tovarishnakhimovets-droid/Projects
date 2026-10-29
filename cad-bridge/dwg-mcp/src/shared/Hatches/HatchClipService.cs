@@ -205,12 +205,19 @@ namespace Bimwright.Dwg.Plugin.Hatches
         private static JObject AppearanceSignature(Hatch h) => new JObject {
             ["layer"] = h.Layer,
             ["color"] = h.Color.ToString(), ["background"] = h.BackgroundColor.ToString(),
-            ["transparency"] = new JArray(h.Transparency.Alpha, h.Transparency.IsByLayer, h.Transparency.IsByBlock), ["lineweight"] = (int)h.LineWeight,
+            ["transparency"] = TransparencySignature(h), ["lineweight"] = (int)h.LineWeight,
             ["linetype"] = h.Linetype, ["linetype_scale"] = h.LinetypeScale, ["visible"] = h.Visible,
             ["associative"] = h.Associative, ["pattern"] = h.PatternName, ["pattern_type"] = (int)h.PatternType,
             ["angle"] = h.PatternAngle, ["scale"] = h.PatternScale, ["space"] = h.PatternSpace,
             ["double"] = h.PatternDouble, ["origin"] = new JArray(h.Origin.X, h.Origin.Y),
             ["definitions"] = PatternSignature(h) };
+
+        private static JObject TransparencySignature(Hatch hatch)
+        {
+            var transparency = hatch.Transparency;
+            return HatchClipInput.TransparencySnapshot(transparency.IsByLayer, transparency.IsByBlock,
+                transparency.IsByAlpha, transparency.IsInvalid, () => transparency.Alpha);
+        }
 
         private static JArray PatternSignature(Hatch hatch)
         {

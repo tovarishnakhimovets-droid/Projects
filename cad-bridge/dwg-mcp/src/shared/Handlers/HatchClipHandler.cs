@@ -15,7 +15,11 @@ namespace Bimwright.Dwg.Plugin.Handlers
         {
             if (!HatchClipInput.TryParse(parameters, plan, out var input, out var error)) return CommandResult.Fail(error);
             try { return CommandResult.Success(HatchClipService.Execute(doc, input, plan)); }
-            catch (Exception e) { return CommandResult.Fail("hatch clip failed: " + ErrorSanitizer.Sanitize(e.Message)); }
+            catch (Exception e)
+            {
+                PluginLog.Error(plan ? "plan_hatch_clip" : "clip_hatches", e);
+                return CommandResult.Fail("hatch clip failed: " + ErrorSanitizer.Sanitize(e.Message));
+            }
         }
     }
     public sealed class ClipHatchesHandler : IAcadCommand

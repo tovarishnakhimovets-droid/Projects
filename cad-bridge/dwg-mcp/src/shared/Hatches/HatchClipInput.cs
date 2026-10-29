@@ -74,6 +74,15 @@ namespace Bimwright.Dwg.Plugin.Hatches
         }
         public static void Need(bool condition, string message) { if (!condition) throw new ArgumentException(message); }
         public static double AreaTolerance(double area) => Math.Max(1e-6, Math.Abs(area) * 1e-9);
+        // Alpha is a mode-specific native getter. Inherited/invalid values have
+        // no numeric alpha; never evaluate the delegate for those modes.
+        public static JObject TransparencySnapshot(bool byLayer, bool byBlock, bool byAlpha, bool invalid, Func<byte> readAlpha)
+        {
+            Need(new[] { byLayer, byBlock, byAlpha, invalid }.Count(v => v) == 1, "ambiguous transparency mode");
+            if (!byAlpha) return new JObject { ["mode"] = byLayer ? "by_layer" : byBlock ? "by_block" : "invalid" };
+            Need(readAlpha != null, "numeric alpha getter is required for ByAlpha");
+            return new JObject { ["mode"] = "alpha", ["alpha"] = readAlpha() };
+        }
         public static string CheckArea(double source, double result)
         {
             if (double.IsNaN(source) || double.IsInfinity(source) || source <= 0 || double.IsNaN(result) || double.IsInfinity(result) || result < 0) return "nonfinite or invalid clip area";
