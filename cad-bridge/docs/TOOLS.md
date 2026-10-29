@@ -548,9 +548,12 @@ This does not establish that every document lock alone destroys Redo.
 **v3.8: native-проход остановлен после heap corruption.** В v3.9 созданные
 Curve/Hatch wrappers явно освобождаются на CAD-потоке до Commit/Abort;
 Face/BoundaryLoop/Edge освобождаются до родительского Brep. Исправление
-lifetime проверено офлайн, но устранение native-фатала ещё не подтверждено.
-До рабочего применения нужна отдельная scratch-проба, включая повторные
-отказы/откаты и длительный проход. Не повторять native clip-tools v3.8.
+lifetime проверено офлайн и в разрешённом Acad27 scratch/рабочем проходе:
+повторные планы, отказы/откаты и21 успешная рабочая обрезка без нового фатала.
+Это подтверждает проверенные случаи, а не любые исходные HATCH; native2026
+в этом проходе не проверялся. AppendLoop/бюджет/неподдержанные стили всё ещё
+могут давать штатный отказ. Для изменённой реализации сначала нужна отдельная
+разрешённая scratch-проба. Не повторять native clip-tools v3.8.
 
 `dwg_plan_hatch_clip` (профиль `query`) принимает полный `expected_document`,
 `expected_fingerprint`, `hatch_handles` (1–20) и `boundary_handles` (1–32).
