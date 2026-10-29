@@ -16,6 +16,22 @@ namespace Bimwright.Dwg.Tests
 {
     public class EntityBatchTests
     {
+        [Fact]
+        public void ArcBulgesStayExactAndCannotBypassStraightHatchBoundaryValidation()
+        {
+            var p = Polyline("boundary"); p["bulges"] = new JArray(0, 0.41421356237309503, -0.5, 0);
+            Assert.True(EntityBatchInput.TryParse(Request(p), out var input, out var error), error);
+            Assert.Equal(0.41421356237309503, (double)input.Items[0].Parameters["bulges"][1]);
+            Assert.False(EntityBatchInput.TryParse(Request(p, Hatch()), out _, out _));
+            p["bulges"] = new JArray(0, 0);
+            Assert.False(EntityBatchInput.TryParse(Request(p), out _, out _));
+            p["bulges"] = new JArray(0, 0, double.NaN, 0);
+            Assert.False(EntityBatchInput.TryParse(Request(p), out _, out _));
+            p["bulges"] = new JArray(0, 0, 0, 1000001);
+            Assert.False(EntityBatchInput.TryParse(Request(p), out _, out _));
+            p["closed"] = false; p["bulges"] = new JArray(0, 0, 0, 1);
+            Assert.False(EntityBatchInput.TryParse(Request(p), out _, out _));
+        }
         private static JObject Point(double x, double y, double z = 0) => new JObject { ["x"] = x, ["y"] = y, ["z"] = z };
         private static JObject Item(string id, string type) => new JObject { ["id"] = id, ["type"] = type, ["layer"] = "ЭОМ" };
         private static JObject Circle(string id = "boundary")
@@ -195,6 +211,9 @@ namespace Bimwright.Dwg.Tests
             Assert.Equal("array", entities.GetProperty("type").GetString());
             var item = entities.GetProperty("items");
             Assert.Equal("object", item.GetProperty("type").GetString());
+            var bulges = item.GetProperty("properties").GetProperty("bulges");
+            AssertSchemaType(bulges, "array", allowNull: true);
+            AssertSchemaType(bulges.GetProperty("items"), "number");
             Assert.Contains("id", item.GetProperty("required").EnumerateArray().Select(p => p.GetString()));
             var position = item.GetProperty("properties").GetProperty("position");
             AssertSchemaType(position, "object", allowNull: true);

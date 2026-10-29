@@ -24,10 +24,11 @@ source, not installed binaries. Missing source is a limitation to report, not a
 reason to create a replacement. The setup/development/release sequence is solely
 docs/TEAM_SETUP.md.
 
-The user owns Git setup, branches, staging, commits, pushes and merges unless
-that specific step is explicitly delegated. Automatic fast-forward updates below
-are explicitly authorized; ordinary merges remain with the user. Each person uses a permanent branch;
-PRs target develop. The agent prepares changes, builds and offline-tests. The user
+The agent manages Git for authorized bridge work: setup, branches, staging,
+commits, fetch/pull, pushes, PRs, ordinary merges and conflict resolution.
+The user has given standing authorization; do not ask again for each Git step
+or hand routine Git work back to the user. Each person uses a permanent branch;
+PRs target develop. The agent prepares changes, reviews, builds and offline-tests. The user
 performs AutoCAD UI actions and explicitly enabled live tests. Do not authorize
 live tests from a successful build. Explain new flags beside their commands.
 Serialize overlapping source edits and live operations; do not overwrite another
@@ -36,9 +37,12 @@ chat's changes or switch its shared checkout underneath it.
 ## Before repository edits
 
 Once before starting a new editing task, inspect Git status, branches, upstreams,
-worktrees and any unfinished Git operation. Require the confirmed personal branch
-with matching origin/<branch> upstream, no staged, unstaged or untracked changes,
-and no overlapping chat edits. Local develop must exist, track origin/develop and
+worktrees and any unfinished Git operation. Use the confirmed personal branch
+with matching origin/<branch> upstream and no overlapping chat edits. Continue
+your own unfinished authorized work without treating it as a new task; commit
+only reviewed changes belonging to that work. Never include another chat's
+unfinished changes just to make the checkout clean. Before updates, require
+no staged, unstaged or untracked changes. Local develop must exist, track origin/develop and
 not be checked out in another worktree. Then automatically run in order:
 `git pull --ff-only`, `git pull --ff-only origin develop`, then
 `git fetch origin refs/heads/develop:refs/heads/develop`.
@@ -50,12 +54,18 @@ Finally require `git merge-base --is-ancestor develop HEAD` to succeed: local
 develop must be included in the personal branch even if GitHub changed between
 requests. This command only checks ancestry; it does not merge.
 
-If prerequisites or any command/check fail, stop before new edits and explain
-the exact condition. Preserve existing work; never auto-stash, rebase, reset,
-force, switch branches or perform an ordinary merge. Do not pull mid-task or for
-read-only/drawing-only work. Report completed updates if a later step fails;
-do not roll them back. After updates, reread the applicable instructions
-and work log. Commit, push and conflict resolution remain human-controlled.
+If fast-forward is impossible, inspect both histories and perform an ordinary
+merge on a clean, unshared checkout when the intended result is clear. Resolve
+unambiguous conflicts, review the merged diff and run affected checks. Ask only
+when intent, ownership or conflict resolution is genuinely unclear, or access
+requires the user's participation. Preserve existing work; never auto-stash,
+rebase, reset or force to bypass a failed check. Switch branches only after
+checking cleanliness, worktree ownership and other chats' active paths.
+Do not pull during unfinished edits or for read-only/drawing-only work; fetch
+and integrate as needed after committing the work for publication/release.
+Report completed updates if a later step fails; do not roll them back. After
+updates, reread the applicable instructions and work log. The agent also
+completes the Git publication and merge cycle; it is not a human handoff gate.
 
 ## Hosts and CAD operations
 

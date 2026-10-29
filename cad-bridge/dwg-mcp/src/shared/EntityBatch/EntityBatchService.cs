@@ -152,7 +152,7 @@ namespace Bimwright.Dwg.Plugin.EntityBatch
                     case "polyline":
                         var poly = new Polyline(); entity = poly;
                         var points = (JArray)p["points"];
-                        for (int i = 0; i < points.Count; i++) { var point = Point(points[i]); poly.AddVertexAt(i, new Point2d(point.X, point.Y), 0, 0, 0); }
+                        for (int i = 0; i < points.Count; i++) { var point = Point(points[i]); poly.AddVertexAt(i, new Point2d(point.X, point.Y), p["bulges"] is JArray bulges ? (double)bulges[i] : 0, 0, 0); }
                         poly.Elevation = Point(points[0]).Z; poly.Closed = p.Value<bool?>("closed") ?? false; break;
                     case "rectangle":
                         var rectangle = new Polyline(); entity = rectangle;

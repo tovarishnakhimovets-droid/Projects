@@ -44,6 +44,8 @@ namespace Bimwright.Dwg.Plugin
                 { "bind_current_xref",       new BindCurrentXrefHandler() },
                 { "plan_block_explode",      new PlanBlockExplodeHandler() },
                 { "explode_blocks",          new ExplodeBlocksHandler() },
+                { "plan_hatch_clip",         new PlanHatchClipHandler() },
+                { "clip_hatches",            new ClipHatchesHandler() },
                 { "create_block_variant",    new CreateBlockVariantHandler() },
                 { "update_block_angles",     new UpdateBlockAnglesHandler() },
                 { "get_selected_texts",      new GetSelectedTextsHandler() },

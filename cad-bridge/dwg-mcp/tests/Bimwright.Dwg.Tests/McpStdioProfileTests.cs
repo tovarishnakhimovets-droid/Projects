@@ -20,10 +20,10 @@ namespace Bimwright.Dwg.Tests
         {
             var profiles = new[]
             {
-                ("query,modify,drawing,view", false, 77),
-                ("query,modify,drawing,view,annotation", false, 77),
-                ("query,modify,drawing,view", true, 31),
-                ("query", false, 22), ("modify", false, 36),
+                ("query,modify,drawing,view", false, 79),
+                ("query,modify,drawing,view,annotation", false, 79),
+                ("query,modify,drawing,view", true, 32),
+                ("query", false, 23), ("modify", false, 37),
                 ("drawing", false, 14), ("annotation", false, 5),
                 ("drawing,annotation", false, 14),
                 ("drawing", true, 4), ("annotation", true, 1)
@@ -95,6 +95,8 @@ namespace Bimwright.Dwg.Tests
             Assert.Equal(enabled.Contains("query"), names.Contains("dwg_use_document", StringComparer.Ordinal));
             Assert.Equal(enabled.Contains("query"), names.Contains("dwg_list_xrefs", StringComparer.Ordinal));
             Assert.Equal(enabled.Contains("query"), names.Contains("dwg_plan_block_explode", StringComparer.Ordinal));
+            Assert.Equal(enabled.Contains("query"), names.Contains("dwg_plan_hatch_clip", StringComparer.Ordinal));
+            Assert.Equal(!readOnly && enabled.Contains("modify"), names.Contains("dwg_clip_hatches", StringComparer.Ordinal));
             Assert.Equal(!readOnly && enabled.Contains("modify"), names.Contains("dwg_manage_xrefs", StringComparer.Ordinal));
             Assert.Equal(!readOnly && enabled.Contains("modify"), names.Contains("dwg_bind_current_xref", StringComparer.Ordinal));
             if (!readOnly && enabled.Contains("modify"))

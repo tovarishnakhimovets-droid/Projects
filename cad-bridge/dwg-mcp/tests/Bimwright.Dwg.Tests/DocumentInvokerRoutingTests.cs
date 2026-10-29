@@ -35,6 +35,52 @@ namespace Bimwright.Dwg.Tests
             Application.DocumentManager.ResetDocuments();
         }
 
+        private JObject ClipRequest(bool dryRun = false) => new JObject {
+            ["expected_document"] = @"D:\Work\surface.dwg", ["expected_fingerprint"] = "739091b3-e588-a041-882e-fdfad3af3b45",
+            ["hatch_handles"] = new JArray("A1"), ["boundary_handles"] = new JArray("B1"),
+            ["expected_session"] = DrawingRevision.For(active).SessionId, ["expected_plan_hash"] = new string('a', 64), ["dry_run"] = dryRun };
+
+        [Fact]
+        public void HatchClipDryRunCannotAcquireWriteLock()
+        {
+            var request = ClipRequest(); request.Remove("dry_run");
+            Assert.Equal(42, DocumentInvoker.Invoke("clip_hatches", null, doc => 42, request));
+            Assert.Equal(DocumentLockMode.Read, active.LastLockMode);
+        }
+
+        [Fact]
+        public void HatchClipAllowsFreshPreflightAfterWriteLockWithoutSuppressingEvents()
+        {
+            var state = DrawingRevision.For(active); var request = ClipRequest();
+            active.Database.Raise("modified", new Entity()); // unrelated edit after the preview
+            active.OnLockAcquired = () => active.Database.Raise("modified", new Entity());
+            Assert.Equal(42, DocumentInvoker.Invoke("clip_hatches", null, doc => {
+                Assert.Equal(2, state.Revision); Assert.Equal(1, doc.LockDepth); return 42;
+            }, request));
+            Assert.Equal(2, state.Revision); Assert.Equal(0, active.LockDepth);
+        }
+
+        [Fact]
+        public void HatchClipStaleSessionRefusesBeforeWriteLock()
+        {
+            var request = ClipRequest(); request["expected_session"] = Guid.NewGuid().ToString("N");
+            int calls = 0;
+            Assert.Throws<InvalidOperationException>(() => DocumentInvoker.Invoke("clip_hatches", null, doc => ++calls, request));
+            Assert.Equal(0, calls); Assert.Equal(0, active.LockCount);
+        }
+
+        [Fact]
+        public void HatchClipReleaseFailurePreservesCommittedReceiptAndForbidsRetry()
+        {
+            active.OnLockReleased = () => throw new InvalidOperationException("release failed");
+            var error = Assert.Throws<InvalidOperationException>(() => DocumentInvoker.Invoke("clip_hatches", null,
+                doc => CommandResult.Success(new JObject { ["committed"] = true, ["created_count"] = 2 }), ClipRequest()));
+            var diagnostic = ReleaseDiagnostic(error);
+            Assert.True(diagnostic.Value<bool>("retry_forbidden"));
+            Assert.True(diagnostic["handler_receipt"]["result"].Value<bool>("committed"));
+            Assert.Equal(2, diagnostic["handler_receipt"]["result"].Value<int>("created_count"));
+        }
+
         [Fact]
         public void InactiveReadUsesOnlyReadLockWithoutPromptOrTabChange()
         {

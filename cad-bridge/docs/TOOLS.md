@@ -543,6 +543,55 @@ The read-only/event policy follows Autodesk's explanation of
 This does not establish that every document lock alone destroys Redo.
 
 <a id="create-entities"></a>
+## Обрезка штриховок по полилиниям
+
+`dwg_plan_hatch_clip` (профиль `query`) принимает полный `expected_document`,
+`expected_fingerprint`, `hatch_handles` (1–20) и `boundary_handles` (1–32).
+Нужна активная вкладка и пространство модели. Маска — **объединение положительных
+замкнутых полилиний**, без вычитания вложенного контура. Отверстия исходных HATCH
+сохраняются. Для маски с отверстием этот контракт не подходит.
+
+План возвращает `drawing_session`, `plan_hash`, решения `keep/remove/clip`,
+`source_area`, `retained_area`, `removed_area`, число новых HATCH. Площади —
+в квадратных единицах чертежа. `keep` сохраняет исходный handle. План и dry-run
+строят только transient Region/BREP/curves и не открывают объекты для записи.
+
+`dwg_clip_hatches` (профиль `modify`) принимает те же handles/identity, session
+как `expected_session` и hash как `expected_plan_hash`; `dry_run=true` по умолчанию.
+При `false` под write lock заново вычисляются геометрия и hash. Чужие изменения
+БД сами по себе не запрещены, но изменение источников/масок или сессии запрещает
+запись. Счётчик ревизий не подавляется и не компенсируется.
+
+Одна транзакция на пакет. Пересекающие границу HATCH заменяются копиями с
+прежним оформлением, по одной на BREP face; внутренние петли остаются пустотами.
+Временные кривые построения стираются в этой транзакции. Перед удалением исходных
+HATCH сверяются площадь и геометрические разности в обе стороны; в конце ещё раз
+проверяются новые/оставленные HATCH и неизменность масок. Допуск проверки площади
+`max(1e-6, abs(area)*1e-9)` не используется для классификации и удаления мелких
+частей. Сохраняется порядок отрисовки относительно исходной штриховки.
+Receipt содержит `created_handles` для каждого заменённого источника, `committed`,
+`saved=false`; отсутствие исходного `Hatch.Area` явно отмечено null, вместо него
+используется площадь построенных Region.
+
+Поддержаны прямые model-space HATCH и lightweight Polyline, normal +Z/elevation0,
+без ширины/толщины масок. HATCH должны быть nonassociative, nongradient,
+HatchStyle.Normal. Петли — полилинейные bulges либо LineSegment2d/CircularArc2d.
+Эллипсы/сплайны не аппроксимируются. Отказ для nested blocks/xrefs, XData,
+extension dictionaries/fields/persistent reactors/annotative и locked/dependent
+слоёв; не стирать метаданные ради обхода. Пределы: 1000 исходных петель,
+20000 суммарных читаемых/выходных сегментов, 2000 новых HATCH,
+256 pattern definitions по 512 dashes и 15 секунд кооперативно. Отдельный native
+вызов ядра прервать нельзя; повторять uncertain timeout запрещено.
+
+`Region.CreateFromCurves` получает только неоткрытые transient-кривые, а не
+resident write-open объекты: [ограничение Autodesk](https://help.autodesk.com/cloudhelp/2026/ENU/OARX-ManagedRefGuide/files/OARX-ManagedRefGuide-Autodesk_AutoCAD_DatabaseServices_Region_CreateFromCurves_DBObjectCollection.html).
+Булевы операции выполняются с локальным началом для больших WCS-координат.
+Сборка не доказывает native-геометрию или один Undo. До рабочего применения нужна
+явно разрешённая проба в отдельном DWG: внутри/снаружи, касание, пересечение прямой
+и дуги, несколько частей, создание и сохранение отверстия, stale hash, отказ
+на неподдержанной геометрии, Undo. Проверять каждый используемый год AutoCAD.
+Сохранение и изменение вида инструмент не выполняет.
+
 ## Атомарное создание объектов: dwg_create_entities
 
 Одна операция создания новых объектов в текущем пространстве. Не вызывает
@@ -567,13 +616,13 @@ unlocked; текстовый стиль — local/horizontal/non-annotative/non-
 | `line` | `start`, `end`; различные точки. |
 | `circle` | `center`, положительный `radius`, normal +Z. |
 | `point` | `position`. |
-| `polyline` | `points` из 2–512 точек одной точной высоты; optional `closed:false`. Прямые сегменты без ширины, повторную замыкающую вершину не передавать. |
+| `polyline` | `points` из 2–512 точек одной точной высоты; optional `closed:false`. Без ширины; optional `bulges` — массив дуговых выпуклостей той же длины (по умолчанию нули). Конечные значения по модулю до 1e6; у открытой полилинии последняя выпуклость 0. Повторную замыкающую вершину не передавать. |
 | `rectangle` | `position` нижнего левого угла, положительные `width`, `height`, optional `rotation:0`. Создаёт замкнутую lightweight Polyline. |
 | `arc` | `center`, `radius`, `start_angle`, `end_angle`; `0 <= start < end <= 360`, sweep <360. Полный круг передавать как circle. |
 | `ellipse` | `center`, `major_radius`, `minor_radius`, optional `rotation:0`. Полный эллипс, отношение minor/major от 1e-6 до 1. |
 | `text` | `position`, `text`, `text_style`; optional `height:2.5`, `rotation:0`, `width_factor:1`. Одна строка. |
 | `mtext` | `position`, `text`, `text_style`; optional `height:2.5`, `rotation:0`, положительная `width:100`. |
-| `hatch` | `boundary_id` ранее объявленной circle/rectangle/простой замкнутой polyline; optional `associative:true`. Только SOLID; плоскость/высота берутся из границы, её контур располагается поверх заливки. |
+| `hatch` | `boundary_id` ранее объявленной circle/rectangle/простой замкнутой polyline с нулевыми bulges; optional `associative:true`. Только SOLID; плоскость/высота берутся из границы, её контур располагается поверх заливки. |
 
 TEXT/MTEXT: до 16384 символов, без fields и null characters. Неизвестные поля и
 поля другого типа отклоняются. Самопересекающиеся/нулевые hatch boundaries не
