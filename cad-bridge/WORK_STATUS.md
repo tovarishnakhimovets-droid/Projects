@@ -1,5 +1,24 @@
 # CAD bridge — состояние работы
 
+## Кандидат v3.10 собран без merge — 2026-10-29
+
+- Из чистого andrew a9032723614b18d77381b7c52f48c11a0c38c24d собран общий
+  releases/3.10/DwgMcp.Setup-v3.10-win-x64.zip,40109122байта; manifest
+  dirty=false,2026/2027,40файлов. SHA256:
+  534bdd904d95a4475bc0bc58786f0ba5dd25a74f23c930e707c277b0a8ce92a0.
+  EXE/обе DLL3.10.0.0 +a903272. Все manifest hashes/ZIP bytes/canonical docs
+  проверены. Package builder повторно собрал обе DLL с финальным receipt.
+- Реальный packaged EXE прошёл6 MCP SDK initialize/tools-list проверок:
+  оба года standard79/query23/read-only32, guards/defaults/version верны,
+  0CAD calls.1936тестов и обе сборки из предыдущей записи остаются актуальны;
+  документационный итог не требует повторной сборки или тестов.
+  Протокол только НК2/release_3_10_check.json; логиv3.10-build/package-check.
+- Code commit/push выполнены агентом. Merge/установка не выполнялись.
+  Runtime остаётсяv3.9, working DWG не менялся. Далее пользователь устанавливает
+  пакет и открывает __MCP_TEST_CLIP_NK2.dwg; сначала прежний AppendLoop-отказ,
+  budget-случай, контрольная кровля и реальные Outer/Ignore с readback/rollback.
+  В реестре103 unique deferred sources; успех nativev3.10 ещё не подтверждён.
+
 ## Обрезка v3.10 подготовлена офлайн — 2026-10-29
 
 - Пользователь поручил продолжать оставшиеся103 HATCH. Перед новой правкой:
