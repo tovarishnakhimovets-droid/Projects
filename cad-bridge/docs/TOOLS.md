@@ -545,6 +545,13 @@ This does not establish that every document lock alone destroys Redo.
 <a id="create-entities"></a>
 ## Обрезка штриховок по полилиниям
 
+**v3.8: native-проход остановлен после heap corruption.** В v3.9 созданные
+Curve/Hatch wrappers явно освобождаются на CAD-потоке до Commit/Abort;
+Face/BoundaryLoop/Edge освобождаются до родительского Brep. Исправление
+lifetime проверено офлайн, но устранение native-фатала ещё не подтверждено.
+До рабочего применения нужна отдельная scratch-проба, включая повторные
+отказы/откаты и длительный проход. Не повторять native clip-tools v3.8.
+
 `dwg_plan_hatch_clip` (профиль `query`) принимает полный `expected_document`,
 `expected_fingerprint`, `hatch_handles` (1–20) и `boundary_handles` (1–32).
 Нужна активная вкладка и пространство модели. Маска — **объединение положительных

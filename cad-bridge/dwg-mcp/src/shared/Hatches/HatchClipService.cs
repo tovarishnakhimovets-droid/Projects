@@ -24,11 +24,10 @@ namespace Bimwright.Dwg.Plugin.Hatches
             internal string Action;
             internal readonly List<Region> Pieces = new List<Region>();
             internal readonly List<List<List<Curve>>> Faces = new List<List<List<Curve>>>();
-            internal readonly List<Hatch> Outputs = new List<Hatch>(); // transaction-owned
+            internal readonly List<Hatch> Outputs = new List<Hatch>(); // wrappers owned by the inner resource scope
             public void Dispose()
             {
                 foreach (var r in Pieces) r.Dispose();
-                foreach (var face in Faces) foreach (var loop in face) foreach (var c in loop) c?.Dispose();
             }
         }
 
@@ -45,6 +44,7 @@ namespace Bimwright.Dwg.Plugin.Hatches
             try
             {
                 using (var tx = db.TransactionManager.StartTransaction())
+                using (var resources = new HatchClipResources())
                 {
                     var modelId = SymbolUtilityServices.GetBlockModelSpaceId(db);
                     Need(db.CurrentSpaceId == modelId, "activate model space before clipping");
@@ -72,7 +72,7 @@ namespace Bimwright.Dwg.Plugin.Hatches
                             Need(HatchClipInput.CheckArea(before, after) == null, "invalid clip area: " + handle);
                             item.Action = inside ? "keep" : item.Pieces.Count == 0 ? "remove" : "clip";
                             if (item.Action == "clip")
-                                foreach (var piece in item.Pieces) ReadFaces(piece, item, geometry, ref outputCount);
+                                foreach (var piece in item.Pieces) ReadFaces(piece, item, geometry, resources, ref outputCount);
                             item.Receipt = new JObject { ["handle"] = handle, ["action"] = item.Action,
                                 ["source_area"] = before, ["retained_area"] = after,
                                 ["removed_area"] = Math.Max(0, before - after), ["output_hatch_count"] = item.Faces.Count,
@@ -110,7 +110,7 @@ namespace Bimwright.Dwg.Plugin.Hatches
                         {
                             foreach (var face in item.Faces)
                             {
-                                var hatch = AppendFace(tx, model, item.Source, face, geometry);
+                                var hatch = AppendFace(tx, model, item.Source, face, geometry, resources);
                                 item.Outputs.Add(hatch);
                                 handles.Add(hatch.Handle.ToString()); newIds.Add(hatch.ObjectId); created++;
                                 rebuilt.AddRange(geometry.HatchRegions(hatch, out _));
@@ -168,6 +168,9 @@ namespace Bimwright.Dwg.Plugin.Hatches
                     Need(DocumentGuard.Validate(doc, input.Document, input.Fingerprint) == null, "active drawing changed before commit");
                     geometry.Time();
                     result["created_count"] = created; result["dry_run"] = false; result["atomic"] = true;
+                    // Commit can close/uncreate database objects. Release the new
+                    // managed wrappers before either Commit or Abort reaches them.
+                    resources.Dispose();
                     commitAttempted = true; tx.Commit(); result["committed"] = true;
                     return result;
                 }
@@ -253,20 +256,23 @@ namespace Bimwright.Dwg.Plugin.Hatches
             return definitions;
         }
 
-        private static void ReadFaces(Region region, Item item, HatchClipGeometry geometry, ref int count)
+        private static void ReadFaces(Region region, Item item, HatchClipGeometry geometry, HatchClipResources resources, ref int count)
         {
             using (var brep = new Brep(region))
                 foreach (var face in brep.Faces)
+                using (face)
                 {
                     geometry.Time(); Need(++count <= HatchClipInput.MaxOutput, "output exceeds2000 hatches");
                     var loops = new List<List<Curve>>(); item.Faces.Add(loops);
                     int exteriors = 0;
                     foreach (var loop in face.Loops)
+                    using (loop)
                     {
                         var curves = new List<Curve>();
                         bool exterior = loop.LoopType == LoopType.LoopExterior;
                         if (exterior) { loops.Insert(0, curves); exteriors++; } else loops.Add(curves);
                         foreach (var edge in loop.Edges)
+                        using (edge)
                         {
                             geometry.Segment();
                             using (var external = edge.Curve as ExternalCurve3d)
@@ -275,7 +281,7 @@ namespace Bimwright.Dwg.Plugin.Hatches
                                 using (var native = external.NativeCurve)
                                 {
                                     var curve = Curve.CreateFromGeCurve(native);
-                                    Need(curve != null, "BREP edge could not be converted"); curves.Add(curve);
+                                    Need(curve != null, "BREP edge could not be converted"); resources.Own(curve); curves.Add(curve);
                                     Need(curve is Line || curve is Arc || curve is Circle || curve is Ellipse, "unsupported output curve; no approximation was made");
                                 }
                             }
@@ -285,7 +291,7 @@ namespace Bimwright.Dwg.Plugin.Hatches
                     Need(exteriors == 1, "BREP face must have exactly one exterior loop");
                 }
         }
-        private static Hatch AppendFace(Transaction tx, BlockTableRecord model, Hatch source, List<List<Curve>> face, HatchClipGeometry geometry)
+        private static Hatch AppendFace(Transaction tx, BlockTableRecord model, Hatch source, List<List<Curve>> face, HatchClipGeometry geometry, HatchClipResources resources)
         {
             var boundaryIds = new List<ObjectIdCollection>();
             foreach (var loop in face)
@@ -300,20 +306,16 @@ namespace Bimwright.Dwg.Plugin.Hatches
                     ids.Add(curve.ObjectId);
                 }
             }
-            var hatch = (Hatch)source.Clone(); bool owned = false;
-            try
-            {
-                while (hatch.NumberOfLoops > 0) hatch.RemoveLoopAt(hatch.NumberOfLoops - 1);
-                model.AppendEntity(hatch); tx.AddNewlyCreatedDBObject(hatch, true); owned = true;
-                hatch.Associative = false;
-                for (int i = 0; i < boundaryIds.Count; i++) hatch.AppendLoop(i == 0 ? HatchLoopTypes.Outermost : HatchLoopTypes.Default, boundaryIds[i]);
-                hatch.EvaluateHatch(true);
-                Need(!hatch.Associative && hatch.NumberOfLoops == boundaryIds.Count, "rebuilt hatch loop count or association changed");
-                Need(JToken.DeepEquals(AppearanceSignature(source), AppearanceSignature(hatch)), "native hatch rebuild changed appearance");
-                foreach (var ids in boundaryIds) foreach (ObjectId id in ids) ((Entity)tx.GetObject(id, OpenMode.ForWrite)).Erase();
-                return hatch;
-            }
-            finally { if (!owned) hatch.Dispose(); }
+            var hatch = resources.Own((Hatch)source.Clone());
+            while (hatch.NumberOfLoops > 0) hatch.RemoveLoopAt(hatch.NumberOfLoops - 1);
+            model.AppendEntity(hatch); tx.AddNewlyCreatedDBObject(hatch, true);
+            hatch.Associative = false;
+            for (int i = 0; i < boundaryIds.Count; i++) hatch.AppendLoop(i == 0 ? HatchLoopTypes.Outermost : HatchLoopTypes.Default, boundaryIds[i]);
+            hatch.EvaluateHatch(true);
+            Need(!hatch.Associative && hatch.NumberOfLoops == boundaryIds.Count, "rebuilt hatch loop count or association changed");
+            Need(JToken.DeepEquals(AppearanceSignature(source), AppearanceSignature(hatch)), "native hatch rebuild changed appearance");
+            foreach (var ids in boundaryIds) foreach (ObjectId id in ids) ((Entity)tx.GetObject(id, OpenMode.ForWrite)).Erase();
+            return hatch;
         }
         private static void CheckCoverage(HatchClipGeometry geometry, List<Region> sources, List<Region> cover, double tolerance)
         {

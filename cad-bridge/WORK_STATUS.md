@@ -1,5 +1,42 @@
 # CAD bridge — состояние работы
 
+## ФАТАЛ v3.8; lifetime-кандидат v3.9 проверен офлайн — 2026-10-29
+
+- Подтверждены15удалений (3301.001317м²) и2обрезки3A81C3/484896 на1+35частей.
+  Последний readback616entities/609HATCH. Save не выполнялся. При пакете
+  488A9C/488A9D/488A9E/488D6E/48C88A pipe закрыт; исход пакета неизвестен.
+  WER15:53:03, PID19604,0xc0000374/ntdll.dll. Никаких повторов после crash.
+- CER minidump3.8MB извлечён в НК2/native_crash_v3_8.dmp, SHA256
+  62244d1ce05ebb4e653a8f9bdfc7f6b094ae88fe2bf9722dd90ef00a6588e6d4.
+  Более полный dump:C:/Users/taa6651111/AppData/Local/CrashDumps/acad.exe.19604.dmp
+  (52658756байт); дополнительный C:/ProgramData/Autodesk/CER/acminidump_big.dmp.
+  Отчёты только читались, никуда не отправлялись. Graphic protobuf не доказывает
+  проблему драйвера. Trace/receipts — только проектный НК2/hatch_clip_result.json.
+- Exception stream:thread0xdcc, тот же .NET finalizer в clrthreads.
+  clrstack -a:RXObject.DeleteUnmanagedObject→DisposableWrapper.Dispose(Boolean),
+  this0x1f1f3db3310. Тип объекта не читается в обоих дампах; первая инструкция
+  повреждения памяти и полная первопричина пока не установлены. Сбой обнаружен
+  при финализации native wrapper, поэтому одного успешного clip недостаточно.
+- В ReadFaces пропущены Dispose для Face/BoundaryLoop/Edge; новые Curve/Hatch
+  также оставались без явного Dispose после передачи transaction. Добавлен
+  HatchClipResources: unique references, owner-thread, обратный порядок,
+  cleanup всех созданных wrappers ДО Commit и ДО Abort/transaction.Dispose.
+  Ошибка одного Dispose не мешает попыткам остальных; ошибки агрегируются,
+  повторных Dispose нет. BREP children закрываются до Brep. GC.Collect/KeepAlive
+  и custom filers отсутствуют. Это устранение конкретных lifecycle-нарушений,
+  а не доказанное устранение всего native heap corruption/AppendLoop eInvalidInput.
+  Основание: https://help.autodesk.com/cloudhelp/2016/ENU/AutoCAD-NET/files/GUID-9DFB5767-F8D6-4A88-87D6-9676C0189369.htm
+- Полный suite1929/1929, включая5новых lifecycle-тестов и actual SDK/schema;
+  обе Release сборки PASS:2027 0errors/2известных Roslyn warnings,2026
+  0errors/0warnings, compile-only25.1.0. git diff --check PASS. Перед правками
+  clean andrew/origin-andrewf0063d8, developd8b712a, один worktree; продолжение
+  этой же отладки, pull/merge не выполнялись. Пакет ещё не собран/не установлен.
+- Последний сохранённый Поверхности.dwg15:08:37 содержит базовые590HATCH+7границ.
+  Свежего autosave в стандартном Temp нет; несохранённые результаты не восстановлены.
+  Clip-tools v3.8 с native BREP не повторять. Далее commit/push и кандидатv3.9
+  из clean andrew без merge; после установки сначала отдельная scratch-проба
+  повторных ошибок/cleanup. До этого рабочего native-прохода нет.
+
 ## v3.8 native: реальные маски/XData проходят, часть AppendLoop отказывает — 2026-10-29
 
 - Реально загружена Acad27 DLL3.8.0.0 +eb5a045, AutoCAD PID19604.
