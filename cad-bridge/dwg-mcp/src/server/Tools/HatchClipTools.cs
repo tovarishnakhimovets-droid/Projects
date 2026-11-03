@@ -16,8 +16,9 @@ namespace Bimwright.Dwg.Server.Tools
             "Holes and separate islands are preserved. Scalar XData is guarded and cloned exactly; handle links, unsupported metadata/associations, locked/dependent layers and nested block contents refuse. " +
             "Returns keep/remove/clip decisions, areas, planned output counts, drawing session and geometry plan hash. Never moves masks or writes/saves/selects/changes view. " +
             "Limits: 1000 source loops, 20000 aggregate inspected/output edges, 2000 output hatches, 15-second cooperative deadline; a native modeler call cannot be interrupted.")]
-        public static Task<string> PlanHatchClip(string expected_document, string expected_fingerprint, string[] hatch_handles, string[] boundary_handles)
-            => HatchClipWriteTools.Call(new { expected_document, expected_fingerprint, hatch_handles, boundary_handles }, true);
+        public static Task<string> PlanHatchClip(string expected_document, string expected_fingerprint, string[] hatch_handles, string[] boundary_handles,
+            [Description("clip (default): intersect with masks; union: combine all sources, boundary_handles=[]; replace: rebuild selected sources using the union of explicit boundary polylines. Named DXF is supported; use active_document_path.")] string operation = "clip")
+            => HatchClipWriteTools.Call(new { expected_document, expected_fingerprint, hatch_handles, boundary_handles, operation }, true);
     }
     [McpServerToolType]
     public sealed class HatchClipWriteTools
@@ -29,8 +30,9 @@ namespace Bimwright.Dwg.Server.Tools
             "Checks retained area and geometry before erasing originals; returns source-to-created handles. Same bounds/refusals as planner. No save; masks unchanged. " +
             "Single Undo requires live verification. Never repeat a timed-out mutation with uncertain outcome.")]
         public static Task<string> ClipHatches(string expected_document, string expected_fingerprint, string[] hatch_handles, string[] boundary_handles,
-            string expected_session, string expected_plan_hash, bool dry_run = true)
-            => Call(new { expected_document, expected_fingerprint, hatch_handles, boundary_handles, expected_session, expected_plan_hash, dry_run }, false);
+            string expected_session, string expected_plan_hash, bool dry_run = true,
+            [Description("Same clip, union or replace operation as the confirmed plan. Union requires identical source appearance and metadata; replacement masks define the complete new coverage.")] string operation = "clip")
+            => Call(new { expected_document, expected_fingerprint, hatch_handles, boundary_handles, expected_session, expected_plan_hash, dry_run, operation }, false);
         internal static Task<string> Call(object value, bool plan)
         {
             var request = JObject.Parse(System.Text.Json.JsonSerializer.Serialize(value));

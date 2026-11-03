@@ -19,6 +19,7 @@ namespace Bimwright.Dwg.Plugin.Hatches
         public string Session { get; private set; }
         public string PlanHash { get; private set; }
         public bool DryRun { get; private set; }
+        public string Operation { get; private set; }
         public const int MaxHatches = 20, MaxBoundaries = 32, MaxSegments = 20000, MaxLoops = 1000, MaxOutput = 2000;
 
         public static bool TryParse(JToken token, bool plan, out HatchClipInput input, out string error)
@@ -27,15 +28,20 @@ namespace Bimwright.Dwg.Plugin.Hatches
             try
             {
                 var o = token as JObject; Need(o != null, "parameters must be an object");
-                string[] names = plan ? new[] { "expected_document", "expected_fingerprint", "hatch_handles", "boundary_handles" }
-                    : new[] { "expected_document", "expected_fingerprint", "hatch_handles", "boundary_handles", "expected_session", "expected_plan_hash", "dry_run" };
+                string[] names = plan ? new[] { "expected_document", "expected_fingerprint", "hatch_handles", "boundary_handles", "operation" }
+                    : new[] { "expected_document", "expected_fingerprint", "hatch_handles", "boundary_handles", "expected_session", "expected_plan_hash", "dry_run", "operation" };
                 Need(o.Properties().All(p => names.Contains(p.Name)), "unknown hatch clip parameter");
                 Need(Encoding.UTF8.GetByteCount(o.ToString(Formatting.None)) <= 65536, "hatch clip input exceeds 64 KiB");
                 string doc = Text(o, "expected_document", 32768), fp = Text(o, "expected_fingerprint", 64);
-                Need(DrawingIdentityPolicy.NormalizeDwgPath(doc) != null, "expected_document must be a fully qualified DWG path");
+                Need(DrawingIdentityPolicy.NormalizeActiveDocumentPath(doc) != null, "expected_document must be a fully qualified DWG or DXF path");
                 Need(Guid.TryParse(fp, out var guid) && guid != Guid.Empty, "expected_fingerprint must be a nonempty GUID");
                 var hatches = Handles(o["hatch_handles"], MaxHatches, "hatch_handles");
-                var boundaries = Handles(o["boundary_handles"], MaxBoundaries, "boundary_handles");
+                Need(o["operation"] == null || o["operation"].Type == JTokenType.String, "operation must be a string");
+                var operation = o.Value<string>("operation") ?? "clip";
+                Need(operation == "clip" || operation == "union" || operation == "replace", "operation must be clip, union or replace");
+                var boundaries = operation == "union" && o["boundary_handles"] is JArray empty && empty.Count == 0
+                    ? Array.Empty<string>() : Handles(o["boundary_handles"], MaxBoundaries, "boundary_handles");
+                Need(operation != "union" || boundaries.Length == 0, "union requires empty boundary_handles");
                 Need(!hatches.Intersect(boundaries).Any(), "hatch and boundary handles must be distinct");
                 string session = null, hash = null;
                 if (!plan)
@@ -48,7 +54,7 @@ namespace Bimwright.Dwg.Plugin.Hatches
                 }
                 Need(o["dry_run"] == null || o["dry_run"].Type == JTokenType.Boolean, "dry_run must be boolean");
                 input = new HatchClipInput { Document = doc, Fingerprint = fp, Hatches = hatches, Boundaries = boundaries,
-                    Session = session, PlanHash = hash, DryRun = plan || o.Value<bool?>("dry_run") != false };
+                    Session = session, PlanHash = hash, Operation = operation, DryRun = plan || o.Value<bool?>("dry_run") != false };
                 return true;
             }
             catch (Exception e) when (e is ArgumentException || e is OverflowException || e is FormatException)

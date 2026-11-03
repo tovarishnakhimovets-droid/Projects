@@ -21,6 +21,7 @@ namespace Bimwright.Dwg.Plugin.Handlers
             if (doc == null)
                 return CommandResult.Fail("an active document is required");
 
+            string stage = "preflight";
             try
             {
                 if (doc.IsReadOnly)
@@ -84,6 +85,7 @@ namespace Bimwright.Dwg.Plugin.Handlers
                         // Autodesk requires database residency before Associative,
                         // and Associative must be set before building the loop.
                         double? verifiedArea = null;
+                        stage = "append_loop";
                         hatch.Associative = input.Associative;
                         if (!input.Associative && boundary is Polyline polyline)
                         {
@@ -96,12 +98,14 @@ namespace Bimwright.Dwg.Plugin.Handlers
                                 vertices.Add(polyline.GetPoint2dAt(i));
                                 bulges.Add(polyline.GetBulgeAt(i));
                             }
-                            hatch.AppendLoop(HatchLoopTypes.Outermost, vertices, bulges);
+                            hatch.AppendLoop(HatchLoopTypes.Outermost | HatchLoopTypes.Polyline, vertices, bulges);
+                            stage = "evaluate_hatch";
                             hatch.EvaluateHatch(true);
                             // An inaccessible or incorrect native area must abort the
                             // transaction, rather than leave an unusable SOLID hatch.
                             double expectedArea = polyline.Area;
-                            double actualArea = hatch.Area;
+                            stage = "validate_boundary_regions";
+                            double actualArea = Bimwright.Dwg.Plugin.Hatches.HatchBoundaryArea.Read(hatch);
                             if (double.IsNaN(actualArea) || double.IsInfinity(actualArea) ||
                                 expectedArea <= 0 || Math.Abs(actualArea - expectedArea) > Math.Max(1.0, expectedArea * 1e-8))
                                 throw new InvalidOperationException("created hatch area differs from its boundary");
@@ -133,6 +137,7 @@ namespace Bimwright.Dwg.Plugin.Handlers
                             color = DescribeColor(input),
                             associative = hatch.Associative,
                             area = verifiedArea,
+                            area_source = verifiedArea.HasValue ? "native boundary regions" : null,
                             draw_order = input.DrawOrder
                         };
                         tx.Commit();
@@ -144,7 +149,7 @@ namespace Bimwright.Dwg.Plugin.Handlers
             {
                 // Disposing the uncommitted transaction also removes a hatch
                 // whose loop evaluation or draw-order adjustment failed.
-                return CommandResult.Fail("failed to create hatch: " + ex.Message);
+                return CommandResult.Fail("failed to create hatch at " + stage + ": " + ex.Message);
             }
         }
 

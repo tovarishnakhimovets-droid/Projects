@@ -188,6 +188,20 @@ namespace Bimwright.Dwg.Plugin.Hatches
             var x = a.GeometricExtents; var y = b.GeometricExtents;
             return x.MinPoint.X <= y.MaxPoint.X && y.MinPoint.X <= x.MaxPoint.X && x.MinPoint.Y <= y.MaxPoint.Y && y.MinPoint.Y <= x.MaxPoint.Y;
         }
+        internal void UnionAll(List<Region> regions)
+        {
+            // Native union also joins a shared edge, including zero-area contact.
+            // Disconnected regions can remain separate without changing coverage.
+            for (int i = 0; i < regions.Count; i++)
+                for (int j = i + 1; j < regions.Count; j++)
+                {
+                    Time(); if (!Overlap(regions[i], regions[j])) continue;
+                    using (var operand = (Region)regions[j].Clone())
+                        regions[i].BooleanOperation(BooleanOperationType.BoolUnite, operand);
+                    regions[j].Dispose(); regions.RemoveAt(j); i = -1; break;
+                }
+        }
+
         internal void UnionMasks(List<Region> masks)
         {
             for (int i = 0; i < masks.Count; i++)

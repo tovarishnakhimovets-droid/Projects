@@ -254,6 +254,16 @@ namespace Bimwright.Dwg.Plugin.Cad
             if (TryGetArea(hatch, out var area))
             {
                 result["area"] = area;
+                result["area_source"] = "native hatch property";
+            }
+            else
+            {
+                try
+                {
+                    result["area"] = Bimwright.Dwg.Plugin.Hatches.HatchBoundaryArea.Read(hatch);
+                    result["area_source"] = "native boundary regions";
+                }
+                catch { /* Unsupported native geometry remains explicitly without area. */ }
             }
         }
 

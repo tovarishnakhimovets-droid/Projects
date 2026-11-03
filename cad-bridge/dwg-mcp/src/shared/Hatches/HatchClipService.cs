@@ -33,7 +33,8 @@ namespace Bimwright.Dwg.Plugin.Hatches
 
         internal static JObject Execute(Document doc, HatchClipInput input, bool plan)
         {
-            Need(DocumentGuard.Validate(doc, input.Document, input.Fingerprint) == null, "active drawing identity changed");
+            if (input.Operation != "clip") return ExecuteEdit(doc, input, plan);
+            Need(DocumentGuard.ValidateActive(doc, input.Document, input.Fingerprint) == null, "active drawing identity changed");
             var db = doc.Database;
             var revision = DrawingRevision.For(doc);
             long start = revision.Revision;
@@ -99,7 +100,7 @@ namespace Bimwright.Dwg.Plugin.Hatches
                     if (plan || input.DryRun) return result;
                     Need(!doc.IsReadOnly && doc.Editor.IsQuiescent, "drawing is read-only or AutoCAD has an active command");
                     Need(EntityBatchInput.ValidateUndoState(db.UndoRecording, Convert.ToInt32(Application.GetSystemVariable("UNDOCTL"))));
-                    Need(DocumentGuard.Validate(doc, input.Document, input.Fingerprint) == null, "active drawing changed before clipping");
+                    Need(DocumentGuard.ValidateActive(doc, input.Document, input.Fingerprint) == null, "active drawing changed before clipping");
                     var model = (BlockTableRecord)tx.GetObject(modelId, OpenMode.ForWrite);
                     int created = 0;
                     foreach (var item in items)
@@ -162,7 +163,7 @@ namespace Bimwright.Dwg.Plugin.Hatches
                     }
                     foreach (var boundary in boundaries) Open<Polyline>(db, tx, boundary.Handle.ToString(), modelId);
                     Need(JToken.DeepEquals(boundarySignatures, new JArray(boundaries.Select(p => MaskSignature(p)))), "boundary changed during clipping; transaction aborted");
-                    Need(DocumentGuard.Validate(doc, input.Document, input.Fingerprint) == null, "active drawing changed before commit");
+                    Need(DocumentGuard.ValidateActive(doc, input.Document, input.Fingerprint) == null, "active drawing changed before commit");
                     geometry.Time();
                     result["created_count"] = created; result["dry_run"] = false; result["atomic"] = true;
                     // Commit can close/uncreate database objects. Release the new
@@ -175,6 +176,103 @@ namespace Bimwright.Dwg.Plugin.Hatches
             catch (Exception e) when (commitAttempted)
             { throw new InvalidOperationException("Commit was attempted; inspect actual drawing state before retrying: " + e.Message, e); }
             finally { foreach (var item in items) item.Dispose(); foreach (var mask in masks) mask.Dispose(); }
+        }
+
+        private static JObject ExecuteEdit(Document doc, HatchClipInput input, bool plan)
+        {
+            Need(DocumentGuard.ValidateActive(doc, input.Document, input.Fingerprint) == null, "active drawing identity changed");
+            var db = doc.Database; var revision = DrawingRevision.For(doc); long start = revision.Revision;
+            if (!plan) Need(revision.SessionId == input.Session, "drawing session changed; obtain a fresh plan");
+            var sources = new List<Region>(); var desired = new List<Region>(); var rebuilt = new List<Region>();
+            bool commitAttempted = false;
+            using (var item = new Item())
+            try
+            {
+                using (var tx = db.TransactionManager.StartTransaction())
+                using (var resources = new HatchClipResources())
+                {
+                    var modelId = SymbolUtilityServices.GetBlockModelSpaceId(db);
+                    Need(db.CurrentSpaceId == modelId, "activate model space before hatch editing");
+                    var hatches = input.Hatches.Select(h => Open<Hatch>(db, tx, h, modelId)).ToArray();
+                    var boundaries = input.Boundaries.Select(h => Open<Polyline>(db, tx, h, modelId)).ToArray();
+                    item.Source = hatches[0];
+                    var geometry = new HatchClipGeometry(hatches[0].GeometricExtents.MinPoint, Stopwatch.StartNew());
+                    var signatures = new JArray(); var appearance = AppearanceSignature(hatches[0]);
+                    foreach (var hatch in hatches)
+                    {
+                        Need(!hatch.Associative && !hatch.IsGradient, "sources must be nonassociative, nongradient hatches");
+                        Need(JToken.DeepEquals(appearance, AppearanceSignature(hatch)), "source appearance or XData differs; edit matching sources separately");
+                        sources.AddRange(geometry.HatchRegions(hatch, out var shape));
+                        signatures.Add(SourceSignature(hatch, shape));
+                    }
+                    geometry.UnionAll(sources);
+                    var boundarySignatures = new JArray(boundaries.Select(p => MaskSignature(p)));
+                    if (input.Operation == "union") desired.AddRange(sources.Select(s => (Region)s.Clone()));
+                    else foreach (var boundary in boundaries) desired.Add(geometry.PolylineRegion(boundary));
+                    geometry.UnionAll(desired);
+                    int outputCount = 0;
+                    foreach (var piece in desired) ReadFaces(piece, item, geometry, resources, ref outputCount);
+                    Need(outputCount > 0, "edit produced no filled faces");
+                    string hash = HatchClipInput.Hash(new JObject { ["session"] = revision.SessionId,
+                        ["document"] = input.Document, ["fingerprint"] = db.FingerprintGuid,
+                        ["operation"] = input.Operation, ["sources"] = signatures, ["boundaries"] = boundarySignatures });
+                    Need(revision.Revision == start, "drawing changed during hatch planning");
+                    if (!plan) Need(hash == input.PlanHash, "hatch or boundary changed; obtain a fresh plan");
+                    double before = sources.Sum(s => s.Area), expected = desired.Sum(s => s.Area);
+                    var result = new JObject { ["document_path"] = input.Document, ["fingerprint"] = db.FingerprintGuid,
+                        ["drawing_session"] = revision.SessionId, ["preflight_revision"] = start, ["plan_hash"] = hash,
+                        ["operation"] = input.Operation, ["complete"] = true, ["dry_run"] = plan || input.DryRun,
+                        ["committed"] = false, ["saved"] = false, ["source_area"] = before, ["retained_area"] = expected,
+                        ["area_source"] = "native boundary regions", ["planned_created_count"] = outputCount,
+                        ["source_handles"] = new JArray(input.Hatches), ["single_undo_verified"] = false };
+                    if (plan || input.DryRun) return result;
+                    Need(!doc.IsReadOnly && doc.Editor.IsQuiescent, "drawing is read-only or has an active command");
+                    Need(EntityBatchInput.ValidateUndoState(db.UndoRecording, Convert.ToInt32(Application.GetSystemVariable("UNDOCTL"))));
+                    Need(DocumentGuard.ValidateActive(doc, input.Document, input.Fingerprint) == null, "active drawing changed before hatch editing");
+                    var model = (BlockTableRecord)tx.GetObject(modelId, OpenMode.ForWrite);
+                    var created = new JArray(); var ids = new ObjectIdCollection();
+                    foreach (var face in item.Faces)
+                    {
+                        var hatch = AppendFace(tx, model, item.Source, face, geometry, resources);
+                        item.Outputs.Add(hatch); ids.Add(hatch.ObjectId); created.Add(hatch.Handle.ToString());
+                        rebuilt.AddRange(geometry.HatchRegions(hatch, out _));
+                    }
+                    double actual = rebuilt.Sum(s => s.Area), tolerance = HatchClipInput.AreaTolerance(expected);
+                    Need(Math.Abs(actual - expected) <= tolerance, "rebuilt hatch area differs from edit plan");
+                    CheckCoverage(geometry, rebuilt, desired, tolerance); CheckCoverage(geometry, desired, rebuilt, tolerance);
+                    for (int i = 0; i < hatches.Length; i++)
+                    {
+                        var source = Open<Hatch>(db, tx, hatches[i].Handle.ToString(), modelId);
+                        Need(JToken.DeepEquals(signatures[i], SourceSignature(source, geometry.HatchShape(source))), "source changed during append");
+                    }
+                    ((DrawOrderTable)tx.GetObject(model.DrawOrderTableId, OpenMode.ForWrite)).MoveBelow(ids, item.Source.ObjectId);
+                    foreach (var source in hatches) { source.UpgradeOpen(); source.Erase(); Need(source.IsErased, "source erase failed"); }
+                    foreach (var region in rebuilt) region.Dispose(); rebuilt.Clear();
+                    foreach (var hatch in item.Outputs)
+                    {
+                        Open<Hatch>(db, tx, hatch.Handle.ToString(), modelId);
+                        Need(JToken.DeepEquals(appearance, AppearanceSignature(hatch)), "output appearance changed during edit");
+                        rebuilt.AddRange(geometry.HatchRegions(hatch, out _));
+                    }
+                    CheckCoverage(geometry, rebuilt, desired, tolerance); CheckCoverage(geometry, desired, rebuilt, tolerance);
+                    foreach (var boundary in boundaries) Open<Polyline>(db, tx, boundary.Handle.ToString(), modelId);
+                    Need(JToken.DeepEquals(boundarySignatures, new JArray(boundaries.Select(p => MaskSignature(p)))), "edit boundary changed");
+                    Need(DocumentGuard.ValidateActive(doc, input.Document, input.Fingerprint) == null, "active drawing changed before commit");
+                    geometry.Time(); result["created_handles"] = created; result["erased_handles"] = new JArray(input.Hatches);
+                    result["created_count"] = created.Count; result["area"] = rebuilt.Sum(s => s.Area);
+                    result["dry_run"] = false; result["atomic"] = true;
+                    resources.Dispose(); commitAttempted = true; tx.Commit(); result["committed"] = true;
+                    return result;
+                }
+            }
+            catch (Exception e) when (commitAttempted)
+            { throw new InvalidOperationException("Commit was attempted; inspect actual drawing before retrying: " + e.Message, e); }
+            finally
+            {
+                foreach (var region in sources) region.Dispose();
+                foreach (var region in desired) region.Dispose();
+                foreach (var region in rebuilt) region.Dispose();
+            }
         }
 
         private static T Open<T>(Database db, Transaction tx, string handle, ObjectId model) where T : Entity

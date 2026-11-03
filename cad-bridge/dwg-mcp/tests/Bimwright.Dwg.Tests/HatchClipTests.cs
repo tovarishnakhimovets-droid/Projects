@@ -94,6 +94,32 @@ namespace Bimwright.Dwg.Tests
             Assert.Throws<ArgumentException>(() => HatchClipInput.TransparencySnapshot(false, false, false, false, null));
             Assert.Throws<ArgumentException>(() => HatchClipInput.TransparencySnapshot(false, false, true, false, null));
         }
+        [Theory]
+        [InlineData("clip", true)]
+        [InlineData("union", false)]
+        [InlineData("replace", true)]
+        public void Edit_modes_require_matching_masks_and_accept_named_dxf(string operation, bool masks)
+        {
+            var request = Write(); request["expected_document"] = @"D:\Work\surface.dxf";
+            request["operation"] = operation;
+            request["boundary_handles"] = masks ? new JArray("B1") : new JArray();
+            Assert.True(HatchClipInput.TryParse(request, false, out var input, out var error), error);
+            Assert.Equal(operation, input.Operation);
+            Assert.True(SchemaValidator.Validate("clip_hatches", request, CommandSchemas.ClipHatches).Ok);
+            request["boundary_handles"] = masks ? new JArray() : new JArray("B1");
+            Assert.False(HatchClipInput.TryParse(request, false, out _, out _));
+        }
+
+        [Theory]
+        [InlineData("\"arbitrary\"")]
+        [InlineData("42")]
+        [InlineData("null")]
+        public void Invalid_edit_operations_are_refused(string value)
+        {
+            var request = Write(); request["operation"] = JToken.Parse(value);
+            Assert.False(HatchClipInput.TryParse(request, false, out _, out _));
+        }
+
         private static JObject Plan() => new JObject {
             ["expected_document"] = @"D:\Work\surface.dwg", ["expected_fingerprint"] = "739091b3-e588-a041-882e-fdfad3af3b45",
             ["hatch_handles"] = new JArray("a1", "00a2"), ["boundary_handles"] = new JArray("b1") };
