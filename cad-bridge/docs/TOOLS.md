@@ -117,7 +117,7 @@ reader, в том числе доступные атрибуты блоков; �
 | --- | --- | --- |
 | `dwg_set_lineweight` | `handles`: массив строк; `lineweight_mm`: число; `mode`: `explicit` / `by_layer` / `by_block` | Изменённые handles, count, вес и режим |
 | `dwg_set_layer_lineweight` | `layers`: массив имён существующих слоёв; `lineweight_mm`: число | Изменённые слои, count, вес |
-| `dwg_create_hatch` | `boundary_handle`: одна окружность или замкнутая плоская lightweight Polyline; опциональные layer, color_index либо color_rgb, associative, draw_order | Handle новой Hatch и её параметры |
+| `dwg_create_hatch` | `boundary_handle`: одна окружность или замкнутая плоская lightweight Polyline; опциональные layer, color_index либо color_rgb, associative, draw_order | Handle новой Hatch и её параметры; для неассоциативной полилинии площадь проверяется до записи |
 
 Примеры параметров обычных MCP-вызовов:
 

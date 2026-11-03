@@ -83,9 +83,35 @@ namespace Bimwright.Dwg.Plugin.Handlers
                         hatch.SetHatchPattern(HatchPatternType.PreDefined, "SOLID");
                         // Autodesk requires database residency before Associative,
                         // and Associative must be set before building the loop.
+                        double? verifiedArea = null;
                         hatch.Associative = input.Associative;
-                        hatch.AppendLoop(HatchLoopTypes.Outermost, new ObjectIdCollection { boundaryId });
-                        hatch.EvaluateHatch(true);
+                        if (!input.Associative && boundary is Polyline polyline)
+                        {
+                            // Embed the complete contour instead of retaining a reference
+                            // to a boundary that can subsequently be erased.
+                            var vertices = new Point2dCollection();
+                            var bulges = new DoubleCollection();
+                            for (int i = 0; i < polyline.NumberOfVertices; i++)
+                            {
+                                vertices.Add(polyline.GetPoint2dAt(i));
+                                bulges.Add(polyline.GetBulgeAt(i));
+                            }
+                            hatch.AppendLoop(HatchLoopTypes.Outermost, vertices, bulges);
+                            hatch.EvaluateHatch(true);
+                            // An inaccessible or incorrect native area must abort the
+                            // transaction, rather than leave an unusable SOLID hatch.
+                            double expectedArea = polyline.Area;
+                            double actualArea = hatch.Area;
+                            if (double.IsNaN(actualArea) || double.IsInfinity(actualArea) ||
+                                expectedArea <= 0 || Math.Abs(actualArea - expectedArea) > Math.Max(1.0, expectedArea * 1e-8))
+                                throw new InvalidOperationException("created hatch area differs from its boundary");
+                            verifiedArea = actualArea;
+                        }
+                        else
+                        {
+                            hatch.AppendLoop(HatchLoopTypes.Outermost, new ObjectIdCollection { boundaryId });
+                            hatch.EvaluateHatch(true);
+                        }
 
                         var hatchIds = new ObjectIdCollection { hatchId };
                         if (input.DrawOrder == "above_entities")
@@ -106,6 +132,7 @@ namespace Bimwright.Dwg.Plugin.Handlers
                             layer = layerName,
                             color = DescribeColor(input),
                             associative = hatch.Associative,
+                            area = verifiedArea,
                             draw_order = input.DrawOrder
                         };
                         tx.Commit();
