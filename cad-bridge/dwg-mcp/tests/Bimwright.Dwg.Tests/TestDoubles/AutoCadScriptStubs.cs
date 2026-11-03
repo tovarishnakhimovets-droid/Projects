@@ -150,6 +150,7 @@ namespace Bimwright.Dwg.Plugin.Drawing
     // Explicit seam for the native identity guard; actual policy has separate tests.
     internal static class DocumentGuard
     {
+        internal static string ValidateActive(Autodesk.AutoCAD.ApplicationServices.Document doc, string path, string fingerprint) => Validate(doc, path, fingerprint);
         internal static string Validate(Autodesk.AutoCAD.ApplicationServices.Document doc, string path, string fingerprint)
             => doc == null ? "no active document" : doc.LispGuardError;
     }

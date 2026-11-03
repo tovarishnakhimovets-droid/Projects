@@ -8,6 +8,7 @@ namespace Bimwright.Dwg.Plugin.Drawing
     internal sealed class DrawingDocumentSnapshot
     {
         internal string DocumentPath { get; set; }
+        internal string ActiveDocumentPath { get; set; }
         internal string DocumentName { get; set; }
         internal string DatabaseFilename { get; set; }
         internal string OriginalFilename { get; set; }
@@ -38,6 +39,7 @@ namespace Bimwright.Dwg.Plugin.Drawing
             };
             snapshot.DocumentPath = DrawingIdentityPolicy.SavedDocumentPath(
                 snapshot.DocumentName, snapshot.IsTitled);
+            snapshot.ActiveDocumentPath = DrawingIdentityPolicy.ActiveDocumentPath(snapshot.DocumentName, snapshot.IsTitled);
             snapshot.Exists = snapshot.DocumentPath != null && File.Exists(snapshot.DocumentPath);
             if (snapshot.Exists)
             {
@@ -57,6 +59,15 @@ namespace Bimwright.Dwg.Plugin.Drawing
                 return "active document changed before preflight";
             var snapshot = Capture(doc);
             return DrawingIdentityPolicy.Validate(snapshot.DocumentPath, snapshot.Fingerprint,
+                expectedDocument, expectedFingerprint);
+        }
+
+        internal static string ValidateActive(Document doc, string expectedDocument, string expectedFingerprint)
+        {
+            if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, doc))
+                return "active document changed before preflight";
+            var snapshot = Capture(doc);
+            return DrawingIdentityPolicy.ValidateActive(snapshot.ActiveDocumentPath, snapshot.Fingerprint,
                 expectedDocument, expectedFingerprint);
         }
 

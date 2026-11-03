@@ -94,7 +94,7 @@ namespace Bimwright.Dwg.Plugin
             {
                 var doc = Application.DocumentManager.MdiActiveDocument;
                 var error = !ReferenceEquals(doc, job.Document) ? "active AutoCAD document changed before LISP execution"
-                    : DocumentGuard.Validate(doc, job.ExpectedDocument, job.ExpectedFingerprint);
+                    : DocumentGuard.ValidateActive(doc, job.ExpectedDocument, job.ExpectedFingerprint);
                 if (error != null) throw new InvalidOperationException(error);
                 if (doc.IsReadOnly) throw new InvalidOperationException("active AutoCAD document is read-only");
                 if (Convert.ToInt32(Application.GetSystemVariable("LISPSYS")) == 0)

@@ -3177,3 +3177,8 @@ README.md и AGENTS.md обновлены. Heartbeat cad-mcp приостано�
   exact endpoint verification. No claim of a released reusable typed tool.
   Next bridge step remains bounded endpoint/noding API, schema/offline checks,
   separate release and user-enabled loading/live checks.
+
+### LISP в активном DXF — 2026-11-03
+
+- Source: dwg_run_lisp принимает путь активного именованного DXF или DWG; повторная проверка пути, GUID и активного документа остаётся перед постановкой и фактическим запуском. Существующий saved DWG identity и другие операции без изменений. Новый active_document_path в dwg_get_drawing_info.
+- Offline: 1937 .NET тестов прошли; сборки плагинов 2026 и 2027 успешны, для 2027 два предупреждения MSB3277 о версиях Roslyn. Installed/loaded/live: старая версия, DXF-прогон не проводился. Требуются выпуск, установка и отдельно разрешённая native проверка; trust MCPTRUSTLISP по точному файлу/хешу/функции остаётся обязательным.

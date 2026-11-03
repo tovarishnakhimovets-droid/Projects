@@ -357,7 +357,9 @@ Preflight проверяет read-only состояние и совпадени�
 3. Агент читает `dwg_get_lisp_status` для разрешённой версии и свежее
    `dwg_get_drawing_info` для `document_path`/`fingerprint`. У запуска обязательны
    `file`, `command`, `expected_sha256`, `expected_document`, `expected_fingerprint`.
-   Нужен именованный DWG и свободная командная строка. Сам факт отказа для
+   Нужен именованный DWG или DXF и свободная командная строка. Для запуска
+   использовать `active_document_path` из свежего `dwg_get_drawing_info`;
+   `document_path` по-прежнему обозначает только сохранённый DWG. Сам факт отказа для
    несохранённого чертежа не разрешает агенту сохранять его.
 4. `dwg_run_lisp` возвращает `job_id` и `queued`. Агент опрашивает
    `dwg_get_lisp_status` с этим ID: `running` ещё не результат, `completed` —

@@ -27,7 +27,7 @@ namespace Bimwright.Dwg.Plugin.Handlers
                 if (error != null) return CommandResult.Fail(error);
                 var expectedDocument = parameters["expected_document"].Value<string>();
                 var expectedFingerprint = parameters["expected_fingerprint"].Value<string>();
-                error = DocumentGuard.Validate(doc, expectedDocument, expectedFingerprint);
+                error = DocumentGuard.ValidateActive(doc, expectedDocument, expectedFingerprint);
                 if (error != null) return CommandResult.Fail(error);
                 if (doc.IsReadOnly) return CommandResult.Fail("active AutoCAD document is read-only");
                 if (!doc.Editor.IsQuiescent) return CommandResult.Fail("AutoCAD command line is busy; finish or cancel the current command before running LISP");

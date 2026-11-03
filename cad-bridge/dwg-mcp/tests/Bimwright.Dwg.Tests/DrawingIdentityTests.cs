@@ -39,6 +39,22 @@ namespace Bimwright.Dwg.Tests
         }
 
         [Fact]
+        public void Active_dxf_identity_is_separate_from_saved_dwg_identity()
+        {
+            const string path = @"C:\Projects\surfaces.dxf";
+            Assert.Null(DrawingIdentityPolicy.SavedDocumentPath(path, true));
+            Assert.Null(DrawingIdentityPolicy.ActiveDocumentPath(path, false));
+            Assert.Null(DrawingIdentityPolicy.ActiveDocumentPath(@"C:\Templates\x.dwt", true));
+            Assert.Null(DrawingIdentityPolicy.ActiveDocumentPath(@"C:surfaces.dxf", true));
+            var actual = DrawingIdentityPolicy.ActiveDocumentPath(path, true);
+            Assert.NotNull(actual);
+            Assert.Null(DrawingIdentityPolicy.ValidateActive(actual, Fingerprint, path, Fingerprint));
+            Assert.NotNull(DrawingIdentityPolicy.ValidateActive(actual, Fingerprint, @"C:\Other\surfaces.dxf", Fingerprint));
+            Assert.NotNull(DrawingIdentityPolicy.ValidateActive(actual, Fingerprint, path, System.Guid.NewGuid().ToString()));
+            Assert.NotNull(DrawingIdentityPolicy.Validate(actual, Fingerprint, path, Fingerprint));
+        }
+
+        [Fact]
         public void Save_refuses_untitled_readonly_or_another_open_document()
         {
             const string path = "C:\\Projects\\НВ.dwg";

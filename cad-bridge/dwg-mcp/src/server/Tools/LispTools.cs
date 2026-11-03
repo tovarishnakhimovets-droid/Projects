@@ -23,7 +23,7 @@ namespace Bimwright.Dwg.Server.Tools
             [Description("Fully qualified local .lsp file approved in AutoCAD.")] string file,
             [Description("Approved Lisp function symbol, e.g. c:NETLEN or c:PLLENLEADERS; no expression.")] string command,
             [Description("Exact file SHA256, as shown by MCPTRUSTLISP/dwg_get_lisp_status.")] string expected_sha256,
-            [Description("Exact named DWG path from fresh dwg_get_drawing_info.")] string expected_document,
+            [Description("Exact active_document_path (named DWG or DXF) from fresh dwg_get_drawing_info.")] string expected_document,
             [Description("Exact DWG fingerprint from fresh dwg_get_drawing_info.")] string expected_fingerprint,
             [Description("JSON argument array (data only), default []; supports strings, finite numbers, booleans, null and lists. Max 100 nodes/depth 8.")] string arguments_json = null,
             [Description("Legacy inline input is always refused.")] string code = null)
@@ -32,7 +32,7 @@ namespace Bimwright.Dwg.Server.Tools
             var error = code != null ? "inline LISP is not supported" : LispExecutionPolicy.ValidateCommand(command);
             if (error == null && string.IsNullOrWhiteSpace(file)) error = "file is required";
             if (error == null && !LispExecutionPolicy.IsSha256(expected_sha256)) error = "expected_sha256 must be 64 hexadecimal characters";
-            if (error == null && DrawingIdentityPolicy.NormalizeDwgPath(expected_document) == null) error = "expected_document must be a fully qualified named DWG path";
+            if (error == null && DrawingIdentityPolicy.NormalizeActiveDocumentPath(expected_document) == null) error = "expected_document must be a fully qualified named DWG or DXF path";
             if (error == null && !Guid.TryParse(expected_fingerprint, out _)) error = "expected_fingerprint must be a DWG GUID";
             if (error != null) return Refuse(error);
             var request = new { file, command, expected_sha256, expected_document, expected_fingerprint, arguments_json };

@@ -32,6 +32,7 @@ namespace Bimwright.Dwg.Plugin.Handlers
                 document_name = safeDocumentName,
                 has_saved_path = identity.DocumentPath != null,
                 document_path = identity.DocumentPath,
+                active_document_path = identity.ActiveDocumentPath,
                 fingerprint = identity.Fingerprint,
                 database_filename = databaseFilename,
                 original_filename = originalFilename,

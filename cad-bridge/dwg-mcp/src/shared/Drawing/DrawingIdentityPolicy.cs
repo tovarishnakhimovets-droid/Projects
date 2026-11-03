@@ -12,7 +12,16 @@ namespace Bimwright.Dwg.Plugin.Drawing
             return NormalizeDwgPath(documentName);
         }
 
-        public static string NormalizeDwgPath(string value)
+        // The active editor may be a named DXF; this is not a saved DWG identity.
+        public static string ActiveDocumentPath(string name, bool isTitled)
+        {
+            return isTitled ? NormalizeCadPath(name, true) : null;
+        }
+
+        public static string NormalizeDwgPath(string value) => NormalizeCadPath(value, false);
+        public static string NormalizeActiveDocumentPath(string value) => NormalizeCadPath(value, true);
+
+        private static string NormalizeCadPath(string value, bool allowDxf)
         {
             if (string.IsNullOrWhiteSpace(value)) return null;
             value = value.Replace('/', '\\');
@@ -24,7 +33,9 @@ namespace Bimwright.Dwg.Plugin.Drawing
             if (!absolute && !unc) return null;
             try
             {
-                if (!string.Equals(Path.GetExtension(value), ".dwg", StringComparison.OrdinalIgnoreCase))
+                var extension = Path.GetExtension(value);
+                if (!string.Equals(extension, ".dwg", StringComparison.OrdinalIgnoreCase) &&
+                    !(allowDxf && string.Equals(extension, ".dxf", StringComparison.OrdinalIgnoreCase)))
                     return null;
                 return Path.GetFullPath(value);
             }
@@ -35,13 +46,21 @@ namespace Bimwright.Dwg.Plugin.Drawing
 
         public static string Validate(string actualPath, string actualFingerprint,
             string expectedDocument, string expectedFingerprint)
+            => ValidateCore(actualPath, actualFingerprint, expectedDocument, expectedFingerprint, false);
+
+        public static string ValidateActive(string actualPath, string actualFingerprint,
+            string expectedDocument, string expectedFingerprint)
+            => ValidateCore(actualPath, actualFingerprint, expectedDocument, expectedFingerprint, true);
+
+        private static string ValidateCore(string actualPath, string actualFingerprint,
+            string expectedDocument, string expectedFingerprint, bool allowDxf)
         {
-            var expectedPath = NormalizeDwgPath(expectedDocument);
+            var expectedPath = NormalizeCadPath(expectedDocument, allowDxf);
             if (expectedPath == null)
-                return "expected_document must be a fully qualified DWG path";
+                return allowDxf ? "expected_document must be a fully qualified DWG or DXF path" : "expected_document must be a fully qualified DWG path";
             if (actualPath == null)
-                return "active drawing has no saved DWG identity; save it explicitly first";
-            actualPath = NormalizeDwgPath(actualPath);
+                return allowDxf ? "active drawing has no named DWG or DXF identity" : "active drawing has no saved DWG identity; save it explicitly first";
+            actualPath = NormalizeCadPath(actualPath, allowDxf);
             if (!string.Equals(actualPath, expectedPath, StringComparison.OrdinalIgnoreCase))
                 return "active document does not match expected_document";
             Guid expected, actual;
